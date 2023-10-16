@@ -2,7 +2,7 @@
 local M = {}
 
 ---@return string
-M.my_first_function = function()
+function M.my_first_function()
   return "hello world!"
 end
 
