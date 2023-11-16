@@ -86,8 +86,12 @@ ffi.cdef[[
 
   const char * git_reference_shorthand(const git_reference *ref);
   const char * git_reference_name(const git_reference *ref);
+  int git_reference_resolve(git_reference **out, const git_reference *ref);
   void git_reference_free(git_reference *ref);
   int git_reference_type(const git_reference *ref);
+  const git_oid * git_reference_target(const git_reference *ref);
+
+  int git_branch_upstream(git_reference **out, const git_reference *branch);
 
   int git_repository_open(git_repository **out, const char *path);
   void git_repository_free(git_repository *repo);
@@ -104,6 +108,10 @@ ffi.cdef[[
   size_t git_status_list_entrycount(git_status_list *statuslist);
   const git_status_entry* git_status_byindex(git_status_list *statuslist, size_t idx);
   int git_status_should_ignore(int *ignored, git_repository *repo, const char *path);
+
+  int git_graph_ahead_behind(size_t *ahead, size_t *behind, git_repository *repo, const git_oid *local, const git_oid *upstream);
+  int git_graph_descendant_of(git_repository *repo, const git_oid *commit, const git_oid *ancestor);
+
 ]]
 
 
@@ -112,6 +120,12 @@ ffi.cdef[[
 local M = {
   C = ffi.load "libgit2",
 }
+
+---@type ffi.ctype*
+M.git_repository_double_pointer = ffi.typeof("struct git_repository*[1]")
+
+---@type ffi.ctype*
+M.git_reference_double_pointer  = ffi.typeof("struct git_reference*[1]")
 
 -- ================
 -- | libgit2 enum |
