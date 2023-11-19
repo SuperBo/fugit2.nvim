@@ -10,7 +10,6 @@ M.link_colors = {
   Fugit2UntrackedHeading  = "PreCondit",
   Fugit2UnstagedHeading   = "Macro",
   Fugit2StagedHeading     = "Include",
-  Fugit2Directory         = "Include",
   Fugit2Modifier          = "Type",
   Fugit2Ignored           = "Ignore",
   Fugit2Unstaged          = "diffRemoved",
