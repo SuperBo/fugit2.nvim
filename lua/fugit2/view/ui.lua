@@ -1,74 +1,47 @@
-local NuiLine = require "nui.line"
-local NuiText = require "nui.text"
+local Layout = require "nui.layout"
 local Popup = require "nui.popup"
 local event = require "nui.utils.autocmd".event
 
-local git2 = require "fugit2.git2"
-
-
--- Reads git status and convert to buffer content
----@param bufnr number Buffer number
----@param ns number Nvim namespace number
----@param repo GitRepository Git2 repository
-local render_git2_status = function(bufnr, ns, repo)
-  local line = NuiLine()
-  line:append('  ')
-  line:append(string.rep('  ', 10))
-  local status, error = git2.status(repo)
-
-  if status == nil then
-    NuiText("Git2 Error Code: " .. error, "Error"):render(bufnr, ns, 1, 0)
-    return
-  end
-
-
-  ---@type string
-  local status_str
-
-  line:append("Worktree")
-
-  for _, item in ipairs(status.worktree) do
-    status_str = git2.GIT_STATUS_SHORT.tostring(item.status)
-    if item.new_path then
-      line:append(
-        string.format("- %s: %s -> %s", status_str, item.path, item.new_path)
-      )
-    else
-      line:append(
-        string.format("- %s: %s", status_str, item.path)
-      )
-    end
-  end
-
-  line:append("")
-  line:append("Staging")
-
-  for _, item in ipairs(status.index) do
-    status_str = git2.GIT_STATUS_SHORT.tostring(item.status)
-    if item.new_path then
-      line:append(
-        string.format("- %s: %s -> %s", status_str, item.path, item.new_path)
-      )
-    else
-      line:append(
-        string.format("- %s: %s", status_str, item.path)
-      )
-    end
-  end
-
-  line:render(bufnr, ns, 1)
-end
+local NuiGitStatus = require "fugit2.view.nui_git_status"
 
 
 ---@classs Fugit2UIModule
 local M = {}
 
--- Create Fugit2 Floating Window
----@param ns number Nvim namespace
+-- Creates Fugit2 Main Floating Window
+---@param namespace integer Nvim namespace
 ---@param repo GitRepository
----@return NuiPopup
-function M.new_fugit2_float_window(ns, repo)
-  local popup = Popup({
+---@return NuiLayout
+function M.new_fugit2_float_window(namespace, repo)
+
+  local popup_one = Popup({
+    enter = false,
+    focusable = true,
+    border = {
+      style = "rounded",
+      padding = {
+        top = 1,
+        bottom = 1,
+        left = 2,
+        right = 2,
+      },
+      text = {
+        top = " Status ",
+        top_align = "left",
+      },
+    },
+    win_options = {
+      winblend = 0,
+      winhighlight = "Normal:Normal,FloatBorder:FloatBorder",
+    },
+    buf_options = {
+      modifiable = false,
+      readonly = true,
+      swapfile = false,
+    },
+  })
+
+  local popup_two = Popup({
     enter = true,
     focusable = true,
     border = {
@@ -80,43 +53,57 @@ function M.new_fugit2_float_window(ns, repo)
         right = 1,
       },
       text = {
-        top = " Fugit2 ",
+        top = " Files ",
         top_align = "left",
       },
     },
-    relative = "editor",
-    position = "50%",
-    size = {
-      width = "80%",
-      height = "60%",
-    },
     win_options = {
-      winblend = 10,
+      winblend = 0,
       winhighlight = "Normal:Normal,FloatBorder:FloatBorder",
+      cursorline = true,
+    },
+    buf_options = {
+      modifiable = false,
+      readonly = true,
+      swapfile = false,
     },
   })
 
+  local layout = Layout(
+    {
+      relative = "editor",
+      position = "50%",
+      size = {
+        width = "80%",
+        height = "60%",
+      },
+    },
+    Layout.Box({
+      Layout.Box(popup_one, { size = 6 }),
+      Layout.Box(popup_two, { size = "80%" }),
+    }, { dir = "col" })
+  )
+
   -- Exit event
   local exit_fn = function()
-    popup:unmount()
+    layout:unmount()
   end
+  local map_options = { noremap = true }
 
-  popup:on(event.BufLeave, exit_fn)
-  popup:map("n", "q", exit_fn)
+  popup_one:map("n", "q", exit_fn, map_options)
+  popup_one:map("n", "<esc>", exit_fn, map_options)
+  -- popup_two:on(event.BufLeave, exit_fn)
 
   -------------
   -- Content --
   -------------
 
   -- Status content
-  render_git2_status(popup.bufnr, ns, repo)
+  local status = NuiGitStatus(popup_one.bufnr, popup_two.bufnr, namespace, repo)
+  status:setup_handlers(popup_two, map_options)
+  status:render()
 
-  local line = NuiLine()
-  line:append(NuiLine({NuiText("Text 1")}))
-  line:append(NuiLine({NuiText("Text 2")}))
-  line:render(popup.bufnr, -1, 11)
-
-  return popup
+  return layout
 end
 
 

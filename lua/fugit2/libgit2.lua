@@ -7,38 +7,28 @@ local ffi = require "ffi"
 --- Load libgit2 via ffi
 ffi.cdef[[
   typedef uint64_t git_object_size_t;
+
+  typedef struct git_commit git_commit;
+  typedef struct git_index git_index;
+  typedef struct git_index_conflict_iterator git_index_conflict_iterator;
+  typedef struct git_index_iterator git_index_iterator;
+  typedef struct git_object git_object;
   typedef struct git_reference git_reference;
   typedef struct git_repository git_repository;
   typedef struct git_status_list git_status_list;
 
-  /* typedef enum { */
-  /*   GIT_REFERENCE_INVALID  = 0, // Invalid reference */
-  /*   GIT_REFERENCE_DIRECT   = 1, // A reference that points at an object id */
-  /*   GIT_REFERENCE_SYMBOLIC = 2, // A reference that points at another reference */
-  /*   GIT_REFERENCE_ALL      = GIT_REFERENCE_DIRECT | GIT_REFERENCE_SYMBOLIC */
-  /* } git_reference_t; */
+  typedef struct {
+    char **strings;
+    size_t count;
+  } git_strarray;
 
-  /* typedef enum { */
-  /*   GIT_STATUS_CURRENT          = 0, */
-  /**/
-  /*   GIT_STATUS_INDEX_NEW        = bit.lshift(1, 0), */
-  /*   GIT_STATUS_INDEX_MODIFIED   = bit.lshift(1, 1), */
-  /*   GIT_STATUS_INDEX_DELETED    = bit.lshift(1, 2), */
-  /*   GIT_STATUS_INDEX_RENAMED    = bit.lshift(1, 3), */
-  /*   GIT_STATUS_INDEX_TYPECHANGE = bit.lshift(1, 4), */
-  /**/
-  /*   GIT_STATUS_WT_NEW           = bit.lshift(1, 7), */
-  /*   GIT_STATUS_WT_MODIFIED      = bit.lshift(1, 8), */
-  /*   GIT_STATUS_WT_DELETED       = bit.lshift(1, 9), */
-  /*   GIT_STATUS_WT_TYPECHANGE    = bit.lshift(1, 10), */
-  /*   GIT_STATUS_WT_RENAMED       = bit.lshift(1, 11), */
-  /*   GIT_STATUS_WT_UNREADABLE    = bit.lshift(1, 12), */
-  /**/
-  /*   GIT_STATUS_IGNORED          = bit.lshift(1, 14), */
-  /*   GIT_STATUS_CONFLICTED       = bit.lshift(1, 15) */
-  /* } git_status_t; */
 
-  typedef struct git_oid {
+  typedef struct {
+    const char **strings;
+    size_t count;
+  } git_strarray_readonly;
+
+  typedef struct {
 	  unsigned char id[20];
   } git_oid;
 
@@ -66,11 +56,6 @@ ffi.cdef[[
     git_diff_delta *index_to_workdir;
   } git_status_entry;
 
-  typedef struct git_strarray {
-    char **strings;
-    size_t count;
-  } git_strarray;
-
   typedef struct {
 	  unsigned int     version;
 	  int              show;
@@ -84,23 +69,47 @@ ffi.cdef[[
   int git_libgit2_init();
   int git_libgit2_shutdown();
 
+  void git_strarray_dispose(git_strarray *array);
+
+  char * git_oid_tostr(char *out, size_t n, const git_oid *id);
+
+  void git_object_free(git_object *object);
+  const git_oid * git_object_id(const git_object *obj);
+
+  int git_commit_lookup(git_commit **commit, git_repository *repo, const git_oid *id);
+  int git_commit_lookup_prefix(git_commit **commit, git_repository *repo, const git_oid *id, size_t len);
+  void git_commit_free(git_commit *commit);
+  const git_oid * git_commit_id(const git_commit *commit);
+  git_repository * git_commit_owner(const git_commit *commit);
+  const char * git_commit_message(const git_commit *commit);
+  const char * git_commit_message_encoding(const git_commit *commit);
+  const char * git_commit_message_raw(const git_commit *commit);
+
   const char * git_reference_shorthand(const git_reference *ref);
   const char * git_reference_name(const git_reference *ref);
   int git_reference_resolve(git_reference **out, const git_reference *ref);
   void git_reference_free(git_reference *ref);
   int git_reference_type(const git_reference *ref);
   const git_oid * git_reference_target(const git_reference *ref);
+  int git_reference_peel(git_object **out, const git_reference *ref, int type);
 
   int git_branch_upstream(git_reference **out, const git_reference *branch);
 
   int git_repository_open(git_repository **out, const char *path);
   void git_repository_free(git_repository *repo);
-
   const char* git_repository_path(const git_repository *repo);
   int git_repository_is_empty(git_repository *repo);
   int git_repository_is_bare(const git_repository *repo);
   int git_repository_head_detached(git_repository *repo);
   int git_repository_head(git_reference **out, git_repository *repo);
+  int git_repository_index(git_index **out, git_repository *repo);
+
+  void git_index_free(git_index *index);
+  int git_index_read(git_index *index, int force);
+  int git_index_write(git_index *index);
+  int git_index_add_bypath(git_index *index, const char *path);
+  int git_index_remove_bypath(git_index *index, const char *path);
+  int git_index_remove_directory(git_index *index, const char *dir, int stage);
 
   int git_status_list_new(git_status_list **out, git_repository *repo, const git_status_options *opts);
   void git_status_list_free(git_status_list *statuslist);
@@ -108,10 +117,12 @@ ffi.cdef[[
   size_t git_status_list_entrycount(git_status_list *statuslist);
   const git_status_entry* git_status_byindex(git_status_list *statuslist, size_t idx);
   int git_status_should_ignore(int *ignored, git_repository *repo, const char *path);
+  int git_status_file(unsigned int *status_flags, git_repository *repo, const char *path);
+
+  int git_reset_default(git_repository *repo, const git_object *target, const git_strarray_readonly *pathspecs);
 
   int git_graph_ahead_behind(size_t *ahead, size_t *behind, git_repository *repo, const git_oid *local, const git_oid *upstream);
   int git_graph_descendant_of(git_repository *repo, const git_oid *commit, const git_oid *ancestor);
-
 ]]
 
 
@@ -228,6 +239,19 @@ M.GIT_STATUS_OPT = {
 	UPDATE_INDEX                    = 8192, -- (1u << 13),
 	INCLUDE_UNREADABLE              = 16384, -- (1u << 14),
 	INCLUDE_UNREADABLE_AS_UNTRACKED = 32768, --(1u << 15)
+}
+
+
+---@enum GIT_OBJECT
+M.GIT_OBJECT = {
+	ANY       = -2, -- Object can be any of the following.
+	INVALID   = -1, -- Object is invalid.
+	COMMIT    = 1, -- A commit object.
+	TREE      = 2, -- A tree (directory listing) object.
+	BLOB      = 3, -- A file revision object.
+	TAG       = 4, -- An annotated tag object.
+	OFS_DELTA = 6, -- A delta, base is given by an offset.
+	REF_DELTA = 7  -- A delta, base is given by object id.
 }
 
 

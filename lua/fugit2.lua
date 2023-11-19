@@ -29,7 +29,7 @@ M.setup = function(args)
 
   if M.namespace == 0 then
     M.namespace = vim.api.nvim_create_namespace("Fugit2")
-    colors.set_hl(M.namespace)
+    colors.set_hl(0)
   end
 end
 
