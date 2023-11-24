@@ -1,5 +1,4 @@
 -- Fugit2 main module file
-local module = require "fugit2.module"
 local colors = require "fugit2.view.colors"
 
 ---@class Config

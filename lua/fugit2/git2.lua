@@ -403,6 +403,7 @@ end
 ---@field new_path string? New file path in case of rename
 ---@field worktree_status GIT_STATUS_SHORT Git status in worktree to index
 ---@field index_status GIT_STATUS_SHORT Git status in index to head
+---@field renamed boolean Extra flag to indicate whether item is renamed
 
 
 ---@class GitStatusUpstream
@@ -636,6 +637,8 @@ function Repository:status()
   opts[0].flags = bit.bor(
     libgit2.GIT_STATUS_OPT.INCLUDE_UNTRACKED,
     libgit2.GIT_STATUS_OPT.RENAMES_HEAD_TO_INDEX,
+    libgit2.GIT_STATUS_OPT.RENAMES_INDEX_TO_WORKDIR,
+    libgit2.GIT_STATUS_OPT.RECURSE_UNTRACKED_DIRS,
     libgit2.GIT_STATUS_OPT.SORT_CASE_SENSITIVELY
   )
 
@@ -715,6 +718,7 @@ function Repository:status()
       path            = "",
       worktree_status = GIT_STATUS_SHORT.UNCHANGED,
       index_status    = GIT_STATUS_SHORT.UNCHANGED,
+      renamed         = false,
     }
     ---@type string
     local old_path, new_path
@@ -734,7 +738,6 @@ function Repository:status()
         status_item.worktree_status = GIT_STATUS_SHORT.DELETED
       elseif bit.band(entry.status, libgit2.GIT_STATUS.WT_RENAMED) ~= 0 then
         status_item.worktree_status = GIT_STATUS_SHORT.RENAMED
-        status_item.new_path = new_path
       elseif bit.band(entry.status, libgit2.GIT_STATUS.WT_TYPECHANGE) ~= 0 then
         status_item.worktree_status = GIT_STATUS_SHORT.TYPECHANGE
       elseif bit.band(entry.status, libgit2.GIT_STATUS.WT_UNREADABLE) ~= 0 then
@@ -743,6 +746,11 @@ function Repository:status()
         status_item.worktree_status = GIT_STATUS_SHORT.IGNORED
       elseif bit.band(entry.status, libgit2.GIT_STATUS.CONFLICTED) ~= 0 then
         status_item.worktree_status = GIT_STATUS_SHORT.CONFLICTED
+      end
+
+      if bit.band(entry.status, libgit2.GIT_STATUS.WT_RENAMED) ~= 0 then
+        status_item.renamed = true
+        status_item.new_path = new_path
       end
     end
 
@@ -760,9 +768,13 @@ function Repository:status()
         status_item.index_status = GIT_STATUS_SHORT.DELETED
       elseif bit.band(entry.status, libgit2.GIT_STATUS.INDEX_RENAMED) ~=0 then
         status_item.index_status = GIT_STATUS_SHORT.RENAMED
-        status_item.new_path = new_path
       elseif bit.band(entry.status, libgit2.GIT_STATUS.INDEX_TYPECHANGE) ~= 0 then
         status_item.index_status = GIT_STATUS_SHORT.TYPECHANGE
+      end
+
+      if bit.band(entry.status, libgit2.GIT_STATUS.INDEX_RENAMED) ~=0 then
+        status_item.renamed = true
+        status_item.new_path = new_path
       end
     end
 

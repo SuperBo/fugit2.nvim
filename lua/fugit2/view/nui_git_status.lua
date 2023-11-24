@@ -8,6 +8,7 @@ local Object = require "nui.object"
 local event = require "nui.utils.autocmd".event
 
 local git2 = require "fugit2.git2"
+local utils = require "fugit2.utils"
 
 
 -- =================
@@ -95,9 +96,15 @@ end
 ---@param bufs table
 ---@return NuiTreeNodeData
 local function tree_node_data_from_item(item, bufs)
-  local filename = vim.fs.basename(item.path)
+  local path = item.path
+  local alt_path
+  if item.renamed and item.worktree_status == git2.GIT_STATUS_SHORT.UNCHANGED then
+    path = item.new_path or ""
+  end
+
+  local filename = vim.fs.basename(path)
   local extension = vim.filetype.match({ filename = filename })
-  local modified = bufs[item.path] and bufs[item.path].modified or false
+  local modified = bufs[path] and bufs[path].modified or false
 
   local icon = WebDevIcons.get_icon(filename, extension, { default = true })
   local wstatus = git2.GIT_STATUS_SHORT.toshort(item.worktree_status)
@@ -106,19 +113,22 @@ local function tree_node_data_from_item(item, bufs)
   local text_color, icon_color, stage_icon = tree_node_colors(item.worktree_status, item.index_status, modified)
 
   local rename = ""
-  if item.worktree_status == git2.GIT_STATUS_SHORT.RENAMED
-    or item.index_status == git2.GIT_STATUS_SHORT.RENAMED then
-    rename = " -> " .. item.new_path
+  if item.renamed and item.index_status == git2.GIT_STATUS_SHORT.UNCHANGED then
+    rename = " -> " .. utils.make_relative_path(vim.fs.dirname(item.path), item.new_path)
+    alt_path = item.new_path
+  elseif item.renamed and item.worktree_status == git2.GIT_STATUS_SHORT.UNCHANGED then
+    print(vim.fs.dirname(item.new_path), item.path)
+    rename = " <- " .. utils.make_relative_path(vim.fs.dirname(item.new_path), item.path)
+    alt_path = item.path
   end
-
-  local modified_text = modified and " [+]" or ""
 
   local text = string.format(
     "%s %s%s", icon, filename, rename
   )
 
   return {
-    id   = item.path,
+    id = path,
+    alt_path = alt_path,
     text = text,
     color = text_color,
     wstatus = wstatus,
@@ -201,6 +211,10 @@ function NuiGitStatusTree:update(status)
 
   for _, item in ipairs(status) do
     local dirname = vim.fs.dirname(item.path)
+    if item.renamed and item.worktree_status == git2.GIT_STATUS_SHORT.UNCHANGED then
+      dirname = vim.fs.dirname(item.new_path)
+    end
+
     local dir = dir_tree
     if dirname ~= "" and dirname ~= "." then
       for s in vim.gsplit(dirname, "/", { plain = true }) do
@@ -237,30 +251,53 @@ function NuiGitStatusTree:index_add_reset(repo, index, node)
   local updated = false
   local inplace = true -- whether can update status inplace
 
-  if node.wstatus ~= "-" and node.wstatus ~= "!" then
-    -- add to index if worktree is not in [UNCHANGED ,IGNORED]
+  if node.alt_path and (node.wstatus == "R" or node.wstatus == "M")  then
+    -- rename
+    ret = index:add_bypath(node.alt_path)
+    if ret ~= 0 then
+      error("Git Error when handling rename " .. ret)
+    end
+
+    ret = index:remove_bypath(node.id)
+    if ret ~= 0 then
+      error("Git Error when handling rename " .. ret)
+    end
+
+    updated = true
+    inplace = false -- requires full refresh
+  elseif node.wstatus == "?" or node.wstatus == "T" or node.wstatus == "M"  then
+    -- add to index if worktree status is in (UNTRACKED, MODIFIED, TYPECHANGE)
     ret = index:add_bypath(node.id)
     if ret ~= 0 then
       error("Git Error when adding to index: " .. ret)
     end
 
     updated = true
-    if node.wstatus == "R" or node.wstatus == "D" or node.wstatus == "?" then
-      -- There are change rename will happen in index, require full refresh
-      inplace = false
+  elseif node.wstatus == "D" then
+    -- remove from index
+    ret = index:remove_bypath(node.id)
+    if ret ~= 0 then
+      error("Git Error when removing from index: " .. ret)
     end
+
+    updated = true
+  elseif node.alt_path and (node.istatus == "R" or node.istatus == "M") then
+    -- reset both path if rename in index
+    ret = repo:reset_default({node.id, node.alt_path})
+    if ret ~= 0 then
+      error("Git Error when reset rename: " .. ret)
+    end
+
+    updated = true
+    inplace = false -- requires full refresh
   elseif node.istatus ~= "-" and node.istatus ~= "?" then
-    -- else remove from index if status is not in [UNCHANGED, UNTRACKED]
+    -- else reset if index status is not in (UNCHANGED, UNTRACKED, RENAMED)
     ret = repo:reset_default({node.id})
     if ret ~= 0 then
       error("Git Error when unstage from index: " .. ret)
     end
 
     updated = true
-    if node.istatus == "R" then
-      -- Revert rename require full refresh
-      inplace = false
-    end
   end
 
   -- inplace update
@@ -370,7 +407,7 @@ function NuiGitStatus:update()
       if git_status.upstream.ahead > 0 or git_status.upstream.behind > 0 then
         upstream_line:append(git_status.upstream.name, "Fugit2SymbolicRef")
       else
-        upstream_line:append(git_status.upstream.name, "Fugit2StagedModifier")
+        upstream_line:append(git_status.upstream.name, "Fugit2Staged")
       end
 
       if git_status.upstream.ahead > 0 then
