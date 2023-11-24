@@ -118,6 +118,14 @@ local Index = {}
 Index.__index = Index
 
 
+---@class GitRemote
+---@field remote ffi.cdata* libgit2 struct git_remote*[1]
+---@field name string
+---@field url string
+local Remote = {}
+Remote.__index = Remote
+
+
 -- ========================
 -- | Git Object functions |
 -- ========================
@@ -319,6 +327,37 @@ function Reference:branch_upstream()
 end
 
 
+-- Retrieves the upstream remote name of a local branch / upstream.
+---@return string?
+function Reference:remote_name()
+  if self.namespace == GIT_REFERENCE_NAMESPACE.REMOTE then
+    return self.name:match("remotes/([^/]+)/", 6)
+  end
+end
+
+
+-- ====================
+-- | Remote functions |
+-- ====================
+
+
+-- Inits new GitRemote object.
+---@param remote ffi.cdata* struct git_remote*[1], own data
+---@return GitRemote
+function Remote.new(remote)
+  local git_remote = { remote = remote  }
+
+  git_remote.name = ffi.string(libgit2.C.git_remote_name(remote[0]))
+  git_remote.url = ffi.string(libgit2.C.git_remote_url(remote[0]))
+
+  ffi.gc(git_remote.remote, function(c_remote)
+    libgit2.C.git_remote_free(c_remote[0])
+  end)
+
+  return git_remote
+end
+
+
 -- ===================
 -- | Index functions |
 -- ===================
@@ -327,7 +366,7 @@ end
 -- Inits new GitIndex object.
 ---@param index ffi.cdata* struct git_index*[1], own cdata
 ---@return GitIndex
-function Index.new (index)
+function Index.new(index)
   local git_index = { index = index }
   setmetatable(git_index, Index)
 
@@ -412,6 +451,8 @@ end
 ---@field message string
 ---@field ahead integer
 ---@field behind integer
+---@field remote string
+---@field remote_url string
 
 
 ---@class GitStatusHead
@@ -419,6 +460,7 @@ end
 ---@field oid string
 ---@field message string
 ---@field is_detached boolean
+---@field namespace GIT_REFERENCE_NAMESPACE
 
 
 ---@class GitStatusResult
@@ -575,6 +617,72 @@ function Repository:reset_default(paths)
 end
 
 
+-- Finds the remote name of a remote-tracking branch.
+---@param ref string Ref name
+---@return string? remote Git remote name
+---@return GIT_ERROR
+function Repository:branch_remote_name(ref)
+  local c_buf = libgit2.git_buf_pointer()
+
+  local ret = libgit2.C.git_buf_grow(c_buf, 32)
+  if ret ~= 0 then
+    return nil, ret
+  end
+
+  ret = libgit2.C.git_branch_remote_name(c_buf, self.repo[0], ref)
+  if ret ~=0 then
+    libgit2.C.git_buf_dispose(c_buf)
+    return nil, ret
+  end
+
+  local remote = ffi.string(c_buf[0].ptr, c_buf[0].size)
+  libgit2.C.git_buf_dispose(c_buf)
+
+  return remote, 0
+end
+
+
+-- Retrieves the upstream remote of a local branch.
+---@param ref string Ref name
+---@return string? remote Git remote name
+---@return GIT_ERROR
+function Repository:branch_upstream_remote_name(ref)
+  local c_buf = libgit2.git_buf_pointer()
+
+  local ret = libgit2.C.git_buf_grow(c_buf, 32)
+  if ret ~= 0 then
+    return nil, ret
+  end
+
+  ret = libgit2.C.git_branch_upstream_remote(c_buf, self.repo[0], ref)
+  if ret ~=0 then
+    libgit2.C.git_buf_dispose(c_buf)
+    return nil, ret
+  end
+
+  local remote = ffi.string(c_buf[0].ptr, c_buf[0].size)
+  libgit2.C.git_buf_dispose(c_buf)
+
+  return remote, 0
+end
+
+
+-- Gets the information for a particular remote.
+---@param remote string
+---@return GitRemote?
+---@return GIT_ERROR
+function Repository:remote_lookup(remote)
+  local c_remote = libgit2.git_remote_double_pointer()
+
+  local ret = libgit2.C.git_remote_lookup(c_remote, self.repo[0], remote)
+  if ret ~= 0 then
+    return nil, ret
+  end
+
+  return Remote.new(c_remote), 0
+end
+
+
 -- Reads status of a given file path.
 ---@param path string Git file path.
 ---@return GIT_STATUS_SHORT worktree_status Git Status in worktree.
@@ -669,6 +777,7 @@ function Repository:status()
       oid         = repo_head_oid_str,
       message     = repo_head_msg,
       is_detached = self:is_head_detached(),
+      namespace   = repo_head.namespace
     },
     status = {}
   }
@@ -695,12 +804,20 @@ function Repository:status()
       msg = self:commit_lookup(commit_upstream):message()
     end
 
+    local remote_name = repo_upstream:remote_name()
+    local remote
+    if remote_name then
+      remote, _ = self:remote_lookup(remote_name)
+    end
+
     result.upstream = {
-      name    = repo_upstream:shorthand(),
-      oid     = oid_str,
-      message =  msg,
-      ahead   = ahead,
-      behind  = behind
+      name       = repo_upstream:shorthand(),
+      oid        = oid_str,
+      message    = msg,
+      ahead      = ahead,
+      behind     = behind,
+      remote     = remote and remote.name or "",
+      remote_url = remote and remote.url or "",
     }
   end
 

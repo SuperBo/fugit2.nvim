@@ -14,6 +14,7 @@ ffi.cdef[[
   typedef struct git_index_iterator git_index_iterator;
   typedef struct git_object git_object;
   typedef struct git_reference git_reference;
+  typedef struct git_remote git_remote;
   typedef struct git_repository git_repository;
   typedef struct git_status_list git_status_list;
 
@@ -22,11 +23,16 @@ ffi.cdef[[
     size_t count;
   } git_strarray;
 
-
   typedef struct {
     const char **strings;
     size_t count;
   } git_strarray_readonly;
+
+  typedef struct {
+    char *ptr;
+    size_t reserved;
+    size_t size;
+  } git_buf;
 
   typedef struct {
 	  unsigned char id[20];
@@ -71,6 +77,9 @@ ffi.cdef[[
 
   void git_strarray_dispose(git_strarray *array);
 
+  int git_buf_grow(git_buf *buffer, size_t target_size);
+  void git_buf_dispose(git_buf *buffer);
+
   char * git_oid_tostr(char *out, size_t n, const git_oid *id);
 
   void git_object_free(git_object *object);
@@ -93,7 +102,15 @@ ffi.cdef[[
   const git_oid * git_reference_target(const git_reference *ref);
   int git_reference_peel(git_object **out, const git_reference *ref, int type);
 
+  int git_remote_lookup(git_remote **out, git_repository *repo, const char *name);
+  const char * git_remote_name(const git_remote *remote);
+  const char * git_remote_url(const git_remote *remote);
+  int git_remote_disconnect(git_remote *remote);
+  void git_remote_free(git_remote *remote);
+
   int git_branch_upstream(git_reference **out, const git_reference *branch);
+  int git_branch_remote_name(git_buf *out, git_repository *repo, const char *refname);
+  int git_branch_upstream_remote(git_buf *buf, git_repository *repo, const char *refname);
 
   int git_repository_open(git_repository **out, const char *path);
   void git_repository_free(git_repository *repo);
@@ -136,7 +153,13 @@ local M = {
 M.git_repository_double_pointer = ffi.typeof("struct git_repository*[1]")
 
 ---@type ffi.ctype*
-M.git_reference_double_pointer  = ffi.typeof("struct git_reference*[1]")
+M.git_reference_double_pointer = ffi.typeof("struct git_reference*[1]")
+
+---@type ffi.ctype*
+M.git_remote_double_pointer = ffi.typeof("struct git_remote*[1]")
+
+---@type ffi.ctype*
+M.git_buf_pointer = ffi.typeof("git_buf[1]")
 
 -- ================
 -- | libgit2 enum |

@@ -390,34 +390,38 @@ function NuiGitStatus:update()
       NuiLine({NuiText(string.format("Git2 Error Code: %d", git_error), "Error")})
     }
   else
-    local head_line = NuiLine({NuiText("HEAD", "Fugit2Header")})
+    local head_line = NuiLine({ NuiText("HEAD", "Fugit2Header") })
     if git_status.head.is_detached then
       head_line:append(" (detached)", "Fugit2Heading")
     end
     head_line:append(": ", "Fugit2Header")
-    head_line:append(git_status.head.oid .. " ", "Fugit2ObjectId")
-    head_line:append(git_status.head.name, "Fugit2SymbolicRef")
-    head_line:append(" " .. git_status.head.message)
+
+    local head_icon = utils.get_git_namespace_icon(git_status.head.namespace)
+    head_line:append(head_icon .. git_status.head.name, "Fugit2SymbolicRef" )
+    head_line:append(" " .. git_status.head.oid .. " ", "Fugit2ObjectId")
+    head_line:append(git_status.head.message)
     table.insert(lines, head_line)
 
     local upstream_line = NuiLine({NuiText("Upstream: ", "Fugit2Header")})
     if git_status.upstream then
-      upstream_line:append(git_status.upstream.oid .. " ", "Fugit2ObjectId")
+      local remote_icon = utils.get_git_icon(git_status.upstream.remote_url)
 
       if git_status.upstream.ahead > 0 or git_status.upstream.behind > 0 then
-        upstream_line:append(git_status.upstream.name, "Fugit2SymbolicRef")
+        upstream_line:append(remote_icon .. git_status.upstream.name, "Fugit2SymbolicRef")
       else
-        upstream_line:append(git_status.upstream.name, "Fugit2Staged")
+        upstream_line:append(remote_icon .. git_status.upstream.name, "Fugit2Staged")
       end
+
+      upstream_line:append(" " .. git_status.upstream.oid .. " ", "Fugit2ObjectId")
 
       if git_status.upstream.ahead > 0 then
-        upstream_line:append(string.format("  %d", git_status.upstream.ahead), "Fugit2Count")
+        upstream_line:append(string.format(" %d ", git_status.upstream.ahead), "Fugit2Count")
       end
       if git_status.upstream.behind > 0 then
-        upstream_line:append(string.format("  %d", git_status.upstream.behind), "Fugit2Count")
+        upstream_line:append(string.format(" %d ", git_status.upstream.behind), "Fugit2Count")
       end
 
-      upstream_line:append(" " .. git_status.upstream.message)
+      upstream_line:append(git_status.upstream.message)
     else
       upstream_line:append("?", "Fugit2SymbolicRef")
     end
