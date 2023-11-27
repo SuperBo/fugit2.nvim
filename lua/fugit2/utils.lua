@@ -155,6 +155,43 @@ function BitArray:set_unset_indices()
 end
 
 
+-- Gets first k unset indices (1-based) and set it
+-- k can be > #number of unset bit in bitarray.
+-- If k > # number of unset bit, bitaray will be appended.
+---@param k integer
+---@return integer[] unset List of unset indices (1-based) have just been set.
+function BitArray:set_k_unset_indices(k)
+  ---@type integer
+  local i, mask, n = 1, 1, 0
+  local unset = {}
+
+  while i <= self.n and n < k do
+    if bit.band(self.b, mask) == 0 then
+      self.b = bit.bor(self.b, mask)
+      table.insert(unset, i)
+      n = n + 1
+    end
+
+    i = i + 1
+    mask = bit.lshift(mask, 1)
+  end
+
+  if n < k then
+    local b_append = bit.lshift(1, k - n) - 1
+    self.b = bit.bor(self.b, bit.lshift(b_append, self.n))
+    self.n = self.n +  k - n
+
+    while n < k do
+      table.insert(unset, i)
+      i = i + 1
+      n = n + 1
+    end
+  end
+
+  return unset
+end
+
+
 M.BitArray = BitArray
 
 

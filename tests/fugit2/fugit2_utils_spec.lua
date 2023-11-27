@@ -84,7 +84,7 @@ describe("bitarray", function()
     assert.same({1, 4}, unset_5)
   end)
 
-  it("sets correct unset indices", function()
+  it("sets unset indices correctly", function()
     local bitarr = utils.BitArray.new()
 
     bitarr:append(false)
@@ -104,5 +104,24 @@ describe("bitarray", function()
     assert.same({}, unset_2)
     assert.same({}, unset_3)
     assert.same({4}, unset_4)
+  end)
+
+  it("sets k unset indices correctly", function()
+    local bitarr = utils.BitArray.new()
+    bitarr:append(true)
+    bitarr:append(false)
+    bitarr:append(false)
+    bitarr:append(true)
+
+    local unset_1 = bitarr:set_k_unset_indices(1)
+
+    bitarr:append(false)
+    local unset_2 = bitarr:set_k_unset_indices(4)
+    local unset_3 = bitarr:get_unset_indices()
+
+    assert.equals(7, bitarr.n)
+    assert.same({2}, unset_1)
+    assert.same({3, 5, 6, 7}, unset_2)
+    assert.same({}, unset_3)
   end)
 end)
