@@ -74,4 +74,88 @@ function M.get_git_namespace_icon(namespace)
 end
 
 
+
+---@class BitArray BitArray in little-endian representation
+---@field n integer length of bitarray
+---@field b integer bitarray buffer
+local BitArray = {}
+BitArray.__index = BitArray
+
+
+---@return BitArray
+function BitArray.new()
+  local arr = { n = 0, b = 0 }
+  setmetatable(arr, BitArray)
+  return arr
+end
+
+
+---@param set boolean whether new bit is set or not
+---@return integer length new lenght of array
+function BitArray:append(set)
+  if set then
+    self.b = bit.bor(self.b, bit.lshift(1, self.n))
+  end
+  self.n = self.n + 1
+
+  return self.n
+end
+
+
+-- Pops last entry in bitarray.
+---@return boolean?
+function BitArray:pop()
+  if self.n <= 0 then
+    return nil
+  end
+  self.n = self.n - 1
+
+  return bit.band(self.b, bit.lshift(1, self.n)) ~= 0
+end
+
+
+-- Gets empty indices in bitmap
+---@return integer[] unset List of unset indices (1-based)
+function BitArray:get_unset_indices()
+  ---@type integer
+  local i, mask = 1, 1
+  local unset = {}
+
+  while i <= self.n do
+    if bit.band(self.b, mask) == 0 then
+      table.insert(unset, i)
+    end
+
+    i = i + 1
+    mask = bit.lshift(mask, 1)
+  end
+
+  return unset
+end
+
+
+-- Gets unset indices (1-based) and set it
+---@return integer[] unset List of unset indices (1-based)
+function BitArray:set_unset_indices()
+  ---@type integer
+  local i, mask = 1, 1
+  local unset = {}
+
+  while i <= self.n do
+    if bit.band(self.b, mask) == 0 then
+      self.b = bit.bor(self.b, mask)
+      table.insert(unset, i)
+    end
+
+    i = i + 1
+    mask = bit.lshift(mask, 1)
+  end
+
+  return unset
+end
+
+
+M.BitArray = BitArray
+
+
 return M

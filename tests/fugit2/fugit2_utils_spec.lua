@@ -1,18 +1,8 @@
 local utils = require "fugit2.utils"
 
--- describe("setup", function()
---   it("works with default", function()
---     assert("my first function with param = Hello!", plugin.hello())
---   end)
---
---   it("works with custom var", function()
---     plugin.setup({ opt = "custom" })
---     assert("my first function with param = custom", plugin.hello())
---   end)
--- end)
 
-describe("make_relative_path", function ()
-  it("returns same path", function ()
+describe("make_relative_path", function()
+  it("returns same path", function()
     assert.equals(".", utils.make_relative_path("a/b/d", "a/b/d"))
   end)
 
@@ -36,8 +26,83 @@ describe("make_relative_path", function ()
     assert.equals("../../../f.txt", utils.make_relative_path("a/b/c/d", "a/f.txt"))
   end)
 
-  it("return child dir", function()
+  it("returns child dir", function()
     assert.equals("c/f.txt", utils.make_relative_path("a/a", "a/a/c/f.txt"))
   end)
 
+end)
+
+
+describe("bitarray", function()
+  it("returns empty unset indices for empty bitmap", function()
+    local bitarr = utils.BitArray.new()
+    local unset = bitarr:get_unset_indices()
+
+    assert.equals(0, #unset)
+  end)
+
+  it("can push and pop", function()
+    local bitarr = utils.BitArray.new()
+    local pop_1 = bitarr:pop()
+    bitarr:append(true)
+    bitarr:append(false)
+    bitarr:append(true)
+    local pop_2 = bitarr:pop()
+    local pop_3 = bitarr:pop()
+    bitarr:append(false)
+    local pop_4 = bitarr:pop()
+
+    assert.is_nil(pop_1)
+    assert.is_true(pop_2)
+    assert.is_false(pop_3)
+    assert.is_false(pop_4)
+  end)
+
+  it("returns correct unset indices", function()
+    local bitarr = utils.BitArray.new()
+
+    bitarr:append(false)
+    local unset_1 = bitarr:get_unset_indices()
+
+    bitarr:append(true)
+    print(bitarr.b)
+    local unset_2 = bitarr:get_unset_indices()
+
+    bitarr:append(true)
+    local unset_3 = bitarr:get_unset_indices()
+
+    bitarr:append(false)
+    local unset_4 = bitarr:get_unset_indices()
+
+    bitarr:append(true)
+    local unset_5 = bitarr:get_unset_indices()
+
+    assert.same({1}, unset_1)
+    assert.same({1}, unset_2)
+    assert.same({1}, unset_3)
+    assert.same({1, 4}, unset_4)
+    assert.same({1, 4}, unset_5)
+  end)
+
+  it("sets correct unset indices", function()
+    local bitarr = utils.BitArray.new()
+
+    bitarr:append(false)
+    local unset_1 = bitarr:set_unset_indices()
+
+    bitarr:append(true)
+    print(bitarr.b)
+    local unset_2 = bitarr:set_unset_indices()
+
+    bitarr:append(true)
+    local unset_3 = bitarr:set_unset_indices()
+
+    bitarr:append(false)
+    local unset_4 = bitarr:set_unset_indices()
+
+    assert.same({1}, unset_1)
+    assert.same({}, unset_2)
+    assert.same({}, unset_3)
+    assert.same({4}, unset_4)
+  end)
 end)
