@@ -39,6 +39,8 @@ describe("bitarray", function()
     local unset = bitarr:get_unset_indices()
 
     assert.equals(0, #unset)
+    assert.equals(0, bitarr.buf)
+    assert.equals(0, bitarr.n)
   end)
 
   it("can push and pop", function()
@@ -48,14 +50,16 @@ describe("bitarray", function()
     bitarr:append(false)
     bitarr:append(true)
     local pop_2 = bitarr:pop()
-    local pop_3 = bitarr:pop()
     bitarr:append(false)
+    local pop_3 = bitarr:pop()
     local pop_4 = bitarr:pop()
+    local pop_5 = bitarr:pop()
 
     assert.is_nil(pop_1)
     assert.is_true(pop_2)
     assert.is_false(pop_3)
     assert.is_false(pop_4)
+    assert.is_true(pop_5)
   end)
 
   it("returns correct unset indices", function()
@@ -65,7 +69,6 @@ describe("bitarray", function()
     local unset_1 = bitarr:get_unset_indices()
 
     bitarr:append(true)
-    print(bitarr.b)
     local unset_2 = bitarr:get_unset_indices()
 
     bitarr:append(true)
@@ -91,7 +94,6 @@ describe("bitarray", function()
     local unset_1 = bitarr:set_unset_indices()
 
     bitarr:append(true)
-    print(bitarr.b)
     local unset_2 = bitarr:set_unset_indices()
 
     bitarr:append(true)

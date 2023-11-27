@@ -75,16 +75,16 @@ end
 
 
 
----@class BitArray BitArray in little-endian representation
+---@class BitArray BitArray in big-endian representation
 ---@field n integer length of bitarray
----@field b integer bitarray buffer
+---@field buf integer bitarray buffer
 local BitArray = {}
 BitArray.__index = BitArray
 
 
 ---@return BitArray
 function BitArray.new()
-  local arr = { n = 0, b = 0 }
+  local arr = { n = 0, buf = 0 }
   setmetatable(arr, BitArray)
   return arr
 end
@@ -93,9 +93,11 @@ end
 ---@param set boolean whether new bit is set or not
 ---@return integer length new lenght of array
 function BitArray:append(set)
+  local buf = bit.lshift(self.buf, 1)
   if set then
-    self.b = bit.bor(self.b, bit.lshift(1, self.n))
+    buf = bit.bor(buf, 1)
   end
+  self.buf = buf
   self.n = self.n + 1
 
   return self.n
@@ -110,7 +112,10 @@ function BitArray:pop()
   end
   self.n = self.n - 1
 
-  return bit.band(self.b, bit.lshift(1, self.n)) ~= 0
+  local val = bit.band(self.buf, 1)
+  self.buf = bit.rshift(self.buf, 1)
+
+  return val ~= 0
 end
 
 
@@ -118,15 +123,15 @@ end
 ---@return integer[] unset List of unset indices (1-based)
 function BitArray:get_unset_indices()
   ---@type integer
-  local i, mask = 1, 1
+  local i, mask = self.n, 1
   local unset = {}
 
-  while i <= self.n do
-    if bit.band(self.b, mask) == 0 then
-      table.insert(unset, i)
+  while i > 0 do
+    if bit.band(self.buf, mask) == 0 then
+      table.insert(unset, 1, i)
     end
 
-    i = i + 1
+    i = i - 1
     mask = bit.lshift(mask, 1)
   end
 
@@ -138,16 +143,16 @@ end
 ---@return integer[] unset List of unset indices (1-based)
 function BitArray:set_unset_indices()
   ---@type integer
-  local i, mask = 1, 1
+  local i, mask = self.n, 1
   local unset = {}
 
-  while i <= self.n do
-    if bit.band(self.b, mask) == 0 then
-      self.b = bit.bor(self.b, mask)
-      table.insert(unset, i)
+  while i > 0 do
+    if bit.band(self.buf, mask) == 0 then
+      self.buf = bit.bor(self.buf, mask)
+      table.insert(unset, 1, i)
     end
 
-    i = i + 1
+    i = i - 1
     mask = bit.lshift(mask, 1)
   end
 
@@ -162,24 +167,27 @@ end
 ---@return integer[] unset List of unset indices (1-based) have just been set.
 function BitArray:set_k_unset_indices(k)
   ---@type integer
-  local i, mask, n = 1, 1, 0
+  local i, n = 1, 0
+  ---@type integer
+  local mask = bit.lshift(1, self.n - 1)
   local unset = {}
 
   while i <= self.n and n < k do
-    if bit.band(self.b, mask) == 0 then
-      self.b = bit.bor(self.b, mask)
+    if bit.band(self.buf, mask) == 0 then
+      self.buf = bit.bor(self.buf, mask)
       table.insert(unset, i)
       n = n + 1
     end
 
     i = i + 1
-    mask = bit.lshift(mask, 1)
+    mask = bit.rshift(mask, 1)
   end
 
   if n < k then
-    local b_append = bit.lshift(1, k - n) - 1
-    self.b = bit.bor(self.b, bit.lshift(b_append, self.n))
-    self.n = self.n +  k - n
+    local delta = k - n
+    local b_append = bit.lshift(1, delta) - 1
+    self.buf = bit.bor(bit.lshift(self.buf, delta), b_append)
+    self.n = self.n + delta
 
     while n < k do
       table.insert(unset, i)
