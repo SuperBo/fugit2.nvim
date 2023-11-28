@@ -171,10 +171,6 @@ local NuiGitStatusTree = Object("NuiGitStatusTree")
 ---@param bufnr integer
 ---@param namespace integer
 function NuiGitStatusTree:init(bufnr, namespace)
-  if not vim.api.nvim_buf_is_valid(bufnr) then
-    error("invalid bufnr " .. bufnr)
-  end
-
   self.bufnr = bufnr
   self.namespace = namespace
 
@@ -330,6 +326,7 @@ end
 local NuiGitStatus = Object("NuiGitStatus")
 
 
+-- Inits NuiGitStatus.
 ---@param bufnr1 integer
 ---@param bufnr2 integer
 ---@param namespace integer
@@ -370,11 +367,11 @@ function NuiGitStatus:init(bufnr1, bufnr2, namespace, repo)
   self._tree = NuiGitStatusTree(self.bufnr2, self.namespace)
   self:update()
 
-  -- Whether is updated
+  -- Whether git status is updated
   self._updated = false
 end
 
-
+-- Updates git status.
 function NuiGitStatus:update()
   local git_status, git_error = git2.status(self.repo)
 
@@ -387,10 +384,10 @@ function NuiGitStatus:update()
 
   if git_status == nil then
     lines = {
-      NuiLine({NuiText(string.format("Git2 Error Code: %d", git_error), "Error")})
+      NuiLine { NuiText(string.format("Git2 Error Code: %d", git_error), "Error") }
     }
   else
-    local head_line = NuiLine({ NuiText("HEAD", "Fugit2Header") })
+    local head_line = NuiLine { NuiText("HEAD", "Fugit2Header") }
     if git_status.head.is_detached then
       head_line:append(" (detached)", "Fugit2Heading")
     end
@@ -402,7 +399,7 @@ function NuiGitStatus:update()
     head_line:append(git_status.head.message)
     table.insert(lines, head_line)
 
-    local upstream_line = NuiLine({NuiText("Upstream: ", "Fugit2Header")})
+    local upstream_line = NuiLine { NuiText("Upstream: ", "Fugit2Header") }
     if git_status.upstream then
       local remote_icon = utils.get_git_icon(git_status.upstream.remote_url)
 
@@ -434,12 +431,8 @@ end
 
 -- Renders git status
 function NuiGitStatus:render()
-  ---@type integer
-  local line_number = 1
-
-  for _, line in ipairs(self._status_lines) do
-    line:render(self.bufnr1, self.namespace, line_number)
-    line_number = line_number + 1
+  for i, line in ipairs(self._status_lines) do
+    line:render(self.bufnr1, self.namespace, i)
   end
 
   self._tree:render()

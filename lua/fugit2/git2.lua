@@ -469,6 +469,12 @@ end
 ---@field status GitStatusItem[]
 
 
+---@class GitBranch
+---@field name string
+---@field shorthand string
+---@field type GIT_BRANCH
+
+
 function Repository:__tostring()
   return string.format("Git Repository: %s", self.path)
 end
@@ -533,6 +539,52 @@ function Repository:head()
   end
 
   return Reference.new(c_ref), 0
+end
+
+
+-- Listings branches of a repo.
+---@param locals boolean Includes local branches.
+---@param remotes boolean Include remote branches.
+---@return GitBranch[]?
+---@return GIT_ERROR
+function Repository:branches(locals, remotes)
+  if not locals and not remotes then
+    return {}, 0
+  end
+
+  local branch_flags = 0
+  if locals then
+    branch_flags = libgit2.GIT_BRANCH.LOCAL
+  end
+  if remotes then
+    branch_flags = bit.bor(branch_flags, libgit2.GIT_BRANCH.REMOTE)
+  end
+
+  local c_branch_iter = ffi.new("struct git_branch_iterator *[1]")
+  local ret = libgit2.C.git_branch_iterator_new(c_branch_iter, self.repo[0], branch_flags)
+  if ret ~= 0 then
+    return nil, ret
+  end
+
+  ---@type GitBranch[]
+  local branches = {}
+  local c_ref = libgit2.git_reference_double_pointer()
+  local c_branch_type = ffi.new("unsigned int[0]")
+  while libgit2.C.git_branch_next(c_ref, c_branch_type, c_branch_iter[0]) == 0 do
+    ---@type GitBranch
+    local br = {
+      name = ffi.string(libgit2.C.git_reference_name(c_ref[0])),
+      shorthand = ffi.string(libgit2.C.git_reference_shorthand(c_ref[0])),
+      type = math.floor(tonumber(c_branch_type[0]) or 0)
+    }
+    table.insert(branches, br)
+
+    libgit2.C.git_reference_free(c_ref[0])
+  end
+
+  libgit2.C.git_branch_iterator_free(c_branch_iter[0])
+
+  return branches, 0
 end
 
 
@@ -916,6 +968,7 @@ M.Repository = Repository
 M.Reference = Reference
 
 
+M.GIT_BRANCH = libgit2.GIT_BRANCH
 M.GIT_REFERENCE = libgit2.GIT_REFERENCE
 M.GIT_REFERENCE_NAMESPACE = GIT_REFERENCE_NAMESPACE
 M.GIT_STATUS_SHORT = GIT_STATUS_SHORT

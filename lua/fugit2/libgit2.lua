@@ -8,6 +8,7 @@ local ffi = require "ffi"
 ffi.cdef[[
   typedef uint64_t git_object_size_t;
 
+  typedef struct git_branch_iterator git_branch_iterator;
   typedef struct git_commit git_commit;
   typedef struct git_index git_index;
   typedef struct git_index_conflict_iterator git_index_conflict_iterator;
@@ -16,6 +17,7 @@ ffi.cdef[[
   typedef struct git_reference git_reference;
   typedef struct git_remote git_remote;
   typedef struct git_repository git_repository;
+  typedef struct git_revwalk git_revwalk;
   typedef struct git_status_list git_status_list;
 
   typedef struct {
@@ -102,12 +104,23 @@ ffi.cdef[[
   const git_oid * git_reference_target(const git_reference *ref);
   int git_reference_peel(git_object **out, const git_reference *ref, int type);
 
+  int git_revwalk_new(git_revwalk **walker, git_repository *repo);
+  int git_revwalk_push(git_revwalk *walk, const git_oid *oid);
+  int git_revwalk_next(git_oid *oid, git_revwalk *walk);
+  int git_revwalk_hide(git_revwalk *walk, const git_oid *oid);
+  void git_revwalk_sorting(git_revwalk *walk, unsigned int sort_mode);
+  void git_revwalk_free(git_revwalk *walk);
+  void git_revwalk_reset(git_revwalk *walker);
+
   int git_remote_lookup(git_remote **out, git_repository *repo, const char *name);
   const char * git_remote_name(const git_remote *remote);
   const char * git_remote_url(const git_remote *remote);
   int git_remote_disconnect(git_remote *remote);
   void git_remote_free(git_remote *remote);
 
+  int git_branch_iterator_new(git_branch_iterator **out, git_repository *repo, unsigned int list_flags);
+  int git_branch_next(git_reference **out, unsigned int *out_type, git_branch_iterator *iter);
+  void git_branch_iterator_free(git_branch_iterator *iter);
   int git_branch_upstream(git_reference **out, const git_reference *branch);
   int git_branch_remote_name(git_buf *out, git_repository *repo, const char *refname);
   int git_branch_upstream_remote(git_buf *buf, git_repository *repo, const char *refname);
@@ -165,6 +178,15 @@ M.git_buf_pointer = ffi.typeof("git_buf[1]")
 -- | libgit2 enum |
 -- ================
 
+
+---@enum GIT_BRANCH
+M.GIT_BRANCH = {
+  LOCAL  = 1,
+  REMOTE = 2,
+  ALL    = 3, -- GIT_BRANCH_LOCAL|GIT_BRANCH_REMOTE,
+}
+
+
 ---@enum GIT_ERROR
 M.GIT_ERROR = {
   GIT_OK              =  0, -- No error
@@ -215,6 +237,16 @@ M.GIT_REFERENCE = {
   SYMBOLIC = 2, -- A reference that points at another reference
   ALL      = 3, -- Both GIT_REFERENCE_DIRECT | GIT_REFERENCE_SYMBOLIC
 }
+
+
+---@enum GIT_SORT
+M.GIT_SORT = {
+  NONE        = 0, -- 0, default method from `git`: reverse chronological order
+  TOPOLOGICAL = 1, -- 1 << 0, Sort the repository contents in topological order
+  TIME        = 2, -- 1 << 1, Sort the repository contents by commit time.
+  REVERSE     = 4, -- 1 << 2, Iterate through the repository contents in reverse order.
+}
+
 
 ---@enum GIT_STATUS
 M.GIT_STATUS = {

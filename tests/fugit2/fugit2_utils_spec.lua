@@ -122,6 +122,7 @@ describe("bitarray", function()
     local unset_3 = bitarr:get_unset_indices()
 
     assert.equals(7, bitarr.n)
+    assert.equals(127, bitarr.buf)
     assert.same({2}, unset_1)
     assert.same({3, 5, 6, 7}, unset_2)
     assert.same({}, unset_3)

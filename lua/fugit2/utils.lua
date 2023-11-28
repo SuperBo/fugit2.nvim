@@ -119,23 +119,60 @@ function BitArray:pop()
 end
 
 
--- Gets empty indices in bitmap
----@return integer[] unset List of unset indices (1-based)
-function BitArray:get_unset_indices()
-  ---@type integer
-  local i, mask = self.n, 1
-  local unset = {}
+-- Sets n-th bit in bitarray (1-based index)
+---@param i integer index to set bit
+function BitArray:set(i)
+  if i > 0 and i <= self.n then
+    self.buf = bit.bor(self.buf, bit.lshift(1, self.n - i))
+  end
+end
 
-  while i > 0 do
-    if bit.band(self.buf, mask) == 0 then
-      table.insert(unset, 1, i)
+-- Unset n-th bit in bitarray (1-based index)
+---@param i integer index to set bit
+function BitArray:unset(i)
+  if i > 0 and i <= self.n then
+    local mask = bit.bnot(bit.lshift(1, self.n - 1))
+    self.buf = bit.band(self.buf, mask)
+  end
+end
+
+
+---@param arr BitArray
+---@param is_set boolean Whether to get set or unset indices in bitarray
+---@return integer[] indices of set/unset indices (1-based)
+local function _bitarray_get_indices(arr, is_set)
+  ---@type integer
+  local i, mask = 1, bit.lshift(1, arr.n - 1)
+  ---@type boolean
+  local b
+  local indices = {}
+
+  while i <= arr.n do
+    b = bit.band(arr.buf, mask) ~= 0
+    -- logical exclusive or
+    if is_set and b or not (is_set or b) then
+      table.insert(indices, i)
     end
 
-    i = i - 1
-    mask = bit.lshift(mask, 1)
+    i = i + 1
+    mask = bit.rshift(mask, 1)
   end
 
-  return unset
+  return indices
+end
+
+
+-- Get set indices in bitmap
+---@return integer[] set List of set indicies (1-based)
+function BitArray:get_set_indices()
+  return _bitarray_get_indices(self, true)
+end
+
+
+-- Gets unset indices in bitmap
+---@return integer[] unset List of unset indices (1-based)
+function BitArray:get_unset_indices()
+  return _bitarray_get_indices(self, false)
 end
 
 
