@@ -84,7 +84,7 @@ BitArray.__index = BitArray
 
 ---@return BitArray
 function BitArray.new()
-  local arr = { n = 0, buf = 0 }
+  local arr = { n = 0, buf = 0ULL }
   setmetatable(arr, BitArray)
   return arr
 end
@@ -118,22 +118,33 @@ function BitArray:pop()
   return val ~= 0
 end
 
+---@return BitArray
+function BitArray:copy()
+  local a = BitArray.new()
+  a.n = self.n
+  a.buf = self.buf
+  return a
+end
 
 -- Sets n-th bit in bitarray (1-based index)
 ---@param i integer index to set bit
+---@return BitArray
 function BitArray:set(i)
   if i > 0 and i <= self.n then
     self.buf = bit.bor(self.buf, bit.lshift(1, self.n - i))
   end
+  return self
 end
 
 -- Unset n-th bit in bitarray (1-based index)
 ---@param i integer index to set bit
+---@return BitArray
 function BitArray:unset(i)
   if i > 0 and i <= self.n then
-    local mask = bit.bnot(bit.lshift(1, self.n - 1))
+    local mask = bit.bnot(bit.lshift(1, self.n - i))
     self.buf = bit.band(self.buf, mask)
   end
+  return self
 end
 
 

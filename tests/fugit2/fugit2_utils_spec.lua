@@ -87,6 +87,15 @@ describe("bitarray", function()
     assert.same({1, 4}, unset_5)
   end)
 
+  it("returns correct set indices", function()
+    local bitarr = utils.BitArray.new()
+
+    bitarr:append(false)
+    bitarr:append(true)
+
+    assert.same({2}, bitarr:get_set_indices())
+  end)
+
   it("sets unset indices correctly", function()
     local bitarr = utils.BitArray.new()
 
@@ -126,5 +135,15 @@ describe("bitarray", function()
     assert.same({2}, unset_1)
     assert.same({3, 5, 6, 7}, unset_2)
     assert.same({}, unset_3)
+  end)
+
+  it("copy data", function()
+    local b1 = utils.BitArray.new()
+    b1:append(false)
+    b1:append(true)
+    local b2 = b1:copy():unset(2)
+
+    assert.same({2}, b1:get_set_indices())
+    assert.same({}, b2:get_set_indices())
   end)
 end)

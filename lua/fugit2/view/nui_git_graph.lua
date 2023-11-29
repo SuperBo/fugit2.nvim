@@ -155,6 +155,11 @@ function NuiGitGraph.prepare_commit_node_visualisation(nodes)
 
     commit.vis.j = branch.j
 
+    local active_cols = col_arr:copy():unset(branch.j):get_set_indices()
+    if #active_cols > 0 then
+      commit.vis.active_cols = active_cols
+    end
+
     if branch.out_cols then
       for _, col in ipairs(branch.out_cols) do
         col_arr:unset(col)
@@ -186,6 +191,8 @@ function NuiGitGraph.prepare_commit_node_visualisation(nodes)
         -- linear child
         active_branches[parent_oid] = branch
       end
+    else -- no parent end branch
+      col_arr:unset(branch.j)
     end
 
     if #commit.parents > 1 then
