@@ -412,10 +412,10 @@ function NuiGitStatus:update()
       upstream_line:append(" " .. git_status.upstream.oid .. " ", "Fugit2ObjectId")
 
       if git_status.upstream.ahead > 0 then
-        upstream_line:append(string.format(" %d ", git_status.upstream.ahead), "Fugit2Count")
+        upstream_line:append(string.format("↑%d ", git_status.upstream.ahead), "Fugit2Count")
       end
       if git_status.upstream.behind > 0 then
-        upstream_line:append(string.format(" %d ", git_status.upstream.behind), "Fugit2Count")
+        upstream_line:append(string.format("↓%d ", git_status.upstream.behind), "Fugit2Count")
       end
 
       upstream_line:append(git_status.upstream.message)

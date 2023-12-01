@@ -12,25 +12,33 @@ local utils = require "fugit2.utils"
 
 local SYMBOLS = {
   CURRENT_COMMIT        = "●",
-  COMMIT_BRANCH         = "│ ",
-  COMMIT_EMPTY          = "  ",
+  COMMIT_BRANCH         = "│",
+  COMMIT_BRANCH_JUMP    = "┆",
+  COMMIT_EMPTY          = "",
   COMPLEX_MERGE_1       = "┬┆",
   COMPLEX_MERGE_2       = "╰┤",
-  MERGE_ALL             = "┼",
-  MERGE_COMMIT          = "󰍌 ",
-  MERGE_JUMP            = "┆",
-  MERGE_UP_DOWN_LEFT    = "┤",
-  MERGE_UP_DOWN_RIGHT   = "├",
-  MERGE_UP_DOWN         = "│",
+  MERGE_COMMIT          = "󰍌 " ,
+  --
+  BRANCH_COMMIT_LEFT    = "┤",
+  BRANCH_COMMIT_RIGHT   = "├",
+  BRANCH_COMMIT_LRIGHT  = "┼",
+
   MERGE_UP_LEFT_RIGHT   = '┴',
   MERGE_UP_LEFT         = "╯",
   MERGE_UP_RIGHT        = '╰',
-  MERGE_UP              = " ",
-  MERGE_DOWN_LEFT_RIGHT = "┬",
-  MERGE_DOWN_LEFT       = "╮",
-  MERGE_DOWN_RIGHT      = "╭",
+  -- MERGE_UP              = " ",
+  MERGE_UP_DOWN         = "┼",
+  MERGE_UP_DOWN_LEFT    = "├",
+  MERGE_UP_DOWN_RIGHT   = "┤",
+  MERGE_DOWN            = "┬",
+  MERGE_DOWN_LEFT       = "╭",
+  MERGE_DOWN_RIGHT      = "╮",
   MERGE_LEFT_RIGHT      = "─",
   MERGE_EMPTY           = " ",
+  --
+  BRANCH_UP             = "┴",
+  BRANCH_UP_LEFT        = "╰",
+  BRANCH_UP_RIGHT       = "╯",
   MISSING_PARENT        = "┆ ",
   MISSING_PARENT_BRANCH = "│ ",
   MISSING_PARENT_EMPTY  = "  ",
@@ -39,15 +47,27 @@ local SYMBOLS = {
 ---@class ActiveBranchItem
 ---@field j integer
 ---@field out_cols integer[]? optional out_cols
----@field main_merge boolean? optional flag to indicate this branch is main merge branch
 
 
 -- Helper class to store graph vis information
 ---@class NuiGitGraphCommitNodeVis
 ---@field j integer graph j coordinate
+---@field start boolean? this commit start a branch
 ---@field active_cols integer[]? current active branch j
 ---@field out_cols integer[]? out branches column j
 ---@field merge_cols integer[]? merge branches column j
+
+
+-- Helper enum for graph column
+---@enum NuiGitGraphColumn
+local GitGraphColumn = {
+  NONE   = 1, -- column not allocated
+  COMMIT = 2, -- column contains main commit
+  ACTIVE = 3, -- column is allocated by other branch
+}
+
+---@class NuiGitGraphLine
+---@field cols string[]
 
 
 ---@class NuiGitGraphCommitNode
@@ -66,17 +86,6 @@ function NuiGitGraphCommitNode:init(oid, msg, parents)
   self.oid = oid
   self.message = msg
   self.parents = parents
-end
-
-
--- Draws commit graph similar to flog
----@param nodes NuiGitGraphCommitNode[]
----@return NuiLine[] lines
-local function draw_topo_commit_nodes(nodes)
-  local lines = {} -- output lines
-  -- TODO
-
-  return lines
 end
 
 
@@ -129,17 +138,18 @@ function NuiGitGraph:init(branch_bufnr, commit_bufnr, ns_id, repo)
 end
 
 
+-- Prepares node visulasation information for each commit
 ---@param nodes NuiGitGraphCommitNode[] Commit Node in topo order.
 ---@return NuiGitGraphCommitNode[] out_nodes
 ---@return integer graph_width
 function NuiGitGraph.prepare_commit_node_visualisation(nodes)
   ---@type {[string]: ActiveBranchItem}
-  local active_branches = {} -- mapping from oid to {j, out_cols?, main_merge?}
+  local active_branches = {} -- mapping from oid to {j, out_cols? }
   ---@type ActiveBranchItem?
   local branch
   local col_arr = utils.BitArray.new() -- bitarray to save allocated columns
 
-  -- travel nodes in topo order
+  -- travel nodes sorted order
   for _, commit in ipairs(nodes) do
     commit.vis = { j = 1 }
 
@@ -151,23 +161,36 @@ function NuiGitGraph.prepare_commit_node_visualisation(nodes)
       -- append new col
       local unset = col_arr:set_k_unset_indices(1)
       branch = { j = unset[1] }
+      commit.vis.start = true
     end
 
     commit.vis.j = branch.j
 
-    local active_cols = col_arr:copy():unset(branch.j):get_set_indices()
-    if #active_cols > 0 then
-      commit.vis.active_cols = active_cols
-    end
+    -- get other active branches position
+    local col_arr_copy = col_arr:copy()
 
+    -- handle branch out
     if branch.out_cols then
+      if branch.j > branch.out_cols[1] then
+        -- swap branch.j with lowest out_cols
+        local v = branch.j
+        branch.j = table.remove(branch.out_cols, 1)
+        commit.vis.j = branch.j
+        utils.list_sorted_insert(branch.out_cols, v)
+      end
+
       for _, col in ipairs(branch.out_cols) do
         col_arr:unset(col)
       end
 
       commit.vis.out_cols = branch.out_cols
       branch.out_cols = nil -- delete out cols of active branches
-      branch.main_merge = nil
+      -- branch.main_merge = nil
+    end
+
+    local active_cols = col_arr_copy:unset(branch.j):get_set_indices()
+    if #active_cols > 0 then
+      commit.vis.active_cols = active_cols
     end
 
     -- prepare for next iter
@@ -177,15 +200,10 @@ function NuiGitGraph.prepare_commit_node_visualisation(nodes)
 
       if parent_branch then
         -- commit is a branch child, close this branch
-        local out_col = branch.j
-        if branch.main_merge then
-          out_col = parent_branch.j
-          parent_branch.j = branch.j
-        end
         if parent_branch.out_cols then
-          table.insert(parent_branch.out_cols, out_col)
+          utils.list_sorted_insert(parent_branch.out_cols, branch.j)
         else
-          parent_branch.out_cols = { out_col }
+          parent_branch.out_cols = { branch.j }
         end
       else
         -- linear child
@@ -198,7 +216,7 @@ function NuiGitGraph.prepare_commit_node_visualisation(nodes)
     if #commit.parents > 1 then
       -- merge commit
       -- first parent already allocated same j for merge commit
-      branch.main_merge = true
+      -- branch.main_merge = true
 
       -- merge parent can be already be allocated
       local unallocated = {}
@@ -215,14 +233,291 @@ function NuiGitGraph.prepare_commit_node_visualisation(nodes)
       -- find free columns to allocate new branches
       local unset = col_arr:set_k_unset_indices(#unallocated)
 
-      commit.vis.merge_cols = vim.list_extend(allocated_j, unset)
       for k, col in ipairs(unset) do
         active_branches[unallocated[k]] = { j = col }
+        utils.list_sorted_insert(allocated_j, col)
       end
+
+      commit.vis.merge_cols = allocated_j
     end
   end
 
   return nodes, col_arr.n
+end
+
+
+-- Draws graph line base on column of characters
+---@param cols string[]
+---@param width integer padding width, if == 0, no padding-right
+---@param commit_j integer? commit column
+---@return NuiLine
+function NuiGitGraph.draw_graph_line(cols, width, commit_j)
+  local graph_line = {}
+  local space_pad, space_2_pad = "   ", "  "
+  local dash_pad, dash_2_pad = "───", "──"
+  local dash_empty = "────"
+  local space_empty = NuiText("    ")
+
+  local draw_dash = false
+  local color = ""
+
+  local j = #cols
+  if commit_j then
+    j = commit_j
+  end
+
+  -- left to j
+  local i = 1
+  while i < j do
+    if cols[i] == "" then
+      if draw_dash then
+        table.insert(graph_line, NuiText(dash_empty)) -- TODO: coloring
+      else
+        table.insert(graph_line, space_empty)
+      end
+    else
+      if cols[i] == SYMBOLS.COMMIT_BRANCH or cols[i] == "|" then
+        if draw_dash then
+          table.insert(graph_line, NuiText(SYMBOLS.COMMIT_BRANCH_JUMP)) -- TODO: coloring
+          table.insert(graph_line, NuiText(dash_pad)) -- TODO:coloring
+        else
+          table.insert(graph_line, NuiText(cols[i] .. space_pad)) -- TODO coloring
+        end
+      else
+        local symbol = cols[i]
+        if not draw_dash then
+          if cols[i] == SYMBOLS.MERGE_DOWN then
+            symbol = SYMBOLS.MERGE_DOWN_LEFT
+          elseif cols[i] == SYMBOLS.MERGE_UP_DOWN then
+            symbol = SYMBOLS.MERGE_UP_DOWN_LEFT
+          elseif cols[i] == SYMBOLS.BRANCH_UP then
+            symbol = SYMBOLS.BRANCH_UP_LEFT
+          end
+        end
+
+        draw_dash = true
+        table.insert(graph_line, NuiText(symbol .. dash_pad)) -- TODO: coloring
+      end
+    end
+
+    i = i + 1
+  end
+
+  -- commit symbol
+  local k = #graph_line + 1
+  graph_line[k] = NuiText(cols[j])
+  k = k + 1
+  local is_wide_commit = cols[j]:len() > 4
+
+  -- right to j
+  draw_dash = false
+  i = #cols
+  while i > j do
+    if is_wide_commit and i == j + 1 then
+      dash_empty = dash_pad
+      space_empty = NuiText(space_pad)
+      dash_pad = dash_2_pad
+      space_pad = space_2_pad
+    end
+
+    if cols[i] == "" then
+      if draw_dash then
+        table.insert(graph_line, k, NuiText(dash_empty)) -- TODO: coloring
+      else
+        table.insert(graph_line, k, space_empty)
+      end
+    else
+      if cols[i] == SYMBOLS.COMMIT_BRANCH or cols[i] == "|" then
+        if draw_dash then
+          table.insert(graph_line, k, NuiText(SYMBOLS.COMMIT_BRANCH_JUMP)) -- TODO: coloring
+          table.insert(graph_line, k, NuiText(dash_pad)) -- TODO:coloring
+        else
+          table.insert(graph_line, k, NuiText(space_pad .. cols[i])) -- TODO coloring
+        end
+      else
+        local symbol = cols[i]
+        if not draw_dash then
+          if cols[i] == SYMBOLS.MERGE_DOWN then
+            symbol = SYMBOLS.MERGE_DOWN_RIGHT
+          elseif cols[i] == SYMBOLS.MERGE_UP_DOWN then
+            symbol = SYMBOLS.MERGE_UP_DOWN_RIGHT
+          elseif cols[i] == SYMBOLS.BRANCH_UP then
+            symbol = SYMBOLS.BRANCH_UP_RIGHT
+          end
+        end
+        draw_dash = true
+        table.insert(graph_line, k, NuiText(dash_pad .. symbol))
+      end
+    end
+
+    i = i - 1
+  end
+
+  -- padding right
+  if width > #cols then
+    local padding_right = NuiText(string.rep("    ", width - #cols))
+    table.insert(graph_line, padding_right)
+  end
+
+  return NuiLine(graph_line)
+end
+
+
+---@param vis NuiGitGraphCommitNodeVis
+---@return NuiLine pre_line
+local function draw_graph_node_pre_line_bare(vis)
+  local max_pre_j = vis.j
+
+  if vis.start then
+    max_pre_j = 1
+  end
+
+  if vis.active_cols then
+    max_pre_j = math.max(max_pre_j, vis.active_cols[#vis.active_cols])
+  end
+
+  local pre_cols = utils.list_init("", max_pre_j)
+  utils.list_fill(pre_cols, SYMBOLS.COMMIT_BRANCH, vis.active_cols)
+
+  if not vis.start then
+    pre_cols[vis.j] = SYMBOLS.COMMIT_BRANCH
+  end
+
+  return NuiGitGraph.draw_graph_line(pre_cols, 0)
+end
+
+
+---@param vis NuiGitGraphCommitNodeVis
+---@param width integer
+---@return NuiLine commit_line
+local function draw_graph_node_commit_line_bare(vis, width)
+  local max_j = vis.j
+
+  if vis.active_cols then
+    max_j = math.max(max_j, vis.active_cols[#vis.active_cols])
+  end
+
+  local commit_cols = utils.list_init("", max_j)
+  utils.list_fill(commit_cols, SYMBOLS.COMMIT_BRANCH, vis.active_cols)
+
+  commit_cols[vis.j] = SYMBOLS.CURRENT_COMMIT
+
+  return NuiGitGraph.draw_graph_line(commit_cols, width, vis.j)
+end
+
+
+---@param vis NuiGitGraphCommitNodeVis
+---@param width integer
+---@return NuiLine commit_line
+local function draw_graph_node_merge_line(vis, width)
+  local max_j = vis.j
+
+  if vis.active_cols then
+    max_j = math.max(max_j, vis.active_cols[#vis.active_cols])
+  end
+
+  if vis.merge_cols then
+    max_j = math.max(max_j, vis.merge_cols[#vis.merge_cols])
+  end
+
+  local commit_cols = utils.list_init("", max_j)
+  utils.list_fill(commit_cols, SYMBOLS.COMMIT_BRANCH, vis.active_cols)
+
+  if vis.merge_cols then
+    for _, i in ipairs(vis.merge_cols) do
+      if commit_cols[i] ~= ""
+        and not (vis.out_cols and vim.tbl_contains(vis.out_cols, i))
+        then
+        commit_cols[i] = SYMBOLS.MERGE_UP_DOWN
+      else
+        commit_cols[i] = SYMBOLS.MERGE_DOWN
+      end
+    end
+  end
+
+  commit_cols[vis.j] = SYMBOLS.MERGE_COMMIT
+
+  return NuiGitGraph.draw_graph_line(commit_cols, width, vis.j)
+end
+
+
+---@param vis NuiGitGraphCommitNodeVis
+---@param width integer
+---@param commit_line_symbol boolean?
+---@return NuiLine commit_line
+local function draw_graph_node_branch_out_line(vis, width, commit_line_symbol)
+  local max_j = vis.j
+
+  if vis.active_cols then
+    max_j = math.max(max_j, vis.active_cols[#vis.active_cols])
+  end
+
+  if vis.out_cols then
+    max_j = math.max(max_j, vis.out_cols[#vis.out_cols])
+  end
+
+  local cols = utils.list_init("", max_j)
+  utils.list_fill(cols, SYMBOLS.COMMIT_BRANCH, vis.active_cols)
+  utils.list_fill(cols, SYMBOLS.BRANCH_UP, vis.out_cols)
+
+  if commit_line_symbol and vis.out_cols then
+    local min_out_j, max_out_j = vis.out_cols[1], vis.out_cols[#vis.out_cols]
+    if min_out_j > vis.j then
+      cols[vis.j] = SYMBOLS.BRANCH_COMMIT_RIGHT
+    elseif max_out_j < vis.j then
+      cols[vis.j] = SYMBOLS.BRANCH_UP_LEFT
+    else
+      cols[vis.j] = SYMBOLS.BRANCH_COMMIT_LRIGHT
+    end
+  else
+    cols[vis.j] = SYMBOLS.CURRENT_COMMIT
+  end
+
+  return NuiGitGraph.draw_graph_line(cols, width, vis.j)
+end
+
+
+-- Draws commit graph similar to flog
+---@param nodes NuiGitGraphCommitNode[]
+---@param width integer
+---@return NuiLine[] lines
+function NuiGitGraph.draw_commit_nodes(nodes, width)
+  local lines = {} -- output lines
+  local pre_line, commit_line  = {}, {}
+  local graph_cols, j
+
+  for i, commit in ipairs(nodes) do
+    if commit.vis then
+      if commit.vis.out_cols and commit.vis.merge_cols then
+        -- draw both merge and branch-out line
+        pre_line = draw_graph_node_branch_out_line(commit.vis, width, true)
+        commit_line = draw_graph_node_merge_line(commit.vis, width)
+      elseif commit.vis.out_cols then
+        -- draw out_cols only
+        pre_line = draw_graph_node_pre_line_bare(commit.vis)
+        commit_line = draw_graph_node_branch_out_line(commit.vis, width, false)
+      elseif commit.vis.merge_cols then
+        -- draw merge_cols only
+        pre_line = draw_graph_node_pre_line_bare(commit.vis)
+        commit_line = draw_graph_node_merge_line(commit.vis, width)
+      else
+        -- draw commmit only
+        pre_line = draw_graph_node_pre_line_bare(commit.vis)
+        commit_line = draw_graph_node_commit_line_bare(commit.vis, width)
+      end
+
+    end
+
+    commit_line:append(" " .. commit.message)
+
+    -- add to lines
+    if i ~= 1 then
+      table.insert(lines, pre_line)
+    end
+    table.insert(lines, commit_line)
+  end
+
+  return lines
 end
 
 
@@ -259,7 +554,6 @@ end
 
 
 NuiGitGraph.CommitNode = NuiGitGraphCommitNode
-NuiGitGraph.draw_topo_commit_nodes = draw_topo_commit_nodes
 
 
 return NuiGitGraph

@@ -1,8 +1,7 @@
-local git_graph = require "fugit2.view.nui_git_graph"
 local context = require "plenary.context_manager"
-local CommitNode = git_graph.CommitNode
-local draw_topo_commit_nodes = git_graph.draw_topo_commit_nodes
 
+local Graph = require "fugit2.view.nui_git_graph"
+local CommitNode = Graph.CommitNode
 
 ---@param path string
 ---@param read_output boolean Read expected output or not
@@ -41,11 +40,11 @@ local function read_graph_file(path, read_output)
 end
 
 
-describe("NuiGitGraph.prepare_commit_node_visualisation", function()
+describe("prepare_commit_node_visualisation", function()
   it("prepares linear graph", function()
     local nodes, _ = read_graph_file("tests/resources/graph_linear.txt", false)
 
-    local out, length = git_graph.prepare_commit_node_visualisation(nodes)
+    local out, length = Graph.prepare_commit_node_visualisation(nodes)
 
     assert.array(out).has.no.holes()
     assert.equals(#nodes, #out)
@@ -59,7 +58,7 @@ describe("NuiGitGraph.prepare_commit_node_visualisation", function()
   it("prepares double linear graph", function()
     local nodes, _ = read_graph_file("tests/resources/graph_double_linear.txt", false)
 
-    local out, width = git_graph.prepare_commit_node_visualisation(nodes)
+    local out, width = Graph.prepare_commit_node_visualisation(nodes)
     local js = {1, 2, 1, 2, 1, 1, 1, 2, 1}
 
     assert.array(out).has.no.holes()
@@ -77,7 +76,7 @@ describe("NuiGitGraph.prepare_commit_node_visualisation", function()
   it("prepares simple merge graph 1", function()
     local nodes, _ = read_graph_file("tests/resources/graph_merge_1.txt")
 
-    local out, length = git_graph.prepare_commit_node_visualisation(nodes)
+    local out, length = Graph.prepare_commit_node_visualisation(nodes)
     local js = {1, 1, 2, 2, 1, 1, 1}
 
     assert.array(out).has.no.holes()
@@ -95,9 +94,9 @@ describe("NuiGitGraph.prepare_commit_node_visualisation", function()
   end)
 
   it("prepares simple merge graph 2", function()
-    local nodes, _ = read_graph_file("tests/resources/graph_merge_2.txt")
+    local nodes, _ = read_graph_file("tests/resources/graph_merge_2.txt", false)
 
-    local out, length = git_graph.prepare_commit_node_visualisation(nodes)
+    local out, length = Graph.prepare_commit_node_visualisation(nodes)
     local js = {1, 1, 1, 2, 2, 1, 1}
 
     assert.array(out).has.no.holes()
@@ -114,9 +113,9 @@ describe("NuiGitGraph.prepare_commit_node_visualisation", function()
   end)
 
   it("prepares merge graph continue after merge", function()
-    local nodes, _ = read_graph_file("tests/resources/graph_merge_3.txt")
+    local nodes, _ = read_graph_file("tests/resources/graph_merge_3.txt", false)
 
-    local out, length = git_graph.prepare_commit_node_visualisation(nodes)
+    local out, length = Graph.prepare_commit_node_visualisation(nodes)
     local js = {1, 2, 1, 1, 2, 2, 1, 1}
 
     assert.array(out).has.no.holes()
@@ -132,6 +131,110 @@ describe("NuiGitGraph.prepare_commit_node_visualisation", function()
     assert.same({1}, out[6].vis.active_cols)
     assert.same({2}, out[7].vis.out_cols)
   end)
+
+  it("prepares branch out graph", function()
+    local nodes, _ = read_graph_file("tests/resources/graph_branch_out.txt", false)
+
+    local out, width = Graph.prepare_commit_node_visualisation(nodes)
+    local js = {1, 2, 2, 3, 1, 1, 3, 1, 1, 2, 1}
+
+    assert.array(out).has.no.holes()
+    assert.equals(3, width)
+    for i, n in ipairs(out) do
+      assert.is_not_nil(n.vis)
+      assert.equals(js[i], n.vis.j)
+    end
+  end)
+end)
+
+describe("draw_graph_line", function ()
+  it("draws single commit at col 1", function ()
+    local cols = {"x"}
+
+    local line = Graph.draw_graph_line(cols, 0, nil)
+
+    assert.equals("x", line:content())
+  end)
+
+  it("draws single commit at col 2", function ()
+    local cols = {"", "x"}
+
+    local line = Graph.draw_graph_line(cols, 0, nil)
+
+    assert.equals("    x", line:content())
+  end)
+
+  it("draws single commit with active columns", function ()
+    local cols = {"|", "x", "|"}
+
+    local line = Graph.draw_graph_line(cols, 0, 2)
+
+    assert.equals("|   x   |", line:content())
+  end)
+
+  it("draws active columns only", function ()
+    local cols = {"|", "", "|", "|"}
+
+    local line = Graph.draw_graph_line(cols, 0)
+
+    assert.equals("|       |   |", line:content())
+  end)
+
+  it("draws with padding", function ()
+    local cols = {"x", "|"}
+
+    local line = Graph.draw_graph_line(cols, 3, 1)
+
+    assert.equals("x   |    ", line:content())
+  end)
+
+  it("draws branch out left", function ()
+    local cols = {"l", "", "c"}
+
+    local line = Graph.draw_graph_line(cols, 0, 3)
+
+    assert.equals("l───────c", line:content())
+  end)
+
+  it("draws branch out left with outrange active column", function ()
+    local cols = { "│", "l", "c" }
+
+    local line = Graph.draw_graph_line(cols, 0, 3)
+
+    assert.equals("│   l───c", line:content())
+  end)
+
+  it("draws branch out left with active column", function ()
+    local cols = { "l", "│", "c" }
+
+    local line = Graph.draw_graph_line(cols, 3, 3)
+
+    assert.equals("l───┆───c", line:content())
+  end)
+
+  it("draws branch out right", function ()
+    local cols = { "", "c", "r" }
+
+    local line = Graph.draw_graph_line(cols, 0, 2)
+
+    assert.equals("    c───r", line:content())
+  end)
+
+  it ("draws branch out right with outrange active columns", function ()
+    local cols = { "|", "c", "r", "|" }
+
+    local line = Graph.draw_graph_line(cols, 0, 2)
+
+    assert.equals("|   c───r   |", line:content())
+  end)
+
+  it ("draws branch out right with active columns", function ()
+    local cols = { "|", "c", "|", "|", "r", "r" }
+
+    local line = Graph.draw_graph_line(cols, 0, 2)
+
+    assert.equals("|   c───┆───┆───r───r", line:content())
+  end)
 end)
 
 
@@ -146,24 +249,125 @@ local function render_graph_lines(lines)
 end
 
 
-describe("draw_topo_commit_nodes", function()
-  it("draw linear graph", function()
+describe("draw_commit_nodes", function()
+  it("draws linear graph", function()
+    local width
     local nodes, output = read_graph_file("tests/resources/graph_linear.txt", true)
-    local lines = render_graph_lines(draw_topo_commit_nodes(nodes))
 
-    assert.equals(#output, #lines)
-    for i, s in ipairs(output) do
-      assert.equals(s, lines[i])
-    end
+    nodes, width = Graph.prepare_commit_node_visualisation(nodes)
+    local lines = render_graph_lines(Graph.draw_commit_nodes(nodes, width))
+
+    assert.same(output, lines)
   end)
 
-  it("draws simple merge graph", function()
-    local nodes, output = read_graph_file("tests/resources/graph_merge_1.txt", true)
-    local lines = render_graph_lines(draw_topo_commit_nodes(nodes))
+  it("draws double linear graph", function()
+    local width
+    local nodes, output = read_graph_file("tests/resources/graph_double_linear.txt", true)
 
-    assert.equals(#output, #lines)
-    for i, s in ipairs(output) do
-      assert.equals(s, lines[i])
-    end
+    nodes, width = Graph.prepare_commit_node_visualisation(nodes)
+    local lines = render_graph_lines(Graph.draw_commit_nodes(nodes, width))
+
+    assert.same(output, lines)
+  end)
+
+  it("draws simple merge graph 1", function()
+    local width
+    local nodes, output = read_graph_file("tests/resources/graph_merge_1.txt", true)
+
+    nodes, width = Graph.prepare_commit_node_visualisation(nodes)
+    local lines = render_graph_lines(Graph.draw_commit_nodes(nodes, width))
+
+    assert.same(output, lines)
+  end)
+
+  it("draws simple merge graph 2", function()
+    local width
+    local nodes, output = read_graph_file("tests/resources/graph_merge_2.txt", true)
+
+    nodes, width = Graph.prepare_commit_node_visualisation(nodes)
+    local lines = render_graph_lines(Graph.draw_commit_nodes(nodes, width))
+
+
+    assert.same(output, lines)
+  end)
+
+  it("draws simple merge graph 3", function()
+    local width
+    local nodes, output = read_graph_file("tests/resources/graph_merge_3.txt", true)
+
+    nodes, width = Graph.prepare_commit_node_visualisation(nodes)
+    local lines = render_graph_lines(Graph.draw_commit_nodes(nodes, width))
+
+    assert.same(output, lines)
+  end)
+
+  it("draws branch out graph", function ()
+    local width
+    local nodes, output = read_graph_file("tests/resources/graph_branch_out.txt", true)
+
+    nodes, width = Graph.prepare_commit_node_visualisation(nodes)
+    local lines = render_graph_lines(Graph.draw_commit_nodes(nodes, width))
+
+    assert.same(output, lines)
+  end)
+
+  it("draws merge with branch out graph", function ()
+    local width
+    local nodes, output = read_graph_file("tests/resources/graph_merge_branch_out.txt", true)
+
+    nodes, width = Graph.prepare_commit_node_visualisation(nodes)
+    local lines = render_graph_lines(Graph.draw_commit_nodes(nodes, width))
+
+    assert.same(output, lines)
+  end)
+
+  it("draws opctopus out graph", function ()
+    local width
+    local nodes, output = read_graph_file("tests/resources/graph_octopus_crossover_left.txt", true)
+
+    nodes, width = Graph.prepare_commit_node_visualisation(nodes)
+    local lines = render_graph_lines(Graph.draw_commit_nodes(nodes, width))
+
+    assert.same(output, lines)
+  end)
+
+  it("draws opctopus graph", function ()
+    local width
+    local nodes, output = read_graph_file("tests/resources/graph_octopus.txt", true)
+
+    nodes, width = Graph.prepare_commit_node_visualisation(nodes)
+    local lines = render_graph_lines(Graph.draw_commit_nodes(nodes, width))
+
+    assert.same(output, lines)
+  end)
+
+  it("draws opctopus crossover graph", function ()
+    local width
+    local nodes, output = read_graph_file("tests/resources/graph_octopus_crossover.txt", true)
+
+    nodes, width = Graph.prepare_commit_node_visualisation(nodes)
+    local lines = render_graph_lines(Graph.draw_commit_nodes(nodes, width))
+
+    assert.same(output, lines)
+  end)
+
+  it("draws merge cross graph", function ()
+    local width
+    local nodes, output = read_graph_file("tests/resources/graph_merge_cross.txt", true)
+
+    nodes, width = Graph.prepare_commit_node_visualisation(nodes)
+    local lines = render_graph_lines(Graph.draw_commit_nodes(nodes, width))
+
+    assert.same(output, lines)
+  end)
+
+  it("draws merge complex graph", function ()
+    local width
+    local nodes, output = read_graph_file("tests/resources/graph_merge_complex.txt", true)
+
+    nodes, width = Graph.prepare_commit_node_visualisation(nodes)
+    local lines = render_graph_lines(Graph.draw_commit_nodes(nodes, width))
+
+    assert.same(output, lines)
   end)
 end)

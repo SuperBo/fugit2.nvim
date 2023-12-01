@@ -248,6 +248,44 @@ function BitArray:set_k_unset_indices(k)
 end
 
 
+-- Inserts new element into a sorted list, return a sorted list.
+---@param lst table
+---@param ele number
+function M.list_sorted_insert(lst, ele)
+  local i = 1
+  while i < #lst + 1 and ele > lst[i] do
+    i = i + 1
+  end
+  table.insert(lst, i, ele)
+  return lst
+end
+
+---@param val any
+---@param n integer
+function M.list_init(val, n)
+  local list = {}
+  local i = 1
+  while i < n + 1 do
+    list[i] = val
+    i = i + 1
+  end
+
+  return list
+end
+
+
+---@param lst table
+---@param val any
+---@param cols integer[]?
+function M.list_fill(lst, val, cols)
+  if cols then
+    for _, i in ipairs(cols) do
+      lst[i] = val
+    end
+  end
+end
+
+
 M.BitArray = BitArray
 
 
