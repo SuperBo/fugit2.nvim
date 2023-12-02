@@ -126,6 +126,13 @@ local Remote = {}
 Remote.__index = Remote
 
 
+---@class GitRevisionWalker
+---@field repo ffi.cdata* libgti2 struct git_repository*
+---@field revwalk ffi.cdata* libgit2 struct git_revwalk*[1]
+local RevisionWalker = {}
+RevisionWalker.__index = RevisionWalker
+
+
 -- ========================
 -- | Git Object functions |
 -- ========================
@@ -172,7 +179,7 @@ function ObjectId:tostring(n)
     n = 41
   end
 
-  local c_buf = ffi.new("char[?]", n+1)
+  local c_buf = libgit2.char_array(n+1)
   libgit2.C.git_oid_tostr(c_buf, n+1, self.oid)
   return ffi.string(c_buf)
 end
@@ -296,7 +303,7 @@ end
 ---@return GitObject?
 ---@return integer Git Error code
 function Reference:peel(type)
-  local c_object = ffi.new("git_object *[1]")
+  local c_object = libgit2.git_object_double_pointer()
 
   local ret = libgit2.C.git_reference_peel(c_object, self.ref[0], type);
   if ret ~= 0 then
@@ -335,6 +342,116 @@ function Reference:remote_name()
   end
 end
 
+-- ============================
+-- | RevisionWalker functions |
+-- ============================
+
+
+-- Inits new GitRevisionWalker object.
+---@param repo ffi.cdata* struct git_respository*, don't own data
+---@param revwalk ffi.cdata* struct git_revwalk*[1], own cdata
+---@return GitRevisionWalker
+function RevisionWalker.new(repo, revwalk)
+  local git_walker = {
+    repo = libgit2.git_repository_pointer(repo[0]),
+    revwalk = revwalk
+  }
+  setmetatable(git_walker, RevisionWalker)
+
+  ffi.gc(git_walker.revwalk, function(ptr)
+    libgit2.C.git_revwalk_free(ptr[0])
+  end)
+
+  return git_walker
+end
+
+
+---@return GIT_ERROR
+function RevisionWalker:reset()
+  return libgit2.C.git_revwalk_reset(self.revwalk[0])
+end
+
+
+---@param topo boolean sort in topo order
+---@param time boolean sort by time
+---@param reverse boolean reverse
+---@return GIT_ERROR
+function RevisionWalker:sort(topo, time, reverse)
+  if not (topo or time or reverse) then
+    return 0
+  end
+
+  local mode = 0ULL
+  if topo then
+    mode = bit.bor(mode, libgit2.GIT_SORT.TOPOLOGICAL)
+  end
+  if time then
+    mode = bit.bor(mode, libgit2.GIT_SORT.TIME)
+  end
+  if reverse then
+    mode = bit.bor(mode, libgit2.GIT_SORT.REVERSE)
+  end
+
+  return libgit2.C.git_revwalk_sorting(self.revwalk[0], mode);
+end
+
+
+---@param oid GitObjectId
+---@return GIT_ERROR
+function RevisionWalker:push(oid)
+  return libgit2.C.git_revwalk_push(self.revwalk[0], oid.oid)
+end
+
+
+---@return GIT_ERROR
+function RevisionWalker:push_head()
+  return libgit2.C.git_revwalk_push_head(self.revwalk[0])
+end
+
+
+-- Push matching references
+---@param glob string
+---@return GIT_ERROR
+function RevisionWalker:push_glob(glob)
+  return libgit2.C.git_revwalk_push_glob(self.revwalk[0], glob)
+end
+
+
+-- Push the OID pointed to by a reference
+---@param refname string
+---@return GIT_ERROR
+function RevisionWalker:push_ref(refname)
+  return libgit2.C.git_revwalk_push_ref(self.revwalk[0], refname)
+end
+
+
+---@param oid GitObjectId
+---@return GIT_ERROR
+function RevisionWalker:hide(oid)
+  return libgit2.C.git_revwalk_hide(self.revwalk[0], oid.oid)
+end
+
+
+---@return fun(): GitCommit?
+function RevisionWalker:iter()
+  local git_oid = libgit2.git_oid()
+
+  return function()
+    local ret = libgit2.C.git_revwalk_next(git_oid, self.revwalk[0])
+    if ret ~= 0 then
+      return nil
+    end
+
+    local c_commit = libgit2.git_commit_double_pointer()
+    ret = libgit2.C.git_commit_lookup(c_commit, self.repo, git_oid)
+    if ret ~= 0 then
+      return nil
+    end
+
+    return Commit.new(c_commit)
+  end
+end
+
 
 -- ====================
 -- | Remote functions |
@@ -346,6 +463,7 @@ end
 ---@return GitRemote
 function Remote.new(remote)
   local git_remote = { remote = remote  }
+  setmetatable(git_remote, Remote)
 
   git_remote.name = ffi.string(libgit2.C.git_remote_name(remote[0]))
   git_remote.url = ffi.string(libgit2.C.git_remote_url(remote[0]))
@@ -409,9 +527,10 @@ function Index:remove_bypath(path)
 end
 
 
--- ====================
--- | Status functions |
--- ====================
+-- ========================
+-- | Repository functions |
+-- ========================
+
 
 ---@return string
 function GIT_STATUS_SHORT.tostring(status)
@@ -430,11 +549,6 @@ function GIT_STATUS_SHORT.toshort(status)
   end
   return GIT_STATUS_SHORT_STRING[status+1]:sub(1, 1)
 end
-
-
--- ========================
--- | Repository functions |
--- ========================
 
 
 ---@class GitStatusItem
@@ -560,7 +674,7 @@ function Repository:branches(locals, remotes)
     branch_flags = bit.bor(branch_flags, libgit2.GIT_BRANCH.REMOTE)
   end
 
-  local c_branch_iter = ffi.new("struct git_branch_iterator *[1]")
+  local c_branch_iter = libgit2.git_branch_iterator_double_pointer()
   local ret = libgit2.C.git_branch_iterator_new(c_branch_iter, self.repo[0], branch_flags)
   if ret ~= 0 then
     return nil, ret
@@ -569,7 +683,7 @@ function Repository:branches(locals, remotes)
   ---@type GitBranch[]
   local branches = {}
   local c_ref = libgit2.git_reference_double_pointer()
-  local c_branch_type = ffi.new("unsigned int[0]")
+  local c_branch_type = libgit2.unsigned_int_array(1)
   while libgit2.C.git_branch_next(c_ref, c_branch_type, c_branch_iter[0]) == 0 do
     ---@type GitBranch
     local br = {
@@ -595,7 +709,7 @@ end
 ---@return number? behind Unique behind commits.
 ---@return GIT_ERROR error Error code.
 function Repository:ahead_behind(local_commit, upstream_commit)
-  local c_ahead = ffi.new("size_t[2]")
+  local c_ahead = libgit2.size_t_array(2)
 
   local ret = libgit2.C.git_graph_ahead_behind(
     c_ahead, c_ahead + 1, self.repo[0], local_commit, upstream_commit
@@ -614,7 +728,7 @@ end
 ---@return GitCommit?
 ---@return GIT_ERROR
 function Repository:commit_lookup (oid)
-  local c_commit = ffi.new("git_commit*[1]")
+  local c_commit = libgit2.git_commit_double_pointer()
 
   local ret = libgit2.C.git_commit_lookup(c_commit, self.repo[0], oid.oid)
   if ret ~= 0 then
@@ -629,7 +743,7 @@ end
 ---@return GitIndex?
 ---@return GIT_ERROR
 function Repository:index ()
-  local c_index = ffi.new("git_index*[1]")
+  local c_index = libgit2.git_index_double_pointer()
 
   local ret = libgit2.C.git_repository_index(c_index, self.repo[0])
   if ret ~= 0 then
@@ -652,8 +766,8 @@ function Repository:reset_default(paths)
     if commit == nil then
       return err
     elseif #paths > 0 then
-      local c_paths = ffi.new("const char *[?]", #paths)
-      local strarray = ffi.new("git_strarray_readonly[1]")
+      local c_paths = libgit2.const_char_pointer_array(#paths)
+      local strarray = libgit2.git_strarray_readonly()
 
       for i, p in ipairs(paths) do
         c_paths[i-1] = p
@@ -674,7 +788,7 @@ end
 ---@return string? remote Git remote name
 ---@return GIT_ERROR
 function Repository:branch_remote_name(ref)
-  local c_buf = libgit2.git_buf_pointer()
+  local c_buf = libgit2.git_buf()
 
   local ret = libgit2.C.git_buf_grow(c_buf, 32)
   if ret ~= 0 then
@@ -699,7 +813,7 @@ end
 ---@return string? remote Git remote name
 ---@return GIT_ERROR
 function Repository:branch_upstream_remote_name(ref)
-  local c_buf = libgit2.git_buf_pointer()
+  local c_buf = libgit2.git_buf()
 
   local ret = libgit2.C.git_buf_grow(c_buf, 32)
   if ret ~= 0 then
@@ -742,7 +856,7 @@ end
 ---@return GIT_ERROR return_code Git return code.
 function Repository:status_file(path)
   local worktree_status, index_status = GIT_STATUS_SHORT.UNCHANGED, GIT_STATUS_SHORT.UNCHANGED
-  local c_status = ffi.new("unsigned int[1]")
+  local c_status = libgit2.unsigned_int_array(1)
 
   local ret = libgit2.C.git_status_file(c_status, self.repo[0], path)
   if ret ~= 0 then
@@ -783,6 +897,7 @@ function Repository:status_file(path)
 end
 
 
+
 -- Reads the status of the repository and returns a dictionary.
 -- with file paths as keys and status flags as values.
 ---@return GitStatusResult? status_result git status result.
@@ -791,7 +906,7 @@ function Repository:status()
   ---@type GIT_ERROR
   local error
 
-  local opts = ffi.new("git_status_options[1]")
+  local opts = libgit2.git_status_options()
   libgit2.C.git_status_options_init(opts, 1)
   opts[0].show = libgit2.GIT_STATUS_SHOW.INDEX_AND_WORKDIR
   opts[0].flags = bit.bor(
@@ -802,7 +917,7 @@ function Repository:status()
     libgit2.GIT_STATUS_OPT.SORT_CASE_SENSITIVELY
   )
 
-  local status = ffi.new("struct git_status_list*[1]")
+  local status = libgit2.git_status_list_double_pointer()
   error = libgit2.C.git_status_list_new(status, self.repo[0], opts)
   if error ~= 0 then
     return nil, error
@@ -956,6 +1071,22 @@ function Repository:status()
 
   return result, 0
 end
+
+
+-- Travel through commits log.
+---@return GitRevisionWalker?
+---@return GIT_ERROR
+function Repository:walker()
+  local walker = libgit2.git_revwalk_double_pointer()
+
+  local ret = libgit2.C.git_revwalk_new(walker, self.repo[0])
+  if ret ~=0 then
+    return nil, ret
+  end
+
+  return RevisionWalker.new(self.repo, walker), 0
+end
+
 
 -- ==================
 -- | Git2Module     |

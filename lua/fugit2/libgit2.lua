@@ -162,8 +162,16 @@ local M = {
   C = ffi.load "libgit2",
 }
 
+M.char_array = ffi.typeof("char[?]")
+M.const_char_pointer_array = ffi.typeof("const char *[?]")
+M.unsigned_int_array = ffi.typeof("unsigned int[?]")
+M.size_t_array = ffi.typeof("size_t[?]")
+
 ---@type ffi.ctype*
 M.git_repository_double_pointer = ffi.typeof("struct git_repository*[1]")
+
+---@type ffi.ctype*
+M.git_repository_pointer = ffi.typeof("struct git_repository*")
 
 ---@type ffi.ctype*
 M.git_reference_double_pointer = ffi.typeof("struct git_reference*[1]")
@@ -172,7 +180,34 @@ M.git_reference_double_pointer = ffi.typeof("struct git_reference*[1]")
 M.git_remote_double_pointer = ffi.typeof("struct git_remote*[1]")
 
 ---@type ffi.ctype*
-M.git_buf_pointer = ffi.typeof("git_buf[1]")
+M.git_revwalk_double_pointer = ffi.typeof("struct git_revwalk*[1]")
+
+---@type ffi.ctype*
+M.git_buf = ffi.typeof("git_buf[1]")
+
+---@type ffi.ctype*
+M.git_oid = ffi.typeof("git_oid[1]")
+
+---@type ffi.ctype*
+M.git_commit_double_pointer = ffi.typeof("git_commit*[1]")
+
+---@type ffi.ctype*
+M.git_object_double_pointer = ffi.typeof("git_object *[1]")
+
+---@type ffi.ctype*
+M.git_status_options = ffi.typeof("git_status_options[1]")
+
+---@type ffi.ctype*
+M.git_status_list_double_pointer = ffi.typeof("struct git_status_list*[1]")
+
+---@type ffi.ctype*
+M.git_index_double_pointer = ffi.typeof("git_index*[1]")
+
+---@type ffi.ctype*
+M.git_branch_iterator_double_pointer = ffi.typeof("struct git_branch_iterator *[1]")
+
+---@type ffi.ctype*
+M.git_strarray_readonly = ffi.typeof("git_strarray_readonly[1]")
 
 -- ================
 -- | libgit2 enum |

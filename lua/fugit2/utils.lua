@@ -4,6 +4,16 @@ local git2 = require "fugit2.git2"
 local M = {}
 
 
+---@param str string
+function M.string_first_line(str)
+  local newline = str:find("\n", 1, true)
+  if newline then
+    return str:sub(1, newline - 1)
+  end
+  return str
+end
+
+
 -- Return relative path with given base_path
 ---@param base_path string Base dir
 ---@param path string Input path to make relative
