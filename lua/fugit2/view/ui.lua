@@ -134,8 +134,8 @@ function M.new_fugit2_graph_window(namespace, repo)
       cursorline = true,
     },
     buf_options = {
-      modifiable = false,
-      readonly = true,
+      modifiable = true,
+      readonly = false,
       swapfile = false,
     },
   }
@@ -162,8 +162,8 @@ function M.new_fugit2_graph_window(namespace, repo)
       cursorline = true,
     },
     buf_options = {
-      modifiable = false,
-      readonly = true,
+      -- modifiable = true,
+      -- readonly = false,
       swapfile = false,
     },
   }
@@ -179,7 +179,7 @@ function M.new_fugit2_graph_window(namespace, repo)
     },
     Layout.Box(
       {
-        Layout.Box(branch_popup, { size = 38 }),
+        Layout.Box(branch_popup, { size = 30 }),
         Layout.Box(commit_popup, { grow = 1 }),
       },
       { dir = "row" }
@@ -188,7 +188,7 @@ function M.new_fugit2_graph_window(namespace, repo)
 
   -- Status content
   local graph = NuiGitGraph(branch_popup.bufnr, commit_popup.bufnr, namespace, repo)
-  -- graph:setup_handlers(popup_two, map_options)
+  graph:setup_handlers(branch_popup, commit_popup, { noremap = true })
   graph:render()
 
   return layout

@@ -114,7 +114,7 @@ ffi.cdef[[
   int git_revwalk_hide(git_revwalk *walk, const git_oid *oid);
   void git_revwalk_sorting(git_revwalk *walk, unsigned int sort_mode);
   void git_revwalk_free(git_revwalk *walk);
-  void git_revwalk_reset(git_revwalk *walker);
+  int git_revwalk_reset(git_revwalk *walker);
 
   int git_remote_lookup(git_remote **out, git_repository *repo, const char *name);
   const char * git_remote_name(const git_remote *remote);

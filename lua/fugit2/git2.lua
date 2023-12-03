@@ -1136,16 +1136,6 @@ end
 function Repository:walker()
   local ret
 
-  if self._walker then
-    -- reset before return
-    ret = self._walker:reset()
-    if ret ~= 0 then
-      return nil, ret
-    else
-      return self._walker, 0
-    end
-  end
-
   local walker = libgit2.git_revwalk_double_pointer()
 
   ret = libgit2.C.git_revwalk_new(walker, self.repo[0])

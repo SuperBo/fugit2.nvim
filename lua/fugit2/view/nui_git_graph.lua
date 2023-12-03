@@ -129,6 +129,8 @@ function NuiGitGraph:init(branch_bufnr, commit_bufnr, ns_id, repo)
 
   self.repo = repo
 
+  ---@type GitRevisionWalker?
+  self._walker = nil
   ---@type NuiLine[]
   self._branch_lines, self._commit_lines = {}, {}
   ---@type GitBranch[]
@@ -161,19 +163,25 @@ function NuiGitGraph:update()
     local branch_icon = utils.get_git_namespace_icon(git2.GIT_REFERENCE_NAMESPACE.BRANCH)
     self._branches = branches
     for i, branch in ipairs(branches) do
-      self._branch_lines[i] = NuiLine { NuiText( branch_icon .. branch.name ) }
+      self._branch_lines[i] = NuiLine { NuiText( branch_icon .. branch.shorthand) }
     end
   end
 
   -- Gets commits
-  local walker
-  walker, err = self.repo:walker()
+  local walker = self._walker
+  if not walker then
+    walker, err = self.repo:walker()
+  else
+    err = walker:reset()
+  end
   if not walker then
     self._commits = {}
     self._commit_lines = {
       NuiLine { NuiText(string.format("Git2 Error code: %d", err), "Error") }
     }
   else
+    self._walker = walker
+    local i = 0
     walker:push_head()
 
     self._commits = {}
@@ -190,6 +198,12 @@ function NuiGitGraph:update()
         parents = parents,
       }
       table.insert(self._commits, node)
+
+      i = i + 1
+      if i == 30 then
+        -- get first 30 commit only
+        break
+      end
     end
 
     local width
@@ -431,7 +445,7 @@ local function draw_graph_node_pre_line_bare(vis)
     max_pre_j = math.max(max_pre_j, vis.active_cols[#vis.active_cols])
   end
 
-  local pre_cols = utils.list_init("", max_pre_j)
+  local pre_cols = utils.list_init(SYMBOLS.COMMIT_EMPTY, max_pre_j)
   utils.list_fill(pre_cols, SYMBOLS.COMMIT_BRANCH, vis.active_cols)
 
   if not vis.start then
@@ -452,7 +466,7 @@ local function draw_graph_node_commit_line_bare(vis, width)
     max_j = math.max(max_j, vis.active_cols[#vis.active_cols])
   end
 
-  local commit_cols = utils.list_init("", max_j)
+  local commit_cols = utils.list_init(SYMBOLS.COMMIT_EMPTY, max_j)
   utils.list_fill(commit_cols, SYMBOLS.COMMIT_BRANCH, vis.active_cols)
 
   commit_cols[vis.j] = SYMBOLS.CURRENT_COMMIT
@@ -475,7 +489,7 @@ local function draw_graph_node_merge_line(vis, width)
     max_j = math.max(max_j, vis.merge_cols[#vis.merge_cols])
   end
 
-  local commit_cols = utils.list_init("", max_j)
+  local commit_cols = utils.list_init(SYMBOLS.COMMIT_EMPTY, max_j)
   utils.list_fill(commit_cols, SYMBOLS.COMMIT_BRANCH, vis.active_cols)
 
   if vis.merge_cols then
@@ -575,7 +589,6 @@ function NuiGitGraph.draw_commit_nodes(nodes, width)
 end
 
 
-
 -- Renders content for NuiGitGraph.
 function NuiGitGraph:render()
   -- branch lines
@@ -589,9 +602,46 @@ function NuiGitGraph:render()
     self._commit_lines
   )
   vim.api.nvim_buf_set_lines(
-    self.commit_bufnr, 0, 1, true, commit_lines
+    self.commit_bufnr, 0, -1, true, commit_lines
   )
+end
 
+
+-- Setups keymap handlers
+---@param branch_popup NuiPopup
+---@param commit_popup NuiPopup
+---@param map_options table
+function NuiGitGraph:setup_handlers(branch_popup, commit_popup, map_options)
+  -- exit func
+  local commit_exit_fn = function()
+    commit_popup:unmount()
+  end
+  commit_popup:map("n", "q", commit_exit_fn, map_options)
+  commit_popup:map("n", "<esc>", commit_exit_fn, map_options)
+  branch_popup:map("n", "q", commit_exit_fn, map_options)
+  branch_popup:map("n", "<esc>", commit_exit_fn, map_options)
+  -- commit_popup:on(event.BufLeave, exit_fn)
+
+
+  -- update
+  local update_fn = function()
+    self:update()
+    self:render()
+  end
+  commit_popup:map("n", "r", update_fn, map_options)
+  branch_popup:map("n", "r", update_fn, map_options)
+
+  --movement
+  commit_popup:map("n", "j", "2j", map_options)
+  commit_popup:map("n", "k", "2k", map_options)
+  commit_popup:map("n", "h",
+    function() vim.api.nvim_set_current_win(branch_popup.winid) end,
+    map_options
+  )
+  branch_popup:map("n", "l",
+    function() vim.api.nvim_set_current_win(commit_popup.winid) end,
+    map_options
+  )
 end
 
 
