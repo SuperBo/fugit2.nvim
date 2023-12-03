@@ -124,17 +124,78 @@ function NuiGitGraph:init(branch_bufnr, commit_bufnr, ns_id, repo)
   end
 
   if not repo then
-    error("Nil repo ")
+    error("Null repo ")
   end
 
   self.repo = repo
 
   ---@type NuiLine[]
-  self._branch_lines = {}
+  self._branch_lines, self._commit_lines = {}, {}
   ---@type GitBranch[]
   self._branches = {}
+  ---@type NuiGitGraphCommitNode[]
+  self._commits = {}
 
   self:update()
+end
+
+
+-- Updates git branch and commits.
+function NuiGitGraph:update()
+  for i=#self._branch_lines,1,-1 do
+    self._branch_lines[i] = nil
+  end
+  for i=#self._commit_lines,1,-1 do
+    self._commit_lines[i] = nil
+  end
+
+  -- Gets all branches
+  local branches, err
+  branches, err = self.repo:branches(true, false)
+  if not branches then
+    self._branches = {}
+    self._branch_lines = {
+      NuiLine { NuiText(string.format("Git2 Error code: %d", err), "Error") }
+    }
+  else
+    local branch_icon = utils.get_git_namespace_icon(git2.GIT_REFERENCE_NAMESPACE.BRANCH)
+    self._branches = branches
+    for i, branch in ipairs(branches) do
+      self._branch_lines[i] = NuiLine { NuiText( branch_icon .. branch.name ) }
+    end
+  end
+
+  -- Gets commits
+  local walker
+  walker, err = self.repo:walker()
+  if not walker then
+    self._commits = {}
+    self._commit_lines = {
+      NuiLine { NuiText(string.format("Git2 Error code: %d", err), "Error") }
+    }
+  else
+    walker:push_head()
+
+    self._commits = {}
+    for id, commit in walker:iter() do
+      local parents = vim.tbl_map(
+        function(p) return p:tostring(20) end,
+        commit:parent_oids()
+      )
+
+      ---@type NuiGitGraphCommitNode
+      local node = {
+        oid = id:tostring(20),
+        message = commit:message(),
+        parents = parents,
+      }
+      table.insert(self._commits, node)
+    end
+
+    local width
+    self._commits, width = self.prepare_commit_node_visualisation(self._commits)
+    self._commit_lines = self.draw_commit_nodes(self._commits, width)
+  end
 end
 
 
@@ -267,8 +328,7 @@ function NuiGitGraph.draw_graph_line(cols, width, commit_j)
   end
 
   -- left to j
-  local i = 1
-  while i < j do
+  for i = 1,j-1 do
     if cols[i] == "" then
       if draw_dash then
         table.insert(graph_line, NuiText(dash_empty)) -- TODO: coloring
@@ -299,8 +359,6 @@ function NuiGitGraph.draw_graph_line(cols, width, commit_j)
         table.insert(graph_line, NuiText(symbol .. dash_pad)) -- TODO: coloring
       end
     end
-
-    i = i + 1
   end
 
   -- commit symbol
@@ -311,8 +369,7 @@ function NuiGitGraph.draw_graph_line(cols, width, commit_j)
 
   -- right to j
   draw_dash = false
-  i = #cols
-  while i > j do
+  for i = #cols,j+1,-1 do
     if is_wide_commit and i == j + 1 then
       dash_empty = dash_pad
       space_empty = NuiText(space_pad)
@@ -349,8 +406,6 @@ function NuiGitGraph.draw_graph_line(cols, width, commit_j)
         table.insert(graph_line, k, NuiText(dash_pad .. symbol))
       end
     end
-
-    i = i - 1
   end
 
   -- padding right
@@ -484,7 +539,6 @@ end
 function NuiGitGraph.draw_commit_nodes(nodes, width)
   local lines = {} -- output lines
   local pre_line, commit_line  = {}, {}
-  local graph_cols, j
 
   for i, commit in ipairs(nodes) do
     if commit.vis then
@@ -508,7 +562,7 @@ function NuiGitGraph.draw_commit_nodes(nodes, width)
 
     end
 
-    commit_line:append(" " .. commit.message)
+    commit_line:append(" " .. utils.lines_head(commit.message))
 
     -- add to lines
     if i ~= 1 then
@@ -521,35 +575,23 @@ function NuiGitGraph.draw_commit_nodes(nodes, width)
 end
 
 
--- Updates git branch / commit.
-function NuiGitGraph:update()
-  for i, _ in ipairs(self._branch_lines) do
-    self._branch_lines[i] = nil
-  end
-  local lines = self._branch_lines
-
-  -- Gets all branches
-  local branches, err = self.repo:branches(true, false)
-  if branches == nil then
-    self._branches = {}
-    lines = {
-      NuiLine { NuiText(string.format("Git2 Error code: %d", err), "Error") }
-    }
-  else
-    local branch_icon = utils.get_git_namespace_icon(git2.GIT_REFERENCE_NAMESPACE.BRANCH)
-    self._branches = branches
-    for i, branch in ipairs(branches) do
-      lines[i] = NuiLine { NuiText( branch_icon .. branch.name ) }
-    end
-  end
-end
-
 
 -- Renders content for NuiGitGraph.
 function NuiGitGraph:render()
+  -- branch lines
   for i, line in ipairs(self._branch_lines) do
     line:render(self.branch_bufnr, self.ns_id, i)
   end
+
+  -- commit panel
+  local commit_lines = vim.tbl_map(
+    function(line) return line:content() end,
+    self._commit_lines
+  )
+  vim.api.nvim_buf_set_lines(
+    self.commit_bufnr, 0, 1, true, commit_lines
+  )
+
 end
 
 

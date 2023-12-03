@@ -164,7 +164,7 @@ end
 -- | ObjectId functions |
 -- ======================
 
----@param oid ffi.cdata*
+---@param oid ffi.cdata* libgit2 git_oid*
 function ObjectId.new (oid)
   local object_id = { oid = oid }
   setmetatable(object_id, ObjectId)
@@ -185,9 +185,24 @@ function ObjectId:tostring(n)
 end
 
 
+---@param oid_str string hex formatted object id.
+---@return boolean
+function ObjectId:streq(oid_str)
+  return (libgit2.C.git_oid_streq(self.oid, oid_str) == 0)
+end
+
+
 ---@return string
 function ObjectId:__tostring()
   return self:tostring(8)
+end
+
+
+---@param a GitObjectId
+---@param b GitObjectId
+---@return boolean
+function ObjectId.__eq(a, b)
+   return (libgit2.C.git_oid_equal(a.oid, b.oid) ~= 0)
 end
 
 
@@ -197,7 +212,7 @@ end
 
 
 -- Init GitCommit.
----@param git_commit ffi.cdata* libgit2 git_commit, this owns the data.
+---@param git_commit ffi.cdata* libgit2 git_commit*[1], this owns the data.
 ---@return GitCommit
 function Commit.new (git_commit)
   local commit = { commit = git_commit }
@@ -218,6 +233,48 @@ function Commit:message()
   local c_char = libgit2.C.git_commit_message(self.commit[0])
   return vim.trim(ffi.string(c_char))
 end
+
+
+-- Gets the number of parents of this commit
+---@return integer parentcount
+function Commit:nparents()
+  return math.floor(tonumber(libgit2.C.git_commit_parentcount(self.commit[0])) or -1)
+end
+
+-- Gets the specified parent of the commit.
+---@param i integer Parent index (0-based)
+---@return GitCommit?
+---@return GIT_ERROR
+function Commit:parent(i)
+  local c_commit = libgit2.git_commit_double_pointer()
+  local ret = libgit2.C.git_commit_parent(c_commit, self.commit[0], i)
+  if ret ~= 0 then
+    return nil, ret
+  end
+
+  return Commit.new(c_commit), 0
+end
+
+
+-- Gets the oids of a all parents
+---@return GitObjectId[]
+function Commit:parent_oids()
+  local parents = {}
+  local nparents = self:nparents()
+  if nparents < 1 then
+    return parents
+  end
+
+  local i = 0
+  while i < nparents do
+    local oid = libgit2.C.git_commit_parent_id(self.commit[0], i);
+    parents[i+1] = ObjectId.new(oid)
+    i = i + 1
+  end
+
+  return parents
+end
+
 
 
 -- =======================
@@ -353,7 +410,7 @@ end
 ---@return GitRevisionWalker
 function RevisionWalker.new(repo, revwalk)
   local git_walker = {
-    repo = libgit2.git_repository_pointer(repo[0]),
+    repo = libgit2.git_repository_pointer(repo),
     revwalk = revwalk
   }
   setmetatable(git_walker, RevisionWalker)
@@ -432,23 +489,23 @@ function RevisionWalker:hide(oid)
 end
 
 
----@return fun(): GitCommit?
+---@return fun(): GitObjectId?, GitCommit?
 function RevisionWalker:iter()
   local git_oid = libgit2.git_oid()
 
   return function()
     local ret = libgit2.C.git_revwalk_next(git_oid, self.revwalk[0])
     if ret ~= 0 then
-      return nil
+      return nil, nil
     end
 
     local c_commit = libgit2.git_commit_double_pointer()
     ret = libgit2.C.git_commit_lookup(c_commit, self.repo, git_oid)
     if ret ~= 0 then
-      return nil
+      return nil, nil
     end
 
-    return Commit.new(c_commit)
+    return ObjectId.new(git_oid), Commit.new(c_commit)
   end
 end
 
@@ -1073,18 +1130,39 @@ function Repository:status()
 end
 
 
--- Travel through commits log.
+-- Return a GitRevisionWalker, cached it for the repo if possible.
 ---@return GitRevisionWalker?
 ---@return GIT_ERROR
 function Repository:walker()
+  local ret
+
+  if self._walker then
+    -- reset before return
+    ret = self._walker:reset()
+    if ret ~= 0 then
+      return nil, ret
+    else
+      return self._walker, 0
+    end
+  end
+
   local walker = libgit2.git_revwalk_double_pointer()
 
-  local ret = libgit2.C.git_revwalk_new(walker, self.repo[0])
-  if ret ~=0 then
+  ret = libgit2.C.git_revwalk_new(walker, self.repo[0])
+  if ret ~= 0 then
     return nil, ret
   end
 
-  return RevisionWalker.new(self.repo, walker), 0
+  self._walker = RevisionWalker.new(self.repo[0], walker)
+  return self._walker, 0
+end
+
+
+-- Frees a cached GitRevisionWalker
+function Repository:free_walker()
+  if self._walker then
+    self._walker = nil
+  end
 end
 
 

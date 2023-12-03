@@ -5,7 +5,7 @@ local M = {}
 
 
 ---@param str string
-function M.string_first_line(str)
+function M.lines_head(str)
   local newline = str:find("\n", 1, true)
   if newline then
     return str:sub(1, newline - 1)

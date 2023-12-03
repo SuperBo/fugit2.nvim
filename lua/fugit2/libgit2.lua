@@ -95,6 +95,9 @@ ffi.cdef[[
   const char * git_commit_message(const git_commit *commit);
   const char * git_commit_message_encoding(const git_commit *commit);
   const char * git_commit_message_raw(const git_commit *commit);
+  unsigned int git_commit_parentcount(const git_commit *commit);
+  int git_commit_parent(git_commit **out, const git_commit *commit, unsigned int n);
+  const git_oid * git_commit_parent_id(const git_commit *commit, unsigned int n);
 
   const char * git_reference_shorthand(const git_reference *ref);
   const char * git_reference_name(const git_reference *ref);
@@ -106,6 +109,7 @@ ffi.cdef[[
 
   int git_revwalk_new(git_revwalk **walker, git_repository *repo);
   int git_revwalk_push(git_revwalk *walk, const git_oid *oid);
+  int git_revwalk_push_head(git_revwalk *walk);
   int git_revwalk_next(git_oid *oid, git_revwalk *walk);
   int git_revwalk_hide(git_revwalk *walk, const git_oid *oid);
   void git_revwalk_sorting(git_revwalk *walk, unsigned int sort_mode);

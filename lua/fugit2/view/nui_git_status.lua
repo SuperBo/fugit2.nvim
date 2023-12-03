@@ -396,7 +396,7 @@ function NuiGitStatus:update()
     local head_icon = utils.get_git_namespace_icon(git_status.head.namespace)
     head_line:append(head_icon .. git_status.head.name, "Fugit2SymbolicRef" )
     head_line:append(" " .. git_status.head.oid .. " ", "Fugit2ObjectId")
-    head_line:append(utils.string_first_line(git_status.head.message))
+    head_line:append(utils.lines_head(git_status.head.message))
     table.insert(lines, head_line)
 
     local upstream_line = NuiLine { NuiText("Upstream: ", "Fugit2Header") }
@@ -418,7 +418,7 @@ function NuiGitStatus:update()
         upstream_line:append(string.format("↓%d ", git_status.upstream.behind), "Fugit2Count")
       end
 
-      upstream_line:append(utils.string_first_line(git_status.upstream.message))
+      upstream_line:append(utils.lines_head(git_status.upstream.message))
     else
       upstream_line:append("?", "Fugit2SymbolicRef")
     end
