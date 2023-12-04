@@ -653,16 +653,23 @@ end
 
 -- Creates Git repository
 ---@param path string Path to repository
+---@param search boolean Whether to search parent directories.
 ---@return GitRepository?
-function Repository.open (path)
+---@return GIT_ERROR
+function Repository.open (path, search)
   local git_repo = libgit2.git_repository_double_pointer()
 
-  local ret = libgit2.C.git_repository_open(git_repo, path)
-  if ret ~= 0 then
-    return nil
+  local open_flag = 0ULL
+  if not search then
+    open_flag = bit.bor(open_flag, libgit2.GIT_REPOSITORY_OPEN.NO_SEARCH)
   end
 
-  return Repository.new(git_repo)
+  local ret = libgit2.C.git_repository_open_ext(git_repo, path, open_flag, nil)
+  if ret ~= 0 then
+    return nil, ret
+  end
+
+  return Repository.new(git_repo), 0
 end
 
 
@@ -693,6 +700,12 @@ end
 function Repository:is_head_detached()
   local ret = libgit2.C.git_repository_head_detached(self.repo[0])
   return ret == 1
+end
+
+
+-- Get the path of this repository
+function Repository:repo_path()
+  return ffi.string(libgit2.C.git_repository_path(self.repo[0]))
 end
 
 

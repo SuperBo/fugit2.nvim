@@ -130,6 +130,7 @@ ffi.cdef[[
   int git_branch_upstream_remote(git_buf *buf, git_repository *repo, const char *refname);
 
   int git_repository_open(git_repository **out, const char *path);
+  int git_repository_open_ext(git_repository **out, const char *path, unsigned int flags, const char *ceiling_dirs);
   void git_repository_free(git_repository *repo);
   const char* git_repository_path(const git_repository *repo);
   int git_repository_is_empty(git_repository *repo);
@@ -225,7 +226,6 @@ M.GIT_BRANCH = {
   ALL    = 3, -- GIT_BRANCH_LOCAL|GIT_BRANCH_REMOTE,
 }
 
-
 ---@enum GIT_ERROR
 M.GIT_ERROR = {
   GIT_OK              =  0, -- No error
@@ -277,7 +277,6 @@ M.GIT_REFERENCE = {
   ALL      = 3, -- Both GIT_REFERENCE_DIRECT | GIT_REFERENCE_SYMBOLIC
 }
 
-
 ---@enum GIT_SORT
 M.GIT_SORT = {
   NONE        = 0, -- 0, default method from `git`: reverse chronological order
@@ -285,7 +284,6 @@ M.GIT_SORT = {
   TIME        = 2, -- 1 << 1, Sort the repository contents by commit time.
   REVERSE     = 4, -- 1 << 2, Iterate through the repository contents in reverse order.
 }
-
 
 ---@enum GIT_STATUS
 M.GIT_STATUS = {
@@ -335,7 +333,6 @@ M.GIT_STATUS_OPT = {
 	INCLUDE_UNREADABLE_AS_UNTRACKED = 32768, --(1u << 15)
 }
 
-
 ---@enum GIT_OBJECT
 M.GIT_OBJECT = {
 	ANY       = -2, -- Object can be any of the following.
@@ -346,6 +343,27 @@ M.GIT_OBJECT = {
 	TAG       = 4, -- An annotated tag object.
 	OFS_DELTA = 6, -- A delta, base is given by an offset.
 	REF_DELTA = 7  -- A delta, base is given by object id.
+}
+
+---@enum GIT_REPOSITORY_OPEN
+M.GIT_REPOSITORY_OPEN = {
+  NO_SEARCH = 1,
+
+	--  Unless this flag is set, open will not continue searching across
+	-- filesystem boundaries (i.e. when `st_dev` changes from the `stat`
+	-- system call).  For example, searching in a user's home directory at
+	-- "/home/user/source/" will not return "/.git/" as the found repo if
+	-- "/" is a different filesystem than "/home".
+  CROSS_FS  = 2,
+
+	-- Open repository as a bare repo regardless of core.bare config, and
+	-- defer loading config file for faster setup.
+	-- Unlike `git_repository_open_bare`, this can follow gitlinks.
+  BARE      = 4,
+
+  NO_DOTGIT = 8,
+
+  FROM_ENV  = 16,
 }
 
 
