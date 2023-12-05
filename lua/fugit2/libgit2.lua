@@ -190,6 +190,7 @@ ffi.cdef[[
   int git_graph_descendant_of(git_repository *repo, const git_oid *commit, const git_oid *ancestor);
 
   int git_signature_default(git_signature **out, git_repository *repo);
+  void git_signature_free(git_signature *sig);
 ]]
 
 

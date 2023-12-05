@@ -1,6 +1,6 @@
 -- NUI Git graph module
 
-
+local NuiLayout = require "nui.layout"
 local NuiLine = require "nui.line"
 local NuiText = require "nui.text"
 local Object = require "nui.object"
@@ -94,29 +94,21 @@ local NuiGitGraphCommitGraph = Object("NuiGitGraphCommitGraph")
 
 
 ---@class NuiGitGraph
----@field branch_bufnr integer Branch popup buf number.
----@field commit_bufnr integer Commit popup buf number.
+---@field branch_popup NuiPopup Branch popup.
+---@field commit_popup NuiPopup Commit popup.
 ---@field ns_id integer Namespace id.
 ---@field repo GitRepository
 local NuiGitGraph = Object("NuiGitGraph")
 
 
 -- Inits NuiGitGraph.
----@param branch_bufnr integer
----@param commit_bufnr integer
+---@param branch_popup NuiPopup
+---@param commit_popup NuiPopup
 ---@param ns_id integer
 ---@param repo GitRepository
-function NuiGitGraph:init(branch_bufnr, commit_bufnr, ns_id, repo)
-  if not vim.api.nvim_buf_is_valid(branch_bufnr) then
-    error("invalid bufnr " .. branch_bufnr)
-  end
-
-  if not vim.api.nvim_buf_is_valid(commit_bufnr) then
-    error("invalid bufnr " .. commit_bufnr)
-  end
-
-  self.branch_bufnr = branch_bufnr
-  self.commit_bufnr = commit_bufnr
+function NuiGitGraph:init(branch_popup, commit_popup, ns_id, repo)
+  self.branch_popup = branch_popup
+  self.commit_popup = commit_popup
 
   self.ns_id = -1
   if ns_id then
@@ -137,6 +129,26 @@ function NuiGitGraph:init(branch_bufnr, commit_bufnr, ns_id, repo)
   self._branches = {}
   ---@type NuiGitGraphCommitNode[]
   self._commits = {}
+
+  self._layout = NuiLayout(
+    {
+      relative = "editor",
+      position = "50%",
+      size = {
+        width = "80%",
+        height = "80%",
+      },
+    },
+    NuiLayout.Box(
+      {
+        NuiLayout.Box(branch_popup, { size = 30 }),
+        NuiLayout.Box(commit_popup, { grow = 1 }),
+      },
+      { dir = "row" }
+    )
+  )
+
+  self:setup_handlers()
 
   self:update()
 end
@@ -593,7 +605,7 @@ end
 function NuiGitGraph:render()
   -- branch lines
   for i, line in ipairs(self._branch_lines) do
-    line:render(self.branch_bufnr, self.ns_id, i)
+    line:render(self.branch_popup.bufnr, self.ns_id, i)
   end
 
   -- commit panel
@@ -602,24 +614,28 @@ function NuiGitGraph:render()
     self._commit_lines
   )
   vim.api.nvim_buf_set_lines(
-    self.commit_bufnr, 0, -1, true, commit_lines
+    self.commit_popup.bufnr, 0, -1, true, commit_lines
   )
 end
 
 
+function NuiGitGraph:mount()
+  return self._layout:mount()
+end
+
+
 -- Setups keymap handlers
----@param branch_popup NuiPopup
----@param commit_popup NuiPopup
----@param map_options table
-function NuiGitGraph:setup_handlers(branch_popup, commit_popup, map_options)
+function NuiGitGraph:setup_handlers()
+  local map_options = { noremap = true }
+
   -- exit func
-  local commit_exit_fn = function()
-    commit_popup:unmount()
+  local exit_fn = function()
+    self._layout:unmount()
   end
-  commit_popup:map("n", "q", commit_exit_fn, map_options)
-  commit_popup:map("n", "<esc>", commit_exit_fn, map_options)
-  branch_popup:map("n", "q", commit_exit_fn, map_options)
-  branch_popup:map("n", "<esc>", commit_exit_fn, map_options)
+  self.commit_popup:map("n", "q", exit_fn, map_options)
+  self.commit_popup:map("n", "<esc>", exit_fn, map_options)
+  self.branch_popup:map("n", "q", exit_fn, map_options)
+  self.branch_popup:map("n", "<esc>", exit_fn, map_options)
   -- commit_popup:on(event.BufLeave, exit_fn)
 
 
@@ -628,18 +644,18 @@ function NuiGitGraph:setup_handlers(branch_popup, commit_popup, map_options)
     self:update()
     self:render()
   end
-  commit_popup:map("n", "r", update_fn, map_options)
-  branch_popup:map("n", "r", update_fn, map_options)
+  self.commit_popup:map("n", "r", update_fn, map_options)
+  self.branch_popup:map("n", "r", update_fn, map_options)
 
   --movement
-  commit_popup:map("n", "j", "2j", map_options)
-  commit_popup:map("n", "k", "2k", map_options)
-  commit_popup:map("n", "h",
-    function() vim.api.nvim_set_current_win(branch_popup.winid) end,
+  self.commit_popup:map("n", "j", "2j", map_options)
+  self.commit_popup:map("n", "k", "2k", map_options)
+  self.commit_popup:map("n", "h",
+    function() vim.api.nvim_set_current_win(self.branch_popup.winid) end,
     map_options
   )
-  branch_popup:map("n", "l",
-    function() vim.api.nvim_set_current_win(commit_popup.winid) end,
+  self.branch_popup:map("n", "l",
+    function() vim.api.nvim_set_current_win(self.commit_popup.winid) end,
     map_options
   )
 end

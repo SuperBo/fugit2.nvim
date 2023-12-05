@@ -1,4 +1,5 @@
 local Layout = require "nui.layout"
+local NuiText = require "nui.text"
 local Popup = require "nui.popup"
 
 local NuiGitStatus = require "fugit2.view.nui_git_status"
@@ -11,10 +12,9 @@ local M = {}
 -- Creates Fugit2 Main Floating Window
 ---@param namespace integer Nvim namespace
 ---@param repo GitRepository
----@return NuiLayout
+---@return NuiGitStatus
 function M.new_fugit2_status_window(namespace, repo)
-
-  local popup_one = Popup {
+  local info_popup = Popup {
     enter = false,
     focusable = true,
     border = {
@@ -41,7 +41,30 @@ function M.new_fugit2_status_window(namespace, repo)
     },
   }
 
-  local popup_two = Popup {
+  local message_popup = Popup {
+    enter = false,
+    focusable = true,
+    border = {
+      style = "rounded",
+      padding = {
+        left = 1, right = 1
+      },
+      text = {
+        top = NuiText(" Commit Message ", "Fugit2MessageHeading"),
+        top_align = "left",
+      }
+    },
+    win_options = {
+      winhighlight = "Normal:Normal,FloatBorder:FloatBorder",
+    },
+    buf_options = {
+      modifiable = true,
+      filetype = "gitcommit",
+      -- buftype = "prompt",
+    }
+  }
+
+  local file_popup = Popup {
     enter = true,
     focusable = true,
     border = {
@@ -69,41 +92,11 @@ function M.new_fugit2_status_window(namespace, repo)
     },
   }
 
-  local layout = Layout(
-    {
-      relative = "editor",
-      position = "50%",
-      size = {
-        width = "80%",
-        height = "60%",
-      },
-    },
-    Layout.Box({
-      Layout.Box(popup_one, { size = 6 }),
-      Layout.Box(popup_two, { grow = 1 }),
-    }, { dir = "col" })
-  )
-
-  -- Exit event
-  local exit_fn = function()
-    layout:unmount()
-  end
-  local map_options = { noremap = true }
-
-  popup_one:map("n", "q", exit_fn, map_options)
-  popup_one:map("n", "<esc>", exit_fn, map_options)
-  -- popup_two:on(event.BufLeave, exit_fn)
-
-  -------------
-  -- Content --
-  -------------
-
   -- Status content
-  local status = NuiGitStatus(popup_one.bufnr, popup_two.bufnr, namespace, repo)
-  status:setup_handlers(popup_two, map_options)
+  local status = NuiGitStatus(info_popup, file_popup, message_popup, namespace, repo)
   status:render()
 
-  return layout
+  return status
 end
 
 
@@ -113,7 +106,7 @@ end
 ---@return NuiLayout
 function M.new_fugit2_graph_window(namespace, repo)
   local branch_popup = Popup {
-    enter = true,
+    enter = false,
     focusable = true,
     border = {
       style = "rounded",
@@ -167,31 +160,30 @@ function M.new_fugit2_graph_window(namespace, repo)
       swapfile = false,
     },
   }
-
-  local layout = Layout(
-    {
-      relative = "editor",
-      position = "50%",
-      size = {
-        width = "80%",
-        height = "80%",
-      },
-    },
-    Layout.Box(
-      {
-        Layout.Box(branch_popup, { size = 30 }),
-        Layout.Box(commit_popup, { grow = 1 }),
-      },
-      { dir = "row" }
-    )
-  )
+  --
+  -- local layout = Layout(
+  --   {
+  --     relative = "editor",
+  --     position = "50%",
+  --     size = {
+  --       width = "80%",
+  --       height = "80%",
+  --     },
+  --   },
+  --   Layout.Box(
+  --     {
+  --       Layout.Box(branch_popup, { size = 30 }),
+  --       Layout.Box(commit_popup, { grow = 1 }),
+  --     },
+  --     { dir = "row" }
+  --   )
+  -- )
 
   -- Status content
-  local graph = NuiGitGraph(branch_popup.bufnr, commit_popup.bufnr, namespace, repo)
-  graph:setup_handlers(branch_popup, commit_popup, { noremap = true })
+  local graph = NuiGitGraph(branch_popup, commit_popup, namespace, repo)
   graph:render()
 
-  return layout
+  return graph
 end
 
 

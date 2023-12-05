@@ -1,11 +1,11 @@
 -- NUI Git helper module
 
 local WebDevIcons = require "nvim-web-devicons"
+local NuiLayout = require "nui.layout"
 local NuiLine = require "nui.line"
 local NuiText = require "nui.text"
 local NuiTree = require "nui.tree"
 local Object = require "nui.object"
-local event = require "nui.utils.autocmd".event
 
 local git2 = require "fugit2.git2"
 local utils = require "fugit2.utils"
@@ -33,10 +33,7 @@ local function tree_construct_nodes(dir_tree, prefix)
     else
       local id = prefix .. "/" .. k
       local children = tree_construct_nodes(v, id)
-      local node = NuiTree.Node(
-        { text = k, id = id },
-        children
-      )
+      local node = NuiTree.Node({ text = k, id = id }, children)
       node:expand()
       table.insert(files, dir_idx, node)
       dir_idx = dir_idx + 1
@@ -70,6 +67,10 @@ local function tree_node_colors(worktree_status, index_status, modified)
     text_color = "Fugit2Unchanged"
     icon_color = "Fugit2Unstaged"
     status_icon = "󰆢 "
+  elseif worktree_status == git2.GIT_STATUS_SHORT.MODIFIED then
+    text_color = "Fugit2Modified"
+    icon_color = "Fugit2Staged"
+    status_icon = "󰱒 "
   else
     text_color = "Fugit2Staged"
     icon_color = "Fugit2Staged"
@@ -87,6 +88,7 @@ end
 ---@class NuiTreeNodeData
 ---@field id string
 ---@field text string
+---@field icon string
 ---@field color string Extmark.
 ---@field wstatus string Worktree short status.
 ---@field istatus string Index short status.
@@ -122,14 +124,13 @@ local function tree_node_data_from_item(item, bufs)
     alt_path = item.path
   end
 
-  local text = string.format(
-    "%s %s%s", icon, filename, rename
-  )
+  local text = filename .. rename
 
   return {
     id = path,
     alt_path = alt_path,
     text = text,
+    icon = icon,
     color = text_color,
     wstatus = wstatus,
     istatus = istatus,
@@ -150,8 +151,8 @@ local function tree_prepare_node(node)
     line:append(node:is_expanded() and "  " or "  ", "Fugit2SymbolicRef")
     line:append(node.text)
   else
-    local format_str = "%-" .. (50 - node:get_depth() * 2) ..  "s"
-    line:append(string.format(format_str, node.text), node.color)
+    local format_str = "%s %-" .. (48 - node:get_depth() * 2) ..  "s"
+    line:append(string.format(format_str, node.icon, node.text), node.color)
 
     line:append(node.modified and "[+] " or "    ", node.color)
     line:append(node.stage_icon .. " " .. node.wstatus .. node.istatus, node.stage_color)
@@ -174,8 +175,7 @@ function NuiGitStatusTree:init(bufnr, namespace)
   self.bufnr = bufnr
   self.namespace = namespace
 
-
-  self.tree = NuiTree({
+  self.tree = NuiTree {
     bufnr = bufnr,
     ns_id = namespace,
     buf_options = {
@@ -184,7 +184,7 @@ function NuiGitStatusTree:init(bufnr, namespace)
     },
     prepare_node = tree_prepare_node,
     nodes = {}
-  })
+  }
 end
 
 
@@ -320,28 +320,34 @@ function NuiGitStatusTree:render()
 end
 
 
+-- ==========================
+-- |  Commit Message buffer |
+-- ==========================
+
+
+-- ===================
+-- | Main git status |
+-- ===================
+
+
 ---@class NuiGitStatus
----@field bufnr1 integer
----@field bufnr2 integer
+---@field info_popup NuiPopup
+---@field file_popup NuiPopup
+---@field input_popup NuiPopup
+---@field repo GitRepository
 local NuiGitStatus = Object("NuiGitStatus")
 
 
 -- Inits NuiGitStatus.
----@param bufnr1 integer
----@param bufnr2 integer
+---@param info_popup NuiPopup
+---@param file_popup NuiPopup
+---@param input_popup NuiPopup
 ---@param namespace integer
 ---@param repo GitRepository
-function NuiGitStatus:init(bufnr1, bufnr2, namespace, repo)
-  if not vim.api.nvim_buf_is_valid(bufnr1) then
-    error("invalid bufnr " .. bufnr1)
-  end
-
-  if not vim.api.nvim_buf_is_valid(bufnr2) then
-    error("invalid bufnr " .. bufnr2)
-  end
-
-  self.bufnr1 = bufnr1
-  self.bufnr2 = bufnr2
+function NuiGitStatus:init(info_popup, file_popup, input_popup, namespace, repo)
+  self.info_popup = info_popup
+  self.file_popup = file_popup
+  self.input_popup = input_popup
 
   self.namespace = -1
   if namespace then
@@ -350,26 +356,59 @@ function NuiGitStatus:init(bufnr1, bufnr2, namespace, repo)
 
   if repo ~= nil then
     self.repo = repo
+    local index, sig, err
 
-    local index, err = self.repo:index()
+    index, err = repo:index()
     if index == nil then
-      error("Git2 Error " .. err)
+      error("libgit2 Error " .. err)
     end
-
     self.index = index
+
+    sig, err = repo:signature_default()
+    if sig then
+      self.author = tostring(sig)
+    end
   else
-    error("Nil repo")
+    error("Null repo")
   end
 
   ---@type NuiLine[]
   self._status_lines = {}
   ---@type NuiGitStatusTree
-  self._tree = NuiGitStatusTree(self.bufnr2, self.namespace)
+  self._tree = NuiGitStatusTree(self.file_popup.bufnr, self.namespace)
+
+  -- setup layout
+  self._org_box = NuiLayout.Box({
+    NuiLayout.Box(info_popup, { size = 6 }),
+    NuiLayout.Box(file_popup, { grow = 1 }),
+  }, { dir = "col" })
+  self._input_box = NuiLayout.Box({
+    NuiLayout.Box(info_popup, { size = 6 }),
+    NuiLayout.Box(input_popup, { size = 6 }),
+    NuiLayout.Box(file_popup, { grow = 1 }),
+  }, { dir = "col" })
+  self._layout =  NuiLayout(
+    {
+      relative = "editor",
+      position = "50%",
+      size = {
+        width = "80%",
+        height = "60%",
+      },
+    },
+    self._org_box
+  )
+
+  -- keymaps
+  self:setup_handlers()
+
+  -- get git content
   self:update()
 
   -- Whether git status is updated
   self._updated = false
 end
+
 
 -- Updates git status.
 function NuiGitStatus:update()
@@ -432,23 +471,79 @@ end
 -- Renders git status
 function NuiGitStatus:render()
   for i, line in ipairs(self._status_lines) do
-    line:render(self.bufnr1, self.namespace, i)
+    line:render(self.info_popup.bufnr, self.namespace, i)
   end
 
   self._tree:render()
 end
 
 
--- Setup keymaps handlers
----@param popup NuiPopup
----@param map_options table
-function NuiGitStatus:setup_handlers(popup, map_options)
+function NuiGitStatus:mount()
+  return self._layout:mount()
+end
+
+
+function NuiGitStatus:write_index()
+  if self._updated then
+    if self.index:write() == 0 then
+      self._updated = false
+    end
+  end
+end
+
+
+-- Makes a commit
+---@param message string
+function NuiGitStatus:commit(message)
+  if message == "" then
+    vim.notify("Empty commit message", vim.log.levels.ERROR)
+    return
+  end
+
+  local sign, prettified, err
+
+  prettified, err = git2.message_prettify(message)
+  if err ~= 0 then
+    vim.notify("Failed to clean message", vim.log.levels.ERROR)
+    return
+  end
+
+  self:write_index()
+
+  sign, err = self.repo:signature_default()
+  if err ~= 0 then
+    vim.notify("Failed to get default author, code: " .. err, vim.log.levels.ERROR)
+    return
+  end
+
+  if sign and prettified then
+    err = self.repo:commit(self.index, sign, prettified)
+    if err == 0 then
+      self:update()
+    else
+      vim.notify("Failed to create commit, code: " .. err, vim.log.levels.ERROR)
+    end
+  end
+end
+
+
+-- Setup keymap handlers
+function NuiGitStatus:setup_handlers()
+  local map_options = { noremap = true }
   local tree = self._tree
-  local repo = self.repo
-  local index = self.index
+
+  local exit_fn = function()
+    self:write_index()
+    self._layout:unmount()
+  end
+
+  -- exit
+  self.file_popup:map("n", "q", exit_fn, map_options)
+  self.file_popup:map("n", "<esc>", exit_fn, map_options)
+  -- popup:on(event.BufLeave, exit_fn)
 
   -- refresh
-  popup:map("n", "r",
+  self.file_popup:map("n", "r",
     function ()
       self:update()
       tree:render()
@@ -457,7 +552,7 @@ function NuiGitStatus:setup_handlers(popup, map_options)
   )
 
   -- collapse
-  popup:map("n", "h",
+  self.file_popup:map("n", "h",
     function()
       local node = tree.tree:get_node()
 
@@ -469,7 +564,7 @@ function NuiGitStatus:setup_handlers(popup, map_options)
   )
 
   -- collapse all
-  popup:map("n", "H",
+  self.file_popup:map("n", "H",
     function()
       local updated = false
 
@@ -485,7 +580,7 @@ function NuiGitStatus:setup_handlers(popup, map_options)
   )
 
   -- expand
-  popup:map("n", "l",
+  self.file_popup:map("n", "l",
     function()
       local node = tree.tree:get_node()
 
@@ -497,7 +592,7 @@ function NuiGitStatus:setup_handlers(popup, map_options)
   )
 
   -- expand all
-  popup:map("n", "L",
+  self.file_popup:map("n", "L",
     function()
       local updated = false
 
@@ -513,7 +608,7 @@ function NuiGitStatus:setup_handlers(popup, map_options)
   )
 
   -- collapse expand toggle
-  popup:map("n", "<cr>",
+  self.file_popup:map("n", "<cr>",
     function ()
       local node = tree.tree:get_node()
 
@@ -529,24 +624,11 @@ function NuiGitStatus:setup_handlers(popup, map_options)
     map_options
   )
 
-  -- exit func
-  local exit_fn = function()
-    if self._updated then
-      if index:write() == 0 then
-        self._updated = false
-      end
-    end
-    popup:unmount()
-  end
-  popup:map("n", "q", exit_fn, map_options)
-  popup:map("n", "<esc>", exit_fn, map_options)
-  popup:on(event.BufLeave, exit_fn)
-
   -- add to index
   local add_reset_fn = function()
     local node = tree.tree:get_node()
     if node and not node:has_children() then
-      local updated, refresh = tree:index_add_reset(repo, index, node)
+      local updated, refresh = tree:index_add_reset(self.repo, self.index, node)
       if updated then
         if refresh then
           self:update()
@@ -556,14 +638,24 @@ function NuiGitStatus:setup_handlers(popup, map_options)
       end
     end
   end
-  popup:map("n", "-", add_reset_fn, map_options)
-  popup:map("n", "<space>", add_reset_fn, map_options)
+  self.file_popup:map("n", "-", add_reset_fn, map_options)
+  self.file_popup:map("n", "<space>", add_reset_fn, map_options)
 
-  popup:map("n", "w",
+  self.file_popup:map("n", "w",
     function ()
-      if index:write() == 0 then
-        print("[Fugit2] Index saved")
+      if self.index:write() == 0 then
+        vim.notify("[Fugit2] Index saved", vim.log.levels.INFO)
       end
+    end,
+    map_options
+  )
+
+  -- make commit
+  self.file_popup:map("n", "c",
+    function ()
+      self._layout:update(self._input_box)
+      vim.api.nvim_set_current_win(self.input_popup.winid)
+      vim.cmd("startinsert")
     end,
     map_options
   )

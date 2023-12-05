@@ -578,6 +578,7 @@ function Signature.new(signature)
   ffi.gc(git_signature.sign, function(ptr)
     libgit2.C.git_signature_free(ptr[0])
   end)
+  return git_signature
 end
 
 
@@ -593,8 +594,8 @@ function Signature:email()
 end
 
 
-function Signature:_tostring()
-  return string.format("%s <%s>", self.sign[0].name, self.sign[0].email)
+function Signature:__tostring()
+  return string.format("%s <%s>", self:name(), self:email())
 end
 
 
@@ -1247,7 +1248,7 @@ function Repository:commit(index, signature, message)
   end
   local parent = nil
   if head then
-    parent, err = head:peel(libgit2.GIT_OBJECT.COMMIT)
+    parent, err = head:peel_commit()
     if err ~= 0 then
       return err
     end
@@ -1273,7 +1274,7 @@ function Repository:commit(index, signature, message)
     "UTF-8", message,
     tree[0],
     parent and 1 or 0,
-    parent
+    parent and parent.commit[0] or nil
   );
   if err ~= 0 then
     libgit2.C.git_tree_free(tree[0])
@@ -1355,7 +1356,7 @@ M.GIT_STATUS_SHORT = GIT_STATUS_SHORT
 
 M.head = Repository.head
 M.status = Repository.status
-M.prettify_message = prettify_message
+M.message_prettify = message_prettify
 
 
 function M.destroy()
