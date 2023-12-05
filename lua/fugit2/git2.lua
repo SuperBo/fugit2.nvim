@@ -127,10 +127,16 @@ Remote.__index = Remote
 
 
 ---@class GitRevisionWalker
----@field repo ffi.cdata* libgti2 struct git_repository*
+---@field repo ffi.cdata* libgit2 struct git_repository*
 ---@field revwalk ffi.cdata* libgit2 struct git_revwalk*[1]
 local RevisionWalker = {}
 RevisionWalker.__index = RevisionWalker
+
+
+---@class GitSignature
+---@field sign ffi.cdata* libgit2 git_signature*[1]
+local Signature = {}
+Signature.__index = Signature
 
 
 -- ========================
@@ -224,6 +230,14 @@ function Commit.new (git_commit)
   end)
 
   return commit
+end
+
+
+-- Gets the id of a commit.
+---@return GitObjectId
+function Commit:id()
+  local git_oid = libgit2.C.git_commit_id(self.commit[0])
+  return ObjectId.new(git_oid)
 end
 
 
@@ -368,6 +382,24 @@ function Reference:peel(type)
   end
 
   return Object.new(c_object), 0
+end
+
+
+-- Recursively peel reference until commit object is found.
+---@return GitCommit?
+---@return integer Git Error code
+function Reference:peel_commit()
+  local c_object = libgit2.git_object_double_pointer()
+
+  local ret = libgit2.C.git_reference_peel(c_object, self.ref[0], libgit2.GIT_OBJECT.COMMIT);
+  if ret ~= 0 then
+    return nil, ret
+  end
+
+  local c_commit = libgit2.git_commit_double_pointer()
+  c_commit[0] = ffi.cast(libgit2.git_commit_pointer, c_object[0])
+
+  return Commit.new(c_commit), 0
 end
 
 
@@ -533,6 +565,39 @@ function Remote.new(remote)
 end
 
 
+-- =======================
+-- | Signature functions |
+-- =======================
+
+
+---@param signature ffi.cdata* libgit2 git_signature*[1], own data
+function Signature.new(signature)
+  local git_signature = { sign = signature }
+  setmetatable(git_signature, Signature)
+
+  ffi.gc(git_signature.sign, function(ptr)
+    libgit2.C.git_signature_free(ptr[0])
+  end)
+end
+
+
+---@return string
+function Signature:name()
+  return ffi.string(self.sign[0].name)
+end
+
+
+---@return string
+function Signature:email()
+  return ffi.string(self.sign[0].email)
+end
+
+
+function Signature:_tostring()
+  return string.format("%s <%s>", self.sign[0].name, self.sign[0].email)
+end
+
+
 -- ===================
 -- | Index functions |
 -- ===================
@@ -565,6 +630,19 @@ end
 ---@return GIT_ERROR
 function Index:write()
   return libgit2.C.git_index_write(self.index[0])
+end
+
+
+-- Write the index as a tree
+---@return GitObjectId?
+---@return GIT_ERROR
+function Index:write_tree()
+  local tree_oid = libgit2.git_oid()
+  local err = libgit2.C.git_index_write_tree(tree_oid, self.index[0]);
+  if err ~= 0 then
+    return nil, err
+  end
+  return ObjectId.new(tree_oid), 0
 end
 
 
@@ -772,17 +850,17 @@ function Repository:branches(locals, remotes)
 end
 
 
--- Caculates ahead and behind information.
----@param local_commit ffi.cdata* The commit which is considered the local or current state.
----@param upstream_commit ffi.cdata* The commit which is considered upstream.
+-- Calculates ahead and behind information.
+---@param local_commit GitObjectId The commit which is considered the local or current state.
+---@param upstream_commit GitObjectId The commit which is considered upstream.
 ---@return number? ahead Unique ahead commits.
 ---@return number? behind Unique behind commits.
----@return GIT_ERROR error Error code.
+---@return GIT_ERROR err Error code.
 function Repository:ahead_behind(local_commit, upstream_commit)
   local c_ahead = libgit2.size_t_array(2)
 
   local ret = libgit2.C.git_graph_ahead_behind(
-    c_ahead, c_ahead + 1, self.repo[0], local_commit, upstream_commit
+    c_ahead, c_ahead + 1, self.repo[0], local_commit.oid, upstream_commit.oid
   )
 
   if ret ~= 0 then
@@ -974,7 +1052,7 @@ end
 ---@return integer return_code Return code.
 function Repository:status()
   ---@type GIT_ERROR
-  local error
+  local err
 
   local opts = libgit2.git_status_options()
   libgit2.C.git_status_options_init(opts, 1)
@@ -988,31 +1066,33 @@ function Repository:status()
   )
 
   local status = libgit2.git_status_list_double_pointer()
-  error = libgit2.C.git_status_list_new(status, self.repo[0], opts)
-  if error ~= 0 then
-    return nil, error
+  err = libgit2.C.git_status_list_new(status, self.repo[0], opts)
+  if err ~= 0 then
+    return nil, err
   end
 
   -- Get Head information
   local repo_head
-  repo_head, error = self:head()
+  repo_head, err = self:head()
   if repo_head == nil then
-    return nil, error
+    return nil, err
   end
 
-  local repo_head_oid, _ = repo_head:target()
-  local repo_head_oid_str, repo_head_msg = "", ""
-  if repo_head_oid ~= nil then
-    repo_head_oid_str = tostring(repo_head_oid)
-    repo_head_msg = self:commit_lookup(repo_head_oid):message()
-  end
+  -- local repo_head_oid, _ = repo_head:target()
+  -- if repo_head_oid ~= nil then
+  --   repo_head_oid_str = tostring(repo_head_oid)
+  --   repo_head_msg = self:commit_lookup(repo_head_oid):message()
+  -- end
+
+  local repo_head_commit, _ = repo_head:peel_commit()
+  local repo_head_oid = repo_head_commit and repo_head_commit:id() or nil
 
   ---@type GitStatusResult
   local result = {
     head = {
       name        = repo_head:shorthand(),
-      oid         = repo_head_oid_str,
-      message     = repo_head_msg,
+      oid         = repo_head_oid and tostring(repo_head_oid) or "",
+      message     = repo_head_commit and repo_head_commit:message() or "",
       is_detached = self:is_head_detached(),
       namespace   = repo_head.namespace
     },
@@ -1021,24 +1101,20 @@ function Repository:status()
 
   -- Get upstream information
   local repo_upstream
-  repo_upstream, error = repo_head:branch_upstream()
-  if repo_upstream ~= nil then
+  repo_upstream, err = repo_head:branch_upstream()
+  if repo_upstream then
     ---@type number
     local ahead, behind = 0, 0
     local commit_local = repo_head_oid
-    local commit_upstream, _ = repo_upstream:target()
+    -- local commit_upstream, _ = repo_upstream:target()
+    local commit_upstream, _ = repo_upstream:peel_commit()
+    local commit_upstream_oid = commit_upstream and commit_upstream:id() or nil
 
-    if commit_upstream ~= nil and commit_local ~= nil then
-      local nilable_ahead, nilable_behind, _ = self:ahead_behind(commit_local.oid, commit_upstream.oid)
+    if commit_upstream_oid and commit_local then
+      local nilable_ahead, nilable_behind, _ = self:ahead_behind(commit_local, commit_upstream_oid)
       if nilable_ahead ~= nil and nilable_behind ~= nil then
         ahead, behind = nilable_ahead, nilable_behind
       end
-    end
-
-    local oid_str, msg = "", ""
-    if commit_upstream ~= nil then
-      oid_str = tostring(commit_upstream)
-      msg = self:commit_lookup(commit_upstream):message()
     end
 
     local remote_name = repo_upstream:remote_name()
@@ -1049,8 +1125,8 @@ function Repository:status()
 
     result.upstream = {
       name       = repo_upstream:shorthand(),
-      oid        = oid_str,
-      message    = msg,
+      oid        = commit_upstream_oid and tostring(commit_upstream_oid) or "",
+      message    = commit_upstream and commit_upstream:message() or "",
       ahead      = ahead,
       behind     = behind,
       remote     = remote and remote.name or "",
@@ -1143,15 +1219,79 @@ function Repository:status()
 end
 
 
+-- Create a new action signature with default user and now timestamp.
+---@return GitSignature?
+---@return GIT_ERROR
+function Repository:signature_default()
+  local git_signature = libgit2.git_signature_double_pointer()
+
+  local ret = libgit2.C.git_signature_default(git_signature, self.repo[0]);
+  if ret ~= 0 then
+    return nil, ret
+  end
+
+  return Signature.new(git_signature), 0
+end
+
+
+-- Creates new commit in the repository.
+---@param index GitIndex
+---@param signature GitSignature
+---@param message string
+---@return GIT_ERROR
+function Repository:commit(index, signature, message)
+  -- get head as parent commit
+  local head, err = self:head()
+  if err ~= 0 and err ~= libgit2.GIT_ERROR.GIT_ENOTFOUND then
+    return err
+  end
+  local parent = nil
+  if head then
+    parent, err = head:peel(libgit2.GIT_OBJECT.COMMIT)
+    if err ~= 0 then
+      return err
+    end
+  end
+
+  local tree_id
+  tree_id, err = index:write_tree()
+  if not tree_id then
+    return err
+  end
+
+  local tree = libgit2.git_tree_double_pointer()
+  err = libgit2.C.git_tree_lookup(tree, self.repo[0], tree_id.oid)
+  if err ~= 0 then
+    return err
+  end
+
+  local git_oid = libgit2.git_oid()
+  err = libgit2.C.git_commit_create_v(
+    git_oid,
+    self.repo[0], "HEAD",
+    signature.sign[0], signature.sign[0],
+    "UTF-8", message,
+    tree[0],
+    parent and 1 or 0,
+    parent
+  );
+  if err ~= 0 then
+    libgit2.C.git_tree_free(tree[0])
+    return err
+  end
+
+  libgit2.C.git_tree_free(tree[0])
+  return 0
+end
+
+
 -- Return a GitRevisionWalker, cached it for the repo if possible.
 ---@return GitRevisionWalker?
 ---@return GIT_ERROR
 function Repository:walker()
-  local ret
-
   local walker = libgit2.git_revwalk_double_pointer()
 
-  ret = libgit2.C.git_revwalk_new(walker, self.repo[0])
+  local ret = libgit2.C.git_revwalk_new(walker, self.repo[0])
   if ret ~= 0 then
     return nil, ret
   end
@@ -1166,6 +1306,33 @@ function Repository:free_walker()
   if self._walker then
     self._walker = nil
   end
+end
+
+
+-- ===================
+-- | Utils functions |
+-- ===================
+
+-- Prettifiy git message
+---@param msg string
+local function message_prettify(msg)
+  local c_buf = libgit2.git_buf()
+
+  local ret = libgit2.C.git_buf_grow(c_buf, msg:len() + 1)
+  if ret ~= 0 then
+    return nil, ret
+  end
+
+  ret = libgit2.C.git_message_prettify(c_buf, msg, 1, string.byte("#"))
+  if ret ~=0 then
+    libgit2.C.git_buf_dispose(c_buf)
+    return nil, ret
+  end
+
+  local prettified = ffi.string(c_buf[0].ptr, c_buf[0].size)
+  libgit2.C.git_buf_dispose(c_buf)
+
+  return prettified, 0
 end
 
 
@@ -1188,6 +1355,7 @@ M.GIT_STATUS_SHORT = GIT_STATUS_SHORT
 
 M.head = Repository.head
 M.status = Repository.status
+M.prettify_message = prettify_message
 
 
 function M.destroy()

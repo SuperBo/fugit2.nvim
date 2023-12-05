@@ -19,6 +19,7 @@ ffi.cdef[[
   typedef struct git_repository git_repository;
   typedef struct git_revwalk git_revwalk;
   typedef struct git_status_list git_status_list;
+  typedef struct git_tree git_tree;
 
   typedef struct {
     char **strings;
@@ -39,6 +40,18 @@ ffi.cdef[[
   typedef struct {
 	  unsigned char id[20];
   } git_oid;
+
+  typedef struct git_time {
+    int64_t time;
+    int offset;
+    char sign;
+  } git_time;
+
+  typedef struct git_signature {
+    char *name;
+    char *email;
+    git_time when;
+  } git_signature;
 
   typedef struct {
     git_oid            id;
@@ -84,6 +97,8 @@ ffi.cdef[[
 
   char * git_oid_tostr(char *out, size_t n, const git_oid *id);
 
+  int git_message_prettify(git_buf *out, const char *message, int strip_comments, char comment_char);
+
   void git_object_free(git_object *object);
   const git_oid * git_object_id(const git_object *obj);
 
@@ -98,6 +113,18 @@ ffi.cdef[[
   unsigned int git_commit_parentcount(const git_commit *commit);
   int git_commit_parent(git_commit **out, const git_commit *commit, unsigned int n);
   const git_oid * git_commit_parent_id(const git_commit *commit, unsigned int n);
+  int git_commit_create_v(
+    git_oid *id,
+    git_repository *repo,
+    const char *update_ref,
+    const git_signature *author,
+    const git_signature *committer,
+    const char *message_encoding,
+    const char *message,
+    const git_tree *tree,
+    size_t parent_count,
+    ...
+  );
 
   const char * git_reference_shorthand(const git_reference *ref);
   const char * git_reference_name(const git_reference *ref);
@@ -129,7 +156,7 @@ ffi.cdef[[
   int git_branch_remote_name(git_buf *out, git_repository *repo, const char *refname);
   int git_branch_upstream_remote(git_buf *buf, git_repository *repo, const char *refname);
 
-  int git_repository_open(git_repository **out, const char *path);
+  /* int git_repository_open(git_repository **out, const char *path); */
   int git_repository_open_ext(git_repository **out, const char *path, unsigned int flags, const char *ceiling_dirs);
   void git_repository_free(git_repository *repo);
   const char* git_repository_path(const git_repository *repo);
@@ -154,10 +181,15 @@ ffi.cdef[[
   int git_status_should_ignore(int *ignored, git_repository *repo, const char *path);
   int git_status_file(unsigned int *status_flags, git_repository *repo, const char *path);
 
+  int git_tree_lookup(git_tree **out, git_repository *repo, const git_oid *id);
+  void git_tree_free(git_tree *tree);
+
   int git_reset_default(git_repository *repo, const git_object *target, const git_strarray_readonly *pathspecs);
 
   int git_graph_ahead_behind(size_t *ahead, size_t *behind, git_repository *repo, const git_oid *local, const git_oid *upstream);
   int git_graph_descendant_of(git_repository *repo, const git_oid *commit, const git_oid *ancestor);
+
+  int git_signature_default(git_signature **out, git_repository *repo);
 ]]
 
 
@@ -172,47 +204,56 @@ M.const_char_pointer_array = ffi.typeof("const char *[?]")
 M.unsigned_int_array = ffi.typeof("unsigned int[?]")
 M.size_t_array = ffi.typeof("size_t[?]")
 
----@type ffi.ctype*
+---@type ffi.ctype* struct git_repository*[1]
 M.git_repository_double_pointer = ffi.typeof("struct git_repository*[1]")
 
----@type ffi.ctype*
+---@type ffi.ctype* struct git_repository*
 M.git_repository_pointer = ffi.typeof("struct git_repository*")
 
----@type ffi.ctype*
+---@type ffi.ctype* struct git_reference*[1]
 M.git_reference_double_pointer = ffi.typeof("struct git_reference*[1]")
 
----@type ffi.ctype*
+---@type ffi.ctype* struct git_remote*[1]
 M.git_remote_double_pointer = ffi.typeof("struct git_remote*[1]")
 
----@type ffi.ctype*
+---@type ffi.ctype* struct git_revwalk*[1]
 M.git_revwalk_double_pointer = ffi.typeof("struct git_revwalk*[1]")
 
----@type ffi.ctype*
+---@type ffi.ctype* git_buf[1]
 M.git_buf = ffi.typeof("git_buf[1]")
 
----@type ffi.ctype*
+---@type ffi.ctype* git_oid[1]
 M.git_oid = ffi.typeof("git_oid[1]")
 
----@type ffi.ctype*
-M.git_commit_double_pointer = ffi.typeof("git_commit*[1]")
+---@type ffi.ctype* git_commit*[1]
+M.git_commit_double_pointer = ffi.typeof("struct git_commit*[1]")
 
----@type ffi.ctype*
-M.git_object_double_pointer = ffi.typeof("git_object *[1]")
+---@type ffi.ctype* git_commit*
+M.git_commit_pointer = ffi.typeof("struct git_commit*")
 
----@type ffi.ctype*
+---@type ffi.ctype* git_object *[1]
+M.git_object_double_pointer = ffi.typeof("git_object*[1]")
+
+---@type ffi.ctype* git_signature *[1]
+M.git_signature_double_pointer = ffi.typeof("git_signature*[1]")
+
+---@type ffi.ctype* git_status_options[1]
 M.git_status_options = ffi.typeof("git_status_options[1]")
 
----@type ffi.ctype*
+---@type ffi.ctype* struct git_status_list*[1]
 M.git_status_list_double_pointer = ffi.typeof("struct git_status_list*[1]")
 
----@type ffi.ctype*
+---@type ffi.ctype* git_index*[1]
 M.git_index_double_pointer = ffi.typeof("git_index*[1]")
 
----@type ffi.ctype*
+---@type ffi.ctype* struct git_branch_iterator *[1]
 M.git_branch_iterator_double_pointer = ffi.typeof("struct git_branch_iterator *[1]")
 
----@type ffi.ctype*
+---@type ffi.ctype* git_strarray_readonly[1]
 M.git_strarray_readonly = ffi.typeof("git_strarray_readonly[1]")
+
+---@type ffi.ctype* struct git_tree*[1]
+M.git_tree_double_pointer = ffi.typeof("struct git_tree*[1]")
 
 -- ================
 -- | libgit2 enum |
@@ -309,8 +350,8 @@ M.GIT_STATUS = {
 ---@enum GIT_STATUS_SHOW
 M.GIT_STATUS_SHOW = {
   INDEX_AND_WORKDIR = 0,
-	INDEX_ONLY = 1,
-	WORKDIR_ONLY = 2
+	INDEX_ONLY        = 1,
+	WORKDIR_ONLY      = 2
 }
 
 ---@enum GIT_STATUS_OPT
@@ -362,7 +403,6 @@ M.GIT_REPOSITORY_OPEN = {
   BARE      = 4,
 
   NO_DOTGIT = 8,
-
   FROM_ENV  = 16,
 }
 
