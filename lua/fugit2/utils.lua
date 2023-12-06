@@ -1,3 +1,5 @@
+local NuiLine = require "nui.line"
+local NuiText = require "nui.text"
 local git2 = require "fugit2.git2"
 
 ---@class Fugit2Utils
@@ -11,6 +13,23 @@ function M.lines_head(str)
     return str:sub(1, newline - 1)
   end
   return str
+end
+
+
+---@param str string
+---@return NuiLine
+function M.message_title_prettify(str)
+  local title = M.lines_head(str)
+
+  local prefix = title:find(":", 1, true) or title:find("]", 1, true)
+  if prefix then
+    return NuiLine {
+      NuiText(title:sub(1, prefix), "bold"),
+      NuiText(title:sub(prefix + 1, -1))
+    }
+  end
+
+  return NuiLine { NuiText(title) }
 end
 
 

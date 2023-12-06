@@ -4,6 +4,7 @@ local M = {}
 M.link_colors = {
   Fugit2Header            = "Label",
   Fugit2ObjectId          = "Comment",
+  Fugit2Author            = "Tag",
   Fugit2HelpHeader        = "Label",
   Fugit2HelpTag           = "Tag",
   Fugit2Heading           = "PreProc",

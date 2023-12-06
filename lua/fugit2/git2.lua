@@ -249,6 +249,13 @@ function Commit:message()
 end
 
 
+---@return string
+function Commit:author()
+  local sig = libgit2.C.git_commit_author(self.commit[0])
+  return ffi.string(sig.name)
+end
+
+
 -- Gets the number of parents of this commit
 ---@return integer parentcount
 function Commit:nparents()
@@ -707,6 +714,7 @@ end
 ---@field name string
 ---@field oid string
 ---@field message string
+---@field author string
 ---@field ahead integer
 ---@field behind integer
 ---@field remote string
@@ -717,6 +725,7 @@ end
 ---@field name string
 ---@field oid string
 ---@field message string
+---@field author string
 ---@field is_detached boolean
 ---@field namespace GIT_REFERENCE_NAMESPACE
 
@@ -1101,6 +1110,7 @@ function Repository:status()
     head = {
       name        = repo_head:shorthand(),
       oid         = repo_head_oid and tostring(repo_head_oid) or "",
+      author      = repo_head_commit and repo_head_commit:author() or "",
       message     = repo_head_commit and repo_head_commit:message() or "",
       is_detached = self:is_head_detached(),
       namespace   = repo_head.namespace
@@ -1136,6 +1146,7 @@ function Repository:status()
       name       = repo_upstream:shorthand(),
       oid        = commit_upstream_oid and tostring(commit_upstream_oid) or "",
       message    = commit_upstream and commit_upstream:message() or "",
+      author     = commit_upstream and commit_upstream:author() or "",
       ahead      = ahead,
       behind     = behind,
       remote     = remote and remote.name or "",

@@ -105,11 +105,11 @@ ffi.cdef[[
   int git_commit_lookup(git_commit **commit, git_repository *repo, const git_oid *id);
   int git_commit_lookup_prefix(git_commit **commit, git_repository *repo, const git_oid *id, size_t len);
   void git_commit_free(git_commit *commit);
+  const git_signature * git_commit_author(const git_commit *commit);
   const git_oid * git_commit_id(const git_commit *commit);
   git_repository * git_commit_owner(const git_commit *commit);
   const char * git_commit_message(const git_commit *commit);
   const char * git_commit_message_encoding(const git_commit *commit);
-  const char * git_commit_message_raw(const git_commit *commit);
   unsigned int git_commit_parentcount(const git_commit *commit);
   int git_commit_parent(git_commit **out, const git_commit *commit, unsigned int n);
   const git_oid * git_commit_parent_id(const git_commit *commit, unsigned int n);
