@@ -1,11 +1,11 @@
 -- NUI Git helper module
 
-local WebDevIcons = require "nvim-web-devicons"
 local NuiLayout = require "nui.layout"
 local NuiLine = require "nui.line"
 local NuiText = require "nui.text"
 local NuiTree = require "nui.tree"
 local Object = require "nui.object"
+local WebDevIcons = require "nvim-web-devicons"
 
 local git2 = require "fugit2.git2"
 local utils = require "fugit2.utils"
@@ -188,6 +188,33 @@ function NuiGitStatusTree:init(bufnr, namespace)
 end
 
 
+---@return integer files_change
+---@return integer files_remove
+function NuiGitStatusTree:index_count()
+  local files_change, files_remove = 0, 0
+
+  ---@type (string | boolean)[]
+  local queue = { false }
+
+  while #queue > 0 do
+    local parent = table.remove(queue, 1) or nil
+    for _, node in ipairs(self.tree:get_nodes(parent)) do
+      if node:has_children() then
+        table.insert(queue, node:get_id())
+      elseif node.istatus then
+        if node.istatus == "D" then
+          files_remove = files_remove + 1
+        elseif node.istatus ~= "-" and node.istatus ~= "?" then
+          files_change = files_change + 1
+        end
+      end
+    end
+  end
+
+  return files_change, files_remove
+end
+
+
 ---@param status GitStatusItem[]
 function NuiGitStatusTree:update(status)
   -- get all bufs modified info
@@ -339,19 +366,19 @@ local NuiGitStatus = Object("NuiGitStatus")
 
 
 -- Inits NuiGitStatus.
+---@param ns_id integer
+---@param repo GitRepository
 ---@param info_popup NuiPopup
 ---@param file_popup NuiPopup
 ---@param input_popup NuiPopup
----@param namespace integer
----@param repo GitRepository
-function NuiGitStatus:init(info_popup, file_popup, input_popup, namespace, repo)
+function NuiGitStatus:init(ns_id, repo, info_popup, file_popup, input_popup, commit_menu)
   self.info_popup = info_popup
   self.file_popup = file_popup
   self.input_popup = input_popup
 
-  self.namespace = -1
-  if namespace then
-    self.namespace = namespace
+  self.ns_id = -1
+  if ns_id then
+    self.ns_id = ns_id
   end
 
   if repo ~= nil then
@@ -367,37 +394,56 @@ function NuiGitStatus:init(info_popup, file_popup, input_popup, namespace, repo)
     sig, err = repo:signature_default()
     if sig then
       self.author = tostring(sig)
+
     end
   else
     error("Null repo")
   end
 
+  vim.api.nvim_buf_set_extmark(input_popup.bufnr, self.ns_id, 0, 0, {
+    id = 1,
+    end_row = 0,
+    virt_text = {
+      {"commit message", "Comment"}
+    },
+    virt_text_pos = "right_align",
+    virt_text_hide = true,
+  })
+
   ---@type NuiLine[]
   self._status_lines = {}
   ---@type NuiGitStatusTree
-  self._tree = NuiGitStatusTree(self.file_popup.bufnr, self.namespace)
+  self._tree = NuiGitStatusTree(self.file_popup.bufnr, self.ns_id)
 
   -- setup layout
-  self._org_box = NuiLayout.Box({
-    NuiLayout.Box(info_popup, { size = 6 }),
-    NuiLayout.Box(file_popup, { grow = 1 }),
-  }, { dir = "col" })
-  self._input_box = NuiLayout.Box({
-    NuiLayout.Box(info_popup, { size = 6 }),
-    NuiLayout.Box(input_popup, { size = 6 }),
-    NuiLayout.Box(file_popup, { grow = 1 }),
-  }, { dir = "col" })
+  self._boxes = {
+    main = NuiLayout.Box({
+        NuiLayout.Box(info_popup, { size = 6 }),
+        NuiLayout.Box(file_popup, { grow = 1 }),
+      }, { dir = "col" }
+    ),
+    input = NuiLayout.Box({
+        NuiLayout.Box(info_popup, { size = 6 }),
+        NuiLayout.Box(input_popup, { size = 6 }),
+        NuiLayout.Box(file_popup, { grow = 1 }),
+      }, { dir = "col" }
+    ),
+  }
   self._layout =  NuiLayout(
     {
       relative = "editor",
       position = "50%",
       size = {
-        width = "80%",
+        width = "60%",
         height = "60%",
       },
     },
-    self._org_box
+    self._boxes.main
   )
+  -- setup menu
+  self._menus = {
+    commit = commit_menu
+  }
 
   -- keymaps
   self:setup_handlers()
@@ -471,7 +517,7 @@ end
 -- Renders git status
 function NuiGitStatus:render()
   for i, line in ipairs(self._status_lines) do
-    line:render(self.info_popup.bufnr, self.namespace, i)
+    line:render(self.info_popup.bufnr, self.ns_id, i)
   end
 
   self._tree:render()
@@ -479,7 +525,7 @@ end
 
 
 function NuiGitStatus:mount()
-  return self._layout:mount()
+  self._layout:mount()
 end
 
 
@@ -489,6 +535,21 @@ function NuiGitStatus:write_index()
       self._updated = false
     end
   end
+end
+
+
+function NuiGitStatus:on_input()
+  self._layout:update(self._boxes.input)
+end
+
+
+function NuiGitStatus:off_input()
+  vim.api.nvim_buf_set_lines(
+    self.input_popup.bufnr,
+    0, -1, true, {}
+  )
+  self._layout:update(self._boxes.main)
+  vim.api.nvim_set_current_win(self.file_popup.winid)
 end
 
 
@@ -519,7 +580,9 @@ function NuiGitStatus:commit(message)
   if sign and prettified then
     err = self.repo:commit(self.index, sign, prettified)
     if err == 0 then
+      self:off_input()
       self:update()
+      self:render()
     else
       vim.notify("Failed to create commit, code: " .. err, vim.log.levels.ERROR)
     end
@@ -539,6 +602,7 @@ function NuiGitStatus:setup_handlers()
 
   -- exit
   self.file_popup:map("n", "q", exit_fn, map_options)
+  self.file_popup:map("i", "q", exit_fn, map_options)
   self.file_popup:map("n", "<esc>", exit_fn, map_options)
   -- popup:on(event.BufLeave, exit_fn)
 
@@ -650,15 +714,69 @@ function NuiGitStatus:setup_handlers()
     map_options
   )
 
-  -- make commit
-  self.file_popup:map("n", "c",
-    function ()
-      self._layout:update(self._input_box)
-      vim.api.nvim_set_current_win(self.input_popup.winid)
-      vim.cmd("startinsert")
-    end,
-    map_options
-  )
+  -- Commit menu
+  local commit_commit_fn = function()
+    self._menus.commit:unmount()
+    self:on_input()
+
+    local change, remove = self._tree:index_count()
+    local title = string.format(
+      " Create commit - %s%s%s",
+      self.author,
+      change > 0  and " +" .. change or "",
+      remove > 0 and " -" .. remove or ""
+    )
+    self.input_popup.border:set_text(
+      "top",
+      NuiText(title, "Fugit2MessageHeading"),
+      "left"
+    )
+
+    if change + remove < 1 then
+      vim.notify("Empty commit", vim.log.levels.WARN)
+    end
+
+    vim.api.nvim_set_current_win(self.input_popup.winid)
+    vim.cmd("startinsert")
+  end
+
+  local commit_graph_fn = function()
+    self._menus.commit:unmount()
+    exit_fn()
+    require("fugit2.view.ui").new_fugit2_graph_window(self.ns_id, self.repo):mount()
+  end
+
+  self.file_popup:map("n", "c", function()
+    self._menus.commit:mount()
+    self._menus.commit:map("n", "c", commit_commit_fn, map_options)
+    self._menus.commit:map("n", "g", commit_graph_fn, map_options)
+  end, map_options)
+  self._menus.commit.menu_props.on_submit = function()
+    local item_id = self._menus.commit.tree:get_node().id or ""
+    self._menus.commit:unmount()
+    if item_id == "c" then
+      commit_commit_fn()
+    elseif item_id == "g" then
+      commit_graph_fn()
+    end
+  end
+
+  local input_quit_fn = function()
+    vim.cmd("stopinsert")
+    self:off_input()
+  end
+
+  self.input_popup:map("i", "<c-c>", input_quit_fn, map_options)
+  self.input_popup:map("n", "q", input_quit_fn, map_options)
+  self.input_popup:map("n", "<esc>", input_quit_fn, map_options)
+
+  self.input_popup:map("n", "<cr>", function()
+    local message = table.concat(
+      vim.api.nvim_buf_get_lines(self.input_popup.bufnr, 0, -1, true),
+      "\n"
+    )
+    self:commit(message)
+  end, map_options)
 end
 
 

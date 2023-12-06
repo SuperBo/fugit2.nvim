@@ -619,6 +619,14 @@ function Index.new(index)
 end
 
 
+-- Gets the count of entries currently in the index
+---@return integer
+function Index:nentry()
+  local entrycount = libgit2.C.git_index_entrycount(self.index[0])
+  return math.floor(tonumber(entrycount) or -1)
+end
+
+
 -- Updates the contents of an existing index object.
 ---@param force boolean Performs hard read or not?
 ---@return GIT_ERROR

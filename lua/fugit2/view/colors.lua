@@ -23,6 +23,9 @@ M.link_colors = {
   Fugit2Hash              = "Identifier",
   Fugit2SymbolicRef       = "Function",
   Fugit2Count             = "Number",
+  Fugit2WindowHelp        = "Comment",
+  Fugit2MenuHead          = "Function",
+  Fugit2MenuKey           = "Keyword",
 }
 
 M.colors = {

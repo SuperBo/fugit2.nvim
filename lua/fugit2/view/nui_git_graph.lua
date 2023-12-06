@@ -620,7 +620,7 @@ end
 
 
 function NuiGitGraph:mount()
-  return self._layout:mount()
+  self._layout:mount()
 end
 
 

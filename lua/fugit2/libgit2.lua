@@ -169,9 +169,11 @@ ffi.cdef[[
   void git_index_free(git_index *index);
   int git_index_read(git_index *index, int force);
   int git_index_write(git_index *index);
+  int git_index_write_tree(git_oid *out, git_index *index);
   int git_index_add_bypath(git_index *index, const char *path);
   int git_index_remove_bypath(git_index *index, const char *path);
   int git_index_remove_directory(git_index *index, const char *dir, int stage);
+  size_t git_index_entrycount(const git_index *index);
 
   int git_status_list_new(git_status_list **out, git_repository *repo, const git_status_options *opts);
   void git_status_list_free(git_status_list *statuslist);

@@ -1,6 +1,7 @@
-local Layout = require "nui.layout"
+local NuiLine = require "nui.line"
+local NuiMenu = require "nui.menu"
+local NuiPopup = require "nui.popup"
 local NuiText = require "nui.text"
-local Popup = require "nui.popup"
 
 local NuiGitStatus = require "fugit2.view.nui_git_status"
 local NuiGitGraph = require "fugit2.view.nui_git_graph"
@@ -14,7 +15,7 @@ local M = {}
 ---@param repo GitRepository
 ---@return NuiGitStatus
 function M.new_fugit2_status_window(namespace, repo)
-  local info_popup = Popup {
+  local info_popup = NuiPopup {
     enter = false,
     focusable = true,
     border = {
@@ -35,13 +36,14 @@ function M.new_fugit2_status_window(namespace, repo)
       winhighlight = "Normal:Normal,FloatBorder:FloatBorder",
     },
     buf_options = {
-      modifiable = false,
-      readonly = true,
+      modifiable = true,
+      readonly = false,
       swapfile = false,
+
     },
   }
 
-  local message_popup = Popup {
+  local message_popup = NuiPopup {
     enter = false,
     focusable = true,
     border = {
@@ -50,8 +52,10 @@ function M.new_fugit2_status_window(namespace, repo)
         left = 1, right = 1
       },
       text = {
-        top = NuiText(" Commit Message ", "Fugit2MessageHeading"),
+        top = NuiText(" Create commit ", "Fugit2MessageHeading"),
         top_align = "left",
+        bottom = NuiText("[esc], [q]uit, [enter]", "FloatFooter"),
+        bottom_align = "right",
       }
     },
     win_options = {
@@ -60,13 +64,13 @@ function M.new_fugit2_status_window(namespace, repo)
     buf_options = {
       modifiable = true,
       filetype = "gitcommit",
-      -- buftype = "prompt",
     }
   }
 
-  local file_popup = Popup {
+  local file_popup = NuiPopup {
     enter = true,
     focusable = true,
+    zindex = 50,
     border = {
       style = "rounded",
       padding = {
@@ -78,6 +82,8 @@ function M.new_fugit2_status_window(namespace, repo)
       text = {
         top = " Files ",
         top_align = "left",
+        bottom = NuiText("[c]ommits", "FloatFooter"),
+        bottom_align = "right",
       },
     },
     win_options = {
@@ -86,14 +92,66 @@ function M.new_fugit2_status_window(namespace, repo)
       cursorline = true,
     },
     buf_options = {
-      modifiable = false,
-      readonly = true,
+      modifiable = true,
+      readonly = false,
       swapfile = false,
     },
   }
 
+  local menu_item_align = { text_align = "center" }
+  local commit_menu = NuiMenu(
+    {
+      position = "50%",
+      size = {
+        width = 36,
+        height = 8,
+      },
+      zindex = 52,
+      border = {
+        style = "single",
+        text = {
+          top = "Commit Menu",
+          top_align = "left",
+        },
+      },
+      win_options = {
+        winhighlight = "Normal:Normal,FloatBorder:Normal",
+      },
+    },
+    {
+      lines = {
+        NuiMenu.separator(
+          NuiText("Create", "Fugit2MenuHead"),
+          menu_item_align
+        ),
+        NuiMenu.item(NuiLine({NuiText("c ", "Fugit2MenuKey"), NuiText("Commit")}), { id = "c" }),
+        NuiMenu.separator(
+          NuiLine { NuiText("Edit ", "Fugit2MenuHead"), NuiText("HEAD", "Fugit2Staged") },
+          menu_item_align
+        ),
+        NuiMenu.item(NuiLine { NuiText("e ", "Fugit2MenuKey"), NuiText("Extend") }, { id = "e" }),
+        NuiMenu.item(NuiLine { NuiText("r ", "Fugit2MenuKey"), NuiText("Reword") }, { id = "r" }),
+        NuiMenu.item(NuiLine { NuiText("a ", "Fugit2MenuKey"), NuiText("Amend") }, { id = "a" }),
+        NuiMenu.separator(
+          NuiText("View/Edit", "Fugit2MenuHead"),
+          menu_item_align
+        ),
+        NuiMenu.item(NuiLine { NuiText("g ", "Fugit2MenuKey"), NuiText("Graph") }, { id = "g" }),
+      },
+      keymap = {
+        focus_next = { "j", "<down>", "<tab>", "<c-n>" },
+        focus_prev = { "k", "<up>", "<s-tab>", "<c-p>" },
+        close = { "<esc>", "<c-c>", "q" },
+        submit = { "<cr>", "<Space>" },
+      },
+      on_close = function()
+      end,
+      on_submit = nil,
+    }
+  )
+
   -- Status content
-  local status = NuiGitStatus(info_popup, file_popup, message_popup, namespace, repo)
+  local status = NuiGitStatus(namespace, repo, info_popup, file_popup, message_popup, commit_menu)
   status:render()
 
   return status
@@ -105,7 +163,7 @@ end
 ---@param repo GitRepository
 ---@return NuiLayout
 function M.new_fugit2_graph_window(namespace, repo)
-  local branch_popup = Popup {
+  local branch_popup = NuiPopup {
     enter = false,
     focusable = true,
     border = {
@@ -133,7 +191,7 @@ function M.new_fugit2_graph_window(namespace, repo)
     },
   }
 
-  local commit_popup = Popup {
+  local commit_popup = NuiPopup {
     enter = true,
     focusable = true,
     border = {
@@ -160,24 +218,6 @@ function M.new_fugit2_graph_window(namespace, repo)
       swapfile = false,
     },
   }
-  --
-  -- local layout = Layout(
-  --   {
-  --     relative = "editor",
-  --     position = "50%",
-  --     size = {
-  --       width = "80%",
-  --       height = "80%",
-  --     },
-  --   },
-  --   Layout.Box(
-  --     {
-  --       Layout.Box(branch_popup, { size = 30 }),
-  --       Layout.Box(commit_popup, { grow = 1 }),
-  --     },
-  --     { dir = "row" }
-  --   )
-  -- )
 
   -- Status content
   local graph = NuiGitGraph(branch_popup, commit_popup, namespace, repo)
