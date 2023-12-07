@@ -605,8 +605,9 @@ function NuiGitStatus:write_index()
 end
 
 
-function NuiGitStatus:on_input()
+function NuiGitStatus:focus_input()
   self._layout:update(self._boxes.input)
+  vim.api.nvim_set_current_win(self.input_popup.winid)
 end
 
 
@@ -617,6 +618,13 @@ function NuiGitStatus:off_input()
   )
   self._layout:update(self._boxes.main)
   vim.api.nvim_set_current_win(self.file_popup.winid)
+end
+
+function NuiGitStatus:insert_head_message_to_input()
+  vim.api.nvim_buf_set_lines(
+    self.input_popup.bufnr, 0, -1, true,
+    vim.split(self._git.head.message, "\n", { plain = true, trimempty = true })
+  )
 end
 
 
@@ -752,8 +760,7 @@ function NuiGitStatus:commit_commit_handler()
 
     self:_set_input_popup_commit_title("Create commit", true, true)
 
-    self:on_input()
-    vim.api.nvim_set_current_win(self.input_popup.winid)
+    self:focus_input()
     vim.cmd("startinsert")
   end
 end
@@ -791,13 +798,8 @@ function NuiGitStatus:commit_amend_handler(is_reword)
       self:_set_input_popup_commit_title("Amend HEAD", true, false)
     end
 
-    vim.api.nvim_buf_set_lines(
-      self.input_popup.bufnr, 0, -1, true,
-      vim.split(self._git.head.message, "\n", { plain = true, trimempty = true })
-    )
-
-    self:on_input()
-    vim.api.nvim_set_current_win(self.input_popup.winid)
+    self:insert_head_message_to_input()
+    self:focus_input()
   end
 end
 
@@ -813,13 +815,8 @@ function NuiGitStatus:amend_confirm_yes_handler()
         self:_set_input_popup_commit_title("Amend HEAD", true, false)
       end
 
-      vim.api.nvim_buf_set_lines(
-        self.input_popup.bufnr, 0, -1, true,
-        vim.split(self._git.head.message, "\n", { plain = true, trimempty = true })
-      )
-
-      self:on_input()
-      vim.api.nvim_set_current_win(self.input_popup.winid)
+      self:insert_head_message_to_input()
+      self:focus_input()
     end
   end
 end
