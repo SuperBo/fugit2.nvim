@@ -678,6 +678,13 @@ function Index:remove_bypath(path)
 end
 
 
+-- Determine if the index contains entries representing file conflicts.
+---@return boolean has_conflicts
+function Index:has_conflicts()
+  return (libgit2.C.git_index_has_conflicts(self.index[0]) > 0)
+end
+
+
 -- ========================
 -- | Repository functions |
 -- ========================
@@ -1258,31 +1265,32 @@ end
 ---@param index GitIndex
 ---@param signature GitSignature
 ---@param message string
+---@return GitObjectId?
 ---@return GIT_ERROR
 function Repository:commit(index, signature, message)
   -- get head as parent commit
   local head, err = self:head()
   if err ~= 0 and err ~= libgit2.GIT_ERROR.GIT_ENOTFOUND then
-    return err
+    return nil, err
   end
   local parent = nil
   if head then
     parent, err = head:peel_commit()
     if err ~= 0 then
-      return err
+      return nil, err
     end
   end
 
   local tree_id
   tree_id, err = index:write_tree()
   if not tree_id then
-    return err
+    return nil, err
   end
 
   local tree = libgit2.git_tree_double_pointer()
   err = libgit2.C.git_tree_lookup(tree, self.repo[0], tree_id.oid)
   if err ~= 0 then
-    return err
+    return nil, err
   end
 
   local git_oid = libgit2.git_oid()
@@ -1294,14 +1302,91 @@ function Repository:commit(index, signature, message)
     tree[0],
     parent and 1 or 0,
     parent and parent.commit[0] or nil
-  );
+  )
+  libgit2.C.git_tree_free(tree[0])
   if err ~= 0 then
-    libgit2.C.git_tree_free(tree[0])
-    return err
+    return nil, err
   end
 
-  libgit2.C.git_tree_free(tree[0])
-  return 0
+  return ObjectId.new(git_oid), 0
+end
+
+
+-- Rewords HEAD commit.
+---@param signature GitSignature
+---@param message string
+---@return GitObjectId?
+---@return GIT_ERROR
+function Repository:amend_reword(signature, message)
+  return self:amend(nil, signature, message)
+end
+
+
+-- Extend new index to HEAD commit.
+---@param index GitIndex
+---@return GitObjectId?
+---@return GIT_ERROR
+function Repository:amend_extend(index)
+  return self:amend(index, nil, nil)
+end
+
+-- Amends an existing commit by replacing only non-NULL values.
+---@param index GitIndex?
+---@param signature GitSignature?
+---@param message string?
+---@return GitObjectId?
+---@return GIT_ERROR
+function Repository:amend(index, signature, message)
+  -- get head as parent commit
+  local head, head_commit, err
+  head, err = self:head()
+  if not head then
+    return nil, err
+  end
+  head_commit, err = head:peel_commit()
+  if not head_commit then
+    return nil, err
+  end
+
+  if not (index or signature or message) then
+    return head_commit:id(), 0
+  end
+
+  local tree = nil
+  if index then
+    local tree_id
+    tree_id, err = index:write_tree()
+    if not tree_id then
+      return nil, err
+    end
+
+    tree = libgit2.git_tree_double_pointer()
+    err = libgit2.C.git_tree_lookup(tree, self.repo[0], tree_id.oid)
+    if err ~= 0 then
+      return nil, err
+    end
+  end
+
+  local sig = signature and signature.sign[0] or nil
+
+  local git_oid = libgit2.git_oid()
+  err = libgit2.C.git_commit_amend(
+    git_oid,
+    head_commit.commit[0],
+    "HEAD",
+    sig, sig, nil, message,
+    tree ~= nil and tree[0] or nil
+  )
+
+  if tree ~= nil then
+    libgit2.C.git_tree_free(tree[0])
+  end
+
+  if err ~= 0 then
+    return nil, err
+  end
+
+  return ObjectId.new(git_oid), 0
 end
 
 

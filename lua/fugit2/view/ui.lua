@@ -3,6 +3,7 @@ local NuiMenu = require "nui.menu"
 local NuiPopup = require "nui.popup"
 local NuiText = require "nui.text"
 
+local UI = require "fugit2.view.components"
 local NuiGitStatus = require "fugit2.view.nui_git_status"
 local NuiGitGraph = require "fugit2.view.nui_git_graph"
 
@@ -99,56 +100,42 @@ function M.new_fugit2_status_window(namespace, repo)
   }
 
   local menu_item_align = { text_align = "center" }
-  local commit_menu = NuiMenu(
-    {
-      position = "50%",
-      size = {
-        width = 36,
-        height = 8,
-      },
-      zindex = 52,
-      border = {
-        style = "single",
-        text = {
-          top = "Commit Menu",
-          top_align = "left",
-        },
-      },
-      win_options = {
-        winhighlight = "Normal:Normal,FloatBorder:Normal",
+  local commit_menu = UI.Menu({
+    position = "50%",
+    size = {
+      width = 36,
+      height = 8,
+    },
+    zindex = 52,
+    border = {
+      style = "single",
+      text = {
+        top = "Commit Menu",
+        top_align = "left",
       },
     },
-    {
-      lines = {
-        NuiMenu.separator(
-          NuiText("Create", "Fugit2MenuHead"),
-          menu_item_align
-        ),
-        NuiMenu.item(NuiLine({NuiText("c ", "Fugit2MenuKey"), NuiText("Commit")}), { id = "c" }),
-        NuiMenu.separator(
-          NuiLine { NuiText("Edit ", "Fugit2MenuHead"), NuiText("HEAD", "Fugit2Staged") },
-          menu_item_align
-        ),
-        NuiMenu.item(NuiLine { NuiText("e ", "Fugit2MenuKey"), NuiText("Extend") }, { id = "e" }),
-        NuiMenu.item(NuiLine { NuiText("r ", "Fugit2MenuKey"), NuiText("Reword") }, { id = "r" }),
-        NuiMenu.item(NuiLine { NuiText("a ", "Fugit2MenuKey"), NuiText("Amend") }, { id = "a" }),
-        NuiMenu.separator(
-          NuiText("View/Edit", "Fugit2MenuHead"),
-          menu_item_align
-        ),
-        NuiMenu.item(NuiLine { NuiText("g ", "Fugit2MenuKey"), NuiText("Graph") }, { id = "g" }),
-      },
-      keymap = {
-        focus_next = { "j", "<down>", "<tab>", "<c-n>" },
-        focus_prev = { "k", "<up>", "<s-tab>", "<c-p>" },
-        close = { "<esc>", "<c-c>", "q" },
-        submit = { "<cr>", "<Space>" },
-      },
-      on_close = function()
-      end,
-      on_submit = nil,
+    win_options = {
+      winhighlight = "Normal:Normal,FloatBorder:Normal",
     }
-  )
+  }, {
+    NuiMenu.separator(
+    NuiText("Create", "Fugit2MenuHead"),
+      menu_item_align
+    ),
+    NuiMenu.item(NuiLine({NuiText("c ", "Fugit2MenuKey"), NuiText("Commit")}), { id = "c" }),
+    NuiMenu.separator(
+      NuiLine { NuiText("Edit ", "Fugit2MenuHead"), NuiText("HEAD", "Fugit2Staged") },
+      menu_item_align
+    ),
+    NuiMenu.item(NuiLine { NuiText("e ", "Fugit2MenuKey"), NuiText("Extend") }, { id = "e" }),
+    NuiMenu.item(NuiLine { NuiText("r ", "Fugit2MenuKey"), NuiText("Reword") }, { id = "r" }),
+    NuiMenu.item(NuiLine { NuiText("a ", "Fugit2MenuKey"), NuiText("Amend") }, { id = "a" }),
+    NuiMenu.separator(
+      NuiText("View/Edit", "Fugit2MenuHead"),
+      menu_item_align
+    ),
+    NuiMenu.item(NuiLine { NuiText("g ", "Fugit2MenuKey"), NuiText("Graph") }, { id = "g" }),
+  })
 
   -- Status content
   local status = NuiGitStatus(namespace, repo, info_popup, file_popup, message_popup, commit_menu)

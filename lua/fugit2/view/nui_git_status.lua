@@ -351,6 +351,13 @@ end
 -- |  Commit Message buffer |
 -- ==========================
 
+---@enum NuiGitCommitMode
+local CommitMode = {
+  COMMIT = 1,
+  REWORD = 2,
+  EXTEND = 3,
+  AMEND  = 4,
+}
 
 -- ===================
 -- | Main git status |
@@ -365,12 +372,13 @@ end
 local NuiGitStatus = Object("NuiGitStatus")
 
 
--- Inits NuiGitStatus.
+---Inits NuiGitStatus.
 ---@param ns_id integer
 ---@param repo GitRepository
 ---@param info_popup NuiPopup
 ---@param file_popup NuiPopup
 ---@param input_popup NuiPopup
+---param commit_menu Fugit2UIMenu
 function NuiGitStatus:init(ns_id, repo, info_popup, file_popup, input_popup, commit_menu)
   self.info_popup = info_popup
   self.file_popup = file_popup
@@ -393,7 +401,7 @@ function NuiGitStatus:init(ns_id, repo, info_popup, file_popup, input_popup, com
 
     sig, err = repo:signature_default()
     if sig then
-      self.author = tostring(sig)
+      self.sign = sig
 
     end
   else
@@ -441,6 +449,8 @@ function NuiGitStatus:init(ns_id, repo, info_popup, file_popup, input_popup, com
     self._boxes.main
   )
   -- setup menu
+  self._commit_mode = CommitMode.COMMIT
+  self._status_head = nil
   self._menus = {
     commit = commit_menu
   }
@@ -472,6 +482,8 @@ function NuiGitStatus:update()
       NuiLine { NuiText(string.format("Git2 Error Code: %d", git_error), "Error") }
     }
   else
+    self._status_head = git_status.head
+
     local head_line = NuiLine { NuiText("HEAD", "Fugit2Header") }
     if git_status.head.is_detached then
       head_line:append(" (detached)", "Fugit2Heading")
@@ -479,11 +491,18 @@ function NuiGitStatus:update()
       head_line:append("     ")
     end
 
+    local ahead, behind = 0, 0
+    if git_status.upstream then
+      ahead, behind = git_status.upstream.ahead, git_status.upstream.behind
+    end
+    local ahead_behind = ahead + behind
+
     local branch_width = math.max(
-      git_status.head.name:len(),
+      git_status.head.name:len() + (ahead_behind > 0 and 5 or 0),
       git_status.upstream and git_status.upstream.name:len() or 0
     )
     local branch_format = "%s%-" .. branch_width .. "s"
+
 
     local author_width = math.max(
       git_status.head.author:len(),
@@ -492,10 +511,24 @@ function NuiGitStatus:update()
     local author_format = " %-" .. author_width .. "s"
 
     local head_icon = utils.get_git_namespace_icon(git_status.head.namespace)
-    head_line:append(
-      string.format(branch_format, head_icon, git_status.head.name),
-      "Fugit2SymbolicRef"
-    )
+    if ahead_behind == 0 then
+      head_line:append(
+        string.format(branch_format, head_icon, git_status.head.name),
+        "Fugit2SymbolicRef"
+      )
+    else
+      head_line:append(head_icon .. git_status.head.name, "Fugit2SymbolicRef")
+      local padding = branch_width - git_status.head.name:len() - 4
+      if padding > 0 then
+        head_line:append(string.rep(" ", padding))
+      end
+      local ahead_behind_str = (
+        (ahead > 0 and "↑" .. ahead or "")
+        .. (behind > 0 and "↓" .. behind or "")
+      )
+      head_line:append(ahead_behind_str, "Fugit2Count")
+    end
+
     head_line:append(string.format(author_format, git_status.head.author), "Fugit2Author")
     head_line:append(" " .. git_status.head.oid .. " ", "Fugit2ObjectId")
     head_line:append(utils.message_title_prettify(git_status.head.message))
@@ -514,13 +547,6 @@ function NuiGitStatus:update()
 
       upstream_line:append(string.format(author_format, git_status.upstream.author), "Fugit2Author")
       upstream_line:append(" " .. git_status.upstream.oid .. " ", "Fugit2ObjectId")
-
-      if git_status.upstream.ahead > 0 then
-        upstream_line:append(string.format("↑%d ", git_status.upstream.ahead), "Fugit2Count")
-      end
-      if git_status.upstream.behind > 0 then
-        upstream_line:append(string.format("↓%d ", git_status.upstream.behind), "Fugit2Count")
-      end
 
       upstream_line:append(utils.message_title_prettify(git_status.upstream.message))
     else
@@ -572,33 +598,40 @@ function NuiGitStatus:off_input()
 end
 
 
--- Makes a commit
+---@param signature GitSignature
 ---@param message string
-function NuiGitStatus:commit(message)
+---@return string? prettified
+local function check_signature_message(signature, message)
+  if not signature then
+    vim.notify("No default author", vim.log.levels.ERROR)
+    return nil
+  end
+
   if message == "" then
     vim.notify("Empty commit message", vim.log.levels.ERROR)
-    return
+    return nil
   end
 
-  local sign, prettified, err
-
-  prettified, err = git2.message_prettify(message)
+  local prettified, err = git2.message_prettify(message)
   if err ~= 0 then
     vim.notify("Failed to clean message", vim.log.levels.ERROR)
-    return
+    return nil
   end
 
-  self:write_index()
+  return prettified
+end
 
-  sign, err = self.repo:signature_default()
-  if err ~= 0 then
-    vim.notify("Failed to get default author, code: " .. err, vim.log.levels.ERROR)
-    return
-  end
 
-  if sign and prettified then
-    err = self.repo:commit(self.index, sign, prettified)
-    if err == 0 then
+---Makes a commit
+---@param message string
+function NuiGitStatus:commit(message)
+  local prettified = check_signature_message(self.sign, message)
+
+  if self.sign and prettified then
+    self:write_index()
+    local commit_id, err = self.repo:commit(self.index, self.sign, prettified)
+    if commit_id then
+      vim.notify("New commit " .. commit_id:tostring(8), vim.log.levels.INFO)
       self:off_input()
       self:update()
       self:render()
@@ -609,9 +642,136 @@ function NuiGitStatus:commit(message)
 end
 
 
+---Extends HEAD commit
+---add files in index to HEAD commit
+function NuiGitStatus:commit_extend()
+  self:write_index()
+  local commit_id, err = self.repo:amend_extend(self.index)
+  if commit_id then
+    vim.notify("Extend HEAD " .. commit_id:tostring(8), vim.log.levels.INFO)
+    self:off_input()
+    self:update()
+    self:render()
+  else
+    vim.notify("Failed to extend HEAD, code: " .. err, vim.log.levels.ERROR)
+  end
+end
+
+
+---Reword HEAD commit
+---change commit message of HEAD commit
+---@param message string commit message
+function NuiGitStatus:commit_reword(message)
+  local prettified = check_signature_message(self.sign, message)
+
+  if self.sign and prettified then
+    local commit_id, err = self.repo:amend_reword(self.sign, prettified)
+    if commit_id then
+      vim.notify("Reword HEAD " .. commit_id:tostring(8), vim.log.levels.INFO)
+      self:off_input()
+      self:update()
+      self:render()
+    else
+      vim.notify("Failed to reword HEAD, code: " .. err, vim.log.levels.ERROR)
+    end
+  end
+end
+
+---Amend HEAD commit
+---add files from index and also change message or HEAD commit
+---@param message string
+function NuiGitStatus:commit_amend(message)
+  local prettified = check_signature_message(self.sign, message)
+  if self.sign and prettified then
+    self:write_index()
+    local commit_id, err = self.repo:amend(self.index, self.sign, prettified)
+    if commit_id then
+      vim.notify("Amend HEAD " .. commit_id:tostring(8), vim.log.levels.INFO)
+      self:off_input()
+      self:update()
+      self:render()
+    else
+      vim.notify("Failed to amend commit, code: " .. err, vim.log.levels.ERROR)
+    end
+  end
+end
+
+
+---@param init_str string
+---@param include_changes boolean
+---@param notify_empty boolean
+function NuiGitStatus:_set_input_popup_commit_title(init_str, include_changes, notify_empty)
+  local change, remove = 0, 0
+  if include_changes then
+    change, remove = self._tree:index_count()
+    if notify_empty and change + remove < 1 then
+      vim.notify("Empty commit!", vim.log.levels.WARN)
+    end
+  end
+
+  local title = string.format(
+    " %s - %s%s%s",
+    init_str, tostring(self.sign),
+    change > 0  and "+" .. change or "",
+    remove > 0 and "-" .. remove or ""
+  )
+  self.input_popup.border:set_text(
+    "top",
+    NuiText(title, "Fugit2MessageHeading"),
+    "left"
+  )
+end
+
+
+---@return fun()
+function NuiGitStatus:commit_commit_handler()
+  return function()
+    self._commit_mode = CommitMode.COMMIT
+
+    self:_set_input_popup_commit_title("Create commit", true, true)
+
+    self:on_input()
+    vim.api.nvim_set_current_win(self.input_popup.winid)
+    vim.cmd("startinsert")
+  end
+end
+
+
+---@return fun()
+function NuiGitStatus:commit_extend_handler()
+  return function()
+    self._commit_mode = CommitMode.EXTEND
+    self:commit_extend()
+  end
+end
+
+
+---@param is_reword boolean reword only mode
+---@return fun()
+function NuiGitStatus:commit_amend_handler(is_reword)
+  return function()
+    self._commit_mode = is_reword and CommitMode.REWORD or CommitMode.AMEND
+
+    if is_reword then
+      self:_set_input_popup_commit_title("Reword HEAD", false, false)
+    else
+      self:_set_input_popup_commit_title("Amend HEAD", true, false)
+    end
+
+    vim.api.nvim_buf_set_lines(
+      self.input_popup.bufnr, 0, -1, true,
+      vim.split(self._status_head.message, "\n", { plain = true, trimempty = true })
+    )
+
+    self:on_input()
+    vim.api.nvim_set_current_win(self.input_popup.winid)
+  end
+end
+
+
 -- Setup keymap handlers
 function NuiGitStatus:setup_handlers()
-  local map_options = { noremap = true }
+  local map_options = { noremap = true, nowait = true }
   local tree = self._tree
 
   local exit_fn = function()
@@ -734,30 +894,10 @@ function NuiGitStatus:setup_handlers()
   )
 
   -- Commit menu
-  local commit_commit_fn = function()
-    self._menus.commit:unmount()
-    self:on_input()
-
-    local change, remove = self._tree:index_count()
-    local title = string.format(
-      " Create commit - %s%s%s",
-      self.author,
-      change > 0  and " 󰝒 " .. change or "",
-      remove > 0 and " 󱪡 " .. remove or ""
-    )
-    self.input_popup.border:set_text(
-      "top",
-      NuiText(title, "Fugit2MessageHeading"),
-      "left"
-    )
-
-    if change + remove < 1 then
-      vim.notify("Empty commit", vim.log.levels.WARN)
-    end
-
-    vim.api.nvim_set_current_win(self.input_popup.winid)
-    vim.cmd("startinsert")
-  end
+  local commit_commit_fn = self:commit_commit_handler()
+  local commit_extend_fn = self:commit_extend_handler()
+  local commit_reword_fn = self:commit_amend_handler(true)
+  local commit_amend_fn = self:commit_amend_handler(false)
 
   local commit_graph_fn = function()
     self._menus.commit:unmount()
@@ -765,21 +905,25 @@ function NuiGitStatus:setup_handlers()
     require("fugit2.view.ui").new_fugit2_graph_window(self.ns_id, self.repo):mount()
   end
 
-  self.file_popup:map("n", "c", function()
-    self._menus.commit:mount()
-    self._menus.commit:map("n", "c", commit_commit_fn, map_options)
-    self._menus.commit:map("n", "g", commit_graph_fn, map_options)
-  end, map_options)
-  self._menus.commit.menu_props.on_submit = function()
-    local item_id = self._menus.commit.tree:get_node().id or ""
-    self._menus.commit:unmount()
+  self._menus.commit:on_submit(function(item_id)
     if item_id == "c" then
       commit_commit_fn()
+    elseif item_id == "e" then
+      commit_extend_fn()
+    elseif item_id == "r" then
+      commit_reword_fn()
+    elseif item_id == "a" then
+      commit_amend_fn()
     elseif item_id == "g" then
       commit_graph_fn()
     end
-  end
+  end)
 
+  self.file_popup:map("n", "c", function ()
+    self._menus.commit:mount()
+  end, map_options)
+
+  -- Message input
   local input_quit_fn = function()
     vim.cmd("stopinsert")
     self:off_input()
@@ -794,7 +938,13 @@ function NuiGitStatus:setup_handlers()
       vim.api.nvim_buf_get_lines(self.input_popup.bufnr, 0, -1, true),
       "\n"
     )
-    self:commit(message)
+    if self._commit_mode == CommitMode.COMMIT then
+      self:commit(message)
+    elseif self._commit_mode == CommitMode.REWORD then
+      self:commit_reword(message)
+    elseif self._commit_mode == CommitMode.AMEND then
+      self:commit_amend(message)
+    end
   end, map_options)
 end
 

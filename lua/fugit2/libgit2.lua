@@ -125,6 +125,16 @@ ffi.cdef[[
     size_t parent_count,
     ...
   );
+  int git_commit_amend(
+    git_oid *id,
+    const git_commit *commit_to_amend,
+    const char *update_ref,
+    const git_signature *author,
+    const git_signature *committer,
+    const char *message_encoding,
+    const char *message,
+    const git_tree *tree
+  );
 
   const char * git_reference_shorthand(const git_reference *ref);
   const char * git_reference_name(const git_reference *ref);
@@ -174,6 +184,7 @@ ffi.cdef[[
   int git_index_remove_bypath(git_index *index, const char *path);
   int git_index_remove_directory(git_index *index, const char *dir, int stage);
   size_t git_index_entrycount(const git_index *index);
+  int git_index_has_conflicts(const git_index *index);
 
   int git_status_list_new(git_status_list **out, git_repository *repo, const git_status_options *opts);
   void git_status_list_free(git_status_list *statuslist);
