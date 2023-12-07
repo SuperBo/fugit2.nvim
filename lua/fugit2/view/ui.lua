@@ -128,7 +128,7 @@ function M.new_fugit2_status_window(namespace, repo)
       menu_item_align
     ),
     NuiMenu.item(NuiLine { NuiText("e ", "Fugit2MenuKey"), NuiText("Extend") }, { id = "e" }),
-    NuiMenu.item(NuiLine { NuiText("r ", "Fugit2MenuKey"), NuiText("Reword") }, { id = "r" }),
+    NuiMenu.item(NuiLine { NuiText("w ", "Fugit2MenuKey"), NuiText("Reword") }, { id = "w" }),
     NuiMenu.item(NuiLine { NuiText("a ", "Fugit2MenuKey"), NuiText("Amend") }, { id = "a" }),
     NuiMenu.separator(
       NuiText("View/Edit", "Fugit2MenuHead"),

@@ -7,6 +7,7 @@ local NuiTree = require "nui.tree"
 local Object = require "nui.object"
 local WebDevIcons = require "nvim-web-devicons"
 
+local UI = require "fugit2.view.components"
 local git2 = require "fugit2.git2"
 local utils = require "fugit2.utils"
 
@@ -437,7 +438,7 @@ function NuiGitStatus:init(ns_id, repo, info_popup, file_popup, input_popup, com
       }, { dir = "col" }
     ),
   }
-  self._layout =  NuiLayout(
+  self._layout = NuiLayout(
     {
       relative = "editor",
       position = "50%",
@@ -448,12 +449,22 @@ function NuiGitStatus:init(ns_id, repo, info_popup, file_popup, input_popup, com
     },
     self._boxes.main
   )
+  self._amend_confirm = UI.Confirm(
+    self.ns_id,
+    NuiLine { NuiText("This commit has already been pushed to upstream, do you really want to modify it?") }
+  )
+
   -- setup menu
   self._commit_mode = CommitMode.COMMIT
-  self._status_head = nil
+  ---@type table
+  self._git = {
+    head = nil, ahead = 0, behind = 0
+  }
   self._menus = {
     commit = commit_menu
   }
+
+  -- This commit has already been published to origin/dev, do you really want to modify it?
 
   -- keymaps
   self:setup_handlers()
@@ -482,7 +493,7 @@ function NuiGitStatus:update()
       NuiLine { NuiText(string.format("Git2 Error Code: %d", git_error), "Error") }
     }
   else
-    self._status_head = git_status.head
+    self._git.head = git_status.head
 
     local head_line = NuiLine { NuiText("HEAD", "Fugit2Header") }
     if git_status.head.is_detached then
@@ -494,6 +505,7 @@ function NuiGitStatus:update()
     local ahead, behind = 0, 0
     if git_status.upstream then
       ahead, behind = git_status.upstream.ahead, git_status.upstream.behind
+      self._git.ahead, self._git.behind = ahead, behind
     end
     local ahead_behind = ahead + behind
 
@@ -502,7 +514,6 @@ function NuiGitStatus:update()
       git_status.upstream and git_status.upstream.name:len() or 0
     )
     local branch_format = "%s%-" .. branch_width .. "s"
-
 
     local author_width = math.max(
       git_status.head.author:len(),
@@ -518,7 +529,12 @@ function NuiGitStatus:update()
       )
     else
       head_line:append(head_icon .. git_status.head.name, "Fugit2SymbolicRef")
-      local padding = branch_width - git_status.head.name:len() - 4
+      local padding = (
+        branch_width
+        - git_status.head.name:len()
+        - (ahead > 0 and 2 or 0)
+        - (behind > 0 and 2 or 0)
+      )
       if padding > 0 then
         head_line:append(string.rep(" ", padding))
       end
@@ -536,6 +552,12 @@ function NuiGitStatus:update()
 
     local upstream_line = NuiLine { NuiText("Upstream ", "Fugit2Header") }
     if git_status.upstream then
+      self._amend_confirm:set_text(NuiLine {
+        NuiText("This commit has already been pushed to "),
+        NuiText(git_status.upstream.name, "Fugit2SymbolicRef"),
+        NuiText(", do you really want to modify it?")
+      })
+
       local remote_icon = utils.get_git_icon(git_status.upstream.remote_url)
 
       local upstream_name = string.format(branch_format, remote_icon, git_status.upstream.name)
@@ -741,6 +763,12 @@ end
 function NuiGitStatus:commit_extend_handler()
   return function()
     self._commit_mode = CommitMode.EXTEND
+
+    if self._git.ahead == 0 then
+      self._amend_confirm:show()
+      return
+    end
+
     self:commit_extend()
   end
 end
@@ -752,6 +780,11 @@ function NuiGitStatus:commit_amend_handler(is_reword)
   return function()
     self._commit_mode = is_reword and CommitMode.REWORD or CommitMode.AMEND
 
+    if self._git.ahead == 0 then
+      self._amend_confirm:show()
+      return
+    end
+
     if is_reword then
       self:_set_input_popup_commit_title("Reword HEAD", false, false)
     else
@@ -760,11 +793,34 @@ function NuiGitStatus:commit_amend_handler(is_reword)
 
     vim.api.nvim_buf_set_lines(
       self.input_popup.bufnr, 0, -1, true,
-      vim.split(self._status_head.message, "\n", { plain = true, trimempty = true })
+      vim.split(self._git.head.message, "\n", { plain = true, trimempty = true })
     )
 
     self:on_input()
     vim.api.nvim_set_current_win(self.input_popup.winid)
+  end
+end
+
+
+function NuiGitStatus:amend_confirm_yes_handler()
+  return function()
+    if self._commit_mode == CommitMode.EXTEND then
+      self:commit_extend()
+    elseif self._commit_mode == CommitMode.REWORD or self._commit_mode == CommitMode.AMEND then
+      if self._commit_mode == CommitMode.REWORD then
+        self:_set_input_popup_commit_title("Reword HEAD", false, false)
+      else
+        self:_set_input_popup_commit_title("Amend HEAD", true, false)
+      end
+
+      vim.api.nvim_buf_set_lines(
+        self.input_popup.bufnr, 0, -1, true,
+        vim.split(self._git.head.message, "\n", { plain = true, trimempty = true })
+      )
+
+      self:on_input()
+      vim.api.nvim_set_current_win(self.input_popup.winid)
+    end
   end
 end
 
@@ -776,6 +832,8 @@ function NuiGitStatus:setup_handlers()
 
   local exit_fn = function()
     self:write_index()
+    self._amend_confirm:unmount()
+    self._menus.commit:unmount()
     self._layout:unmount()
   end
 
@@ -910,7 +968,7 @@ function NuiGitStatus:setup_handlers()
       commit_commit_fn()
     elseif item_id == "e" then
       commit_extend_fn()
-    elseif item_id == "r" then
+    elseif item_id == "w" then
       commit_reword_fn()
     elseif item_id == "a" then
       commit_amend_fn()
@@ -922,6 +980,9 @@ function NuiGitStatus:setup_handlers()
   self.file_popup:map("n", "c", function ()
     self._menus.commit:mount()
   end, map_options)
+
+  -- Amend confirm
+  self._amend_confirm:on_yes(self:amend_confirm_yes_handler())
 
   -- Message input
   local input_quit_fn = function()
