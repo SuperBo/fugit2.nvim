@@ -97,6 +97,7 @@ ffi.cdef[[
 
   char * git_oid_tostr(char *out, size_t n, const git_oid *id);
 
+  char git_diff_status_char(unsigned int status);
   int git_message_prettify(git_buf *out, const char *message, int strip_comments, char comment_char);
 
   void git_object_free(git_object *object);
@@ -386,6 +387,21 @@ M.GIT_STATUS_OPT = {
 	UPDATE_INDEX                    = 8192, -- (1u << 13),
 	INCLUDE_UNREADABLE              = 16384, -- (1u << 14),
 	INCLUDE_UNREADABLE_AS_UNTRACKED = 32768, --(1u << 15)
+}
+
+---@enum GIT_DELTA
+M.GIT_DELTA = {
+  UNMODIFIED = 0,  -- no changes
+	ADDED      = 1,	 -- entry does not exist in old version
+	DELETED    = 2,	 -- entry does not exist in new version
+	MODIFIED   = 3,  -- entry content changed between old and new
+	RENAMED    = 4,  -- entry was renamed between old and new
+	COPIED     = 5,  -- entry was copied from another old entry
+	IGNORED    = 6,  -- entry is ignored item in workdir
+	UNTRACKED  = 7,  -- entry is untracked item in workdir
+	TYPECHANGE = 8,  -- type of entry changed between old and new
+	UNREADABLE = 9,  -- entry is unreadable
+	CONFLICTED = 10  -- entry in the index is conflicted
 }
 
 ---@enum GIT_OBJECT

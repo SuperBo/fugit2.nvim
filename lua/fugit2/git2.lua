@@ -28,31 +28,19 @@ local GIT_REFERENCE_NAMESPACE = {
   NOTE   = 4, -- Reference is in Note namespace
 }
 
----@enum GIT_STATUS_SHORT
-local GIT_STATUS_SHORT = {
-  UNCHANGED  = 0,
-  UNTRACKED  = 1,
-  ADD        = 2,
-  MODIFIED   = 3,
-  DELETED    = 4,
-  RENAMED    = 5,
-  TYPECHANGE = 6,
-  UNREADABLE = 7,
-  IGNORED    = 8,
-  CONFLICTED = 9,
-}
 
-local GIT_STATUS_SHORT_STRING = {
-  "UNCHANGED",
-  "UNTRACKED",
-  "ADD",
-  "MODIFIED",
-  "DELETED",
-  "RENAMED",
-  "TYPECHANGE",
-  "UNREADABLE",
-  "IGNORED",
-  "CONFLICTED",
+local GIT_DELTA_STRING = {
+  "UNMODIFIED",
+	"ADDED",
+	"DELETED",
+	"MODIFIED",
+	"RENAMED",
+	"COPIED",
+	"IGNORED",
+	"UNTRACKED",
+	"TYPECHANGE",
+	"UNREADABLE",
+	"CONFLICTED",
 }
 
 
@@ -690,30 +678,11 @@ end
 -- ========================
 
 
----@return string
-function GIT_STATUS_SHORT.tostring(status)
-  return GIT_STATUS_SHORT_STRING[status+1]
-end
-
-
----@return string
-function GIT_STATUS_SHORT.toshort(status)
-  if status == GIT_STATUS_SHORT.UNTRACKED then
-    return "?"
-  elseif status == GIT_STATUS_SHORT.UNCHANGED then
-    return "-"
-  elseif status == GIT_STATUS_SHORT.IGNORED then
-    return "!"
-  end
-  return GIT_STATUS_SHORT_STRING[status+1]:sub(1, 1)
-end
-
-
 ---@class GitStatusItem
 ---@field path string File path
 ---@field new_path string? New file path in case of rename
----@field worktree_status GIT_STATUS_SHORT Git status in worktree to index
----@field index_status GIT_STATUS_SHORT Git status in index to head
+---@field worktree_status GIT_DELTA Git status in worktree to index
+---@field index_status GIT_DELTA Git status in index to head
 ---@field renamed boolean Extra flag to indicate whether item is renamed
 
 
@@ -1022,13 +991,14 @@ function Repository:remote_lookup(remote)
 end
 
 
--- Reads status of a given file path.
+---Reads status of a given file path.
+---this can't detect a rename.
 ---@param path string Git file path.
----@return GIT_STATUS_SHORT worktree_status Git Status in worktree.
----@return GIT_STATUS_SHORT index_status Git Status in index.
+---@return GIT_DELTA worktree_status Git Status in worktree.
+---@return GIT_DELTA index_status Git Status in index.
 ---@return GIT_ERROR return_code Git return code.
 function Repository:status_file(path)
-  local worktree_status, index_status = GIT_STATUS_SHORT.UNCHANGED, GIT_STATUS_SHORT.UNCHANGED
+  local worktree_status, index_status = libgit2.GIT_DELTA.UNMODIFIED, libgit2.GIT_DELTA.UNMODIFIED
   local c_status = libgit2.unsigned_int_array(1)
 
   local ret = libgit2.C.git_status_file(c_status, self.repo[0], path)
@@ -1039,30 +1009,30 @@ function Repository:status_file(path)
   local status = tonumber(c_status[0])
   if status ~= nil then
     if bit.band(status, libgit2.GIT_STATUS.WT_NEW) ~= 0 then
-      worktree_status = GIT_STATUS_SHORT.UNTRACKED
-      index_status = GIT_STATUS_SHORT.UNTRACKED
+      worktree_status = libgit2.GIT_DELTA.UNTRACKED
+      index_status = libgit2.GIT_DELTA.UNTRACKED
     elseif bit.band(status, libgit2.GIT_STATUS.WT_MODIFIED) ~= 0 then
-      worktree_status = GIT_STATUS_SHORT.MODIFIED
+      worktree_status = libgit2.GIT_DELTA.MODIFIED
     elseif bit.band(status, libgit2.GIT_STATUS.WT_DELETED) ~= 0 then
-      worktree_status = GIT_STATUS_SHORT.DELETED
+      worktree_status = libgit2.GIT_DELTA.DELETED
     elseif bit.band(status, libgit2.GIT_STATUS.WT_TYPECHANGE) ~= 0 then
-      worktree_status = GIT_STATUS_SHORT.TYPECHANGE
+      worktree_status = libgit2.GIT_DELTA.TYPECHANGE
     elseif bit.band(status, libgit2.GIT_STATUS.WT_UNREADABLE) ~= 0 then
-      worktree_status = GIT_STATUS_SHORT.UNREADABLE
+      worktree_status = libgit2.GIT_DELTA.UNREADABLE
     elseif bit.band(status, libgit2.GIT_STATUS.IGNORED) ~= 0 then
-      worktree_status = GIT_STATUS_SHORT.IGNORED
+      worktree_status = libgit2.GIT_DELTA.IGNORED
     elseif bit.band(status, libgit2.GIT_STATUS.CONFLICTED) ~= 0 then
-      worktree_status = GIT_STATUS_SHORT.CONFLICTED
+      worktree_status = libgit2.GIT_DELTA.CONFLICTED
     end
 
     if bit.band(status, libgit2.GIT_STATUS.INDEX_NEW) ~= 0 then
-      index_status = GIT_STATUS_SHORT.ADD
+      index_status = libgit2.GIT_DELTA.ADDED
     elseif bit.band(status, libgit2.GIT_STATUS.INDEX_MODIFIED) ~= 0 then
-      index_status = GIT_STATUS_SHORT.MODIFIED
-    elseif bit.band(status, libgit2.GIT_STATUS.INDEX_DELETED) ~=0 then
-      index_status = GIT_STATUS_SHORT.DELETED
+      index_status = libgit2.GIT_DELTA.MODIFIED
+    elseif bit.band(status, libgit2.GIT_STATUS.INDEX_DELETED) ~= 0 then
+      index_status = libgit2.GIT_DELTA.DELETED
     elseif bit.band(status, libgit2.GIT_STATUS.INDEX_TYPECHANGE) ~= 0 then
-      index_status = GIT_STATUS_SHORT.TYPECHANGE
+      index_status = libgit2.GIT_DELTA.TYPECHANGE
     end
   end
 
@@ -1173,8 +1143,8 @@ function Repository:status()
     ---@type GitStatusItem
     local status_item = {
       path            = "",
-      worktree_status = GIT_STATUS_SHORT.UNCHANGED,
-      index_status    = GIT_STATUS_SHORT.UNCHANGED,
+      worktree_status = libgit2.GIT_DELTA.UNMODIFIED,
+      index_status    = libgit2.GIT_DELTA.UNMODIFIED,
       renamed         = false,
     }
     ---@type string
@@ -1185,24 +1155,11 @@ function Repository:status()
       new_path = ffi.string(entry.index_to_workdir.new_file.path)
 
       status_item.path = old_path
+      status_item.worktree_status = entry.index_to_workdir.status
 
       if bit.band(entry.status, libgit2.GIT_STATUS.WT_NEW) ~= 0 then
-        status_item.worktree_status = GIT_STATUS_SHORT.UNTRACKED
-        status_item.index_status = GIT_STATUS_SHORT.UNTRACKED
-      elseif bit.band(entry.status, libgit2.GIT_STATUS.WT_MODIFIED) ~= 0 then
-        status_item.worktree_status = GIT_STATUS_SHORT.MODIFIED
-      elseif bit.band(entry.status, libgit2.GIT_STATUS.WT_DELETED) ~= 0 then
-        status_item.worktree_status = GIT_STATUS_SHORT.DELETED
-      elseif bit.band(entry.status, libgit2.GIT_STATUS.WT_RENAMED) ~= 0 then
-        status_item.worktree_status = GIT_STATUS_SHORT.RENAMED
-      elseif bit.band(entry.status, libgit2.GIT_STATUS.WT_TYPECHANGE) ~= 0 then
-        status_item.worktree_status = GIT_STATUS_SHORT.TYPECHANGE
-      elseif bit.band(entry.status, libgit2.GIT_STATUS.WT_UNREADABLE) ~= 0 then
-        status_item.worktree_status = GIT_STATUS_SHORT.UNREADABLE
-      elseif bit.band(entry.status, libgit2.GIT_STATUS.IGNORED) ~= 0 then
-        status_item.worktree_status = GIT_STATUS_SHORT.IGNORED
-      elseif bit.band(entry.status, libgit2.GIT_STATUS.CONFLICTED) ~= 0 then
-        status_item.worktree_status = GIT_STATUS_SHORT.CONFLICTED
+        status_item.worktree_status = libgit2.GIT_DELTA.UNTRACKED
+        status_item.index_status = libgit2.GIT_DELTA.UNTRACKED
       end
 
       if bit.band(entry.status, libgit2.GIT_STATUS.WT_RENAMED) ~= 0 then
@@ -1216,20 +1173,9 @@ function Repository:status()
       new_path = ffi.string(entry.head_to_index.new_file.path)
 
       status_item.path = old_path
+      status_item.index_status = entry.head_to_index.status
 
-      if bit.band(entry.status, libgit2.GIT_STATUS.INDEX_NEW) ~= 0 then
-        status_item.index_status = GIT_STATUS_SHORT.ADD
-      elseif bit.band(entry.status, libgit2.GIT_STATUS.INDEX_MODIFIED) ~= 0 then
-        status_item.index_status = GIT_STATUS_SHORT.MODIFIED
-      elseif bit.band(entry.status, libgit2.GIT_STATUS.INDEX_DELETED) ~=0 then
-        status_item.index_status = GIT_STATUS_SHORT.DELETED
-      elseif bit.band(entry.status, libgit2.GIT_STATUS.INDEX_RENAMED) ~=0 then
-        status_item.index_status = GIT_STATUS_SHORT.RENAMED
-      elseif bit.band(entry.status, libgit2.GIT_STATUS.INDEX_TYPECHANGE) ~= 0 then
-        status_item.index_status = GIT_STATUS_SHORT.TYPECHANGE
-      end
-
-      if bit.band(entry.status, libgit2.GIT_STATUS.INDEX_RENAMED) ~=0 then
+      if bit.band(entry.status, libgit2.GIT_STATUS.INDEX_RENAMED) ~= 0 then
         status_item.renamed = true
         status_item.new_path = new_path
       end
@@ -1418,6 +1364,34 @@ end
 -- | Utils functions |
 -- ===================
 
+
+---@param delta GIT_DELTA
+---@return string char Git status char such as M, A, D.
+local function status_char(delta)
+  local c = libgit2.C.git_diff_status_char(delta);
+  return string.char(c)
+end
+
+
+---Same as status_char but replace " " by "-"
+---@param delta GIT_DELTA
+---@return string Git status char such as M, A, D.
+local function status_char_dash(delta)
+  local c = libgit2.C.git_diff_status_char(delta);
+  if c == 32 then
+    return "-"
+  end
+  return string.char(c)
+end
+
+
+---@param delta GIT_DELTA
+---@return string status status full string such as "UNTRACKED"
+local function status_string(delta)
+  return GIT_DELTA_STRING[delta+1]
+end
+
+
 -- Prettifiy git message
 ---@param msg string
 local function message_prettify(msg)
@@ -1453,13 +1427,16 @@ M.Reference = Reference
 
 
 M.GIT_BRANCH = libgit2.GIT_BRANCH
+M.GIT_DELTA = libgit2.GIT_DELTA
 M.GIT_REFERENCE = libgit2.GIT_REFERENCE
 M.GIT_REFERENCE_NAMESPACE = GIT_REFERENCE_NAMESPACE
-M.GIT_STATUS_SHORT = GIT_STATUS_SHORT
 
 
 M.head = Repository.head
 M.status = Repository.status
+M.status_char = status_char
+M.status_char_dash = status_char_dash
+M.status_string = status_string
 M.message_prettify = message_prettify
 
 

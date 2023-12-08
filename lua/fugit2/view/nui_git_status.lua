@@ -45,8 +45,8 @@ local function tree_construct_nodes(dir_tree, prefix)
 end
 
 
----@param worktree_status GIT_STATUS_SHORT
----@param index_status GIT_STATUS_SHORT
+---@param worktree_status GIT_DELTA
+---@param index_status GIT_DELTA
 ---@param modified boolean
 ---@return string text_color Text color
 ---@return string icon_color Icon color
@@ -55,20 +55,20 @@ local function tree_node_colors(worktree_status, index_status, modified)
   local text_color, icon_color = "Fugit2Modifier", "Fugit2Modifier"
   local status_icon = "  "
 
-  if worktree_status == git2.GIT_STATUS_SHORT.UNTRACKED then
+  if worktree_status == git2.GIT_DELTA.UNTRACKED then
     text_color = "Fugit2Untracked"
     icon_color = "Fugit2Untracked"
     status_icon = " "
-  elseif worktree_status == git2.GIT_STATUS_SHORT.IGNORED
-    or index_status == git2.GIT_STATUS_SHORT.IGNORED then
+  elseif worktree_status == git2.GIT_DELTA.IGNORED
+    or index_status == git2.GIT_DELTA.IGNORED then
     text_color = "Fugit2Ignored"
     icon_color = "Fugit2Ignored"
     status_icon = "󰈅 "
-  elseif index_status == git2.GIT_STATUS_SHORT.UNCHANGED then
+  elseif index_status == git2.GIT_DELTA.UNMODIFIED then
     text_color = "Fugit2Unchanged"
     icon_color = "Fugit2Unstaged"
     status_icon = "󰆢 "
-  elseif worktree_status == git2.GIT_STATUS_SHORT.MODIFIED then
+  elseif worktree_status == git2.GIT_DELTA.MODIFIED then
     text_color = "Fugit2Modified"
     icon_color = "Fugit2Staged"
     status_icon = "󰱒 "
@@ -101,7 +101,7 @@ end
 local function tree_node_data_from_item(item, bufs)
   local path = item.path
   local alt_path
-  if item.renamed and item.worktree_status == git2.GIT_STATUS_SHORT.UNCHANGED then
+  if item.renamed and item.worktree_status == git2.GIT_DELTA.UNMODIFIED then
     path = item.new_path or ""
   end
 
@@ -110,16 +110,16 @@ local function tree_node_data_from_item(item, bufs)
   local modified = bufs[path] and bufs[path].modified or false
 
   local icon = WebDevIcons.get_icon(filename, extension, { default = true })
-  local wstatus = git2.GIT_STATUS_SHORT.toshort(item.worktree_status)
-  local istatus = git2.GIT_STATUS_SHORT.toshort(item.index_status)
+  local wstatus = git2.status_char_dash(item.worktree_status)
+  local istatus = git2.status_char_dash(item.index_status)
 
   local text_color, icon_color, stage_icon = tree_node_colors(item.worktree_status, item.index_status, modified)
 
   local rename = ""
-  if item.renamed and item.index_status == git2.GIT_STATUS_SHORT.UNCHANGED then
+  if item.renamed and item.index_status == git2.GIT_DELTA.UNMODIFIED then
     rename = " -> " .. utils.make_relative_path(vim.fs.dirname(item.path), item.new_path)
     alt_path = item.new_path
-  elseif item.renamed and item.worktree_status == git2.GIT_STATUS_SHORT.UNCHANGED then
+  elseif item.renamed and item.worktree_status == git2.GIT_DELTA.UNMODIFIED then
     print(vim.fs.dirname(item.new_path), item.path)
     rename = " <- " .. utils.make_relative_path(vim.fs.dirname(item.new_path), item.path)
     alt_path = item.path
@@ -235,7 +235,7 @@ function NuiGitStatusTree:update(status)
 
   for _, item in ipairs(status) do
     local dirname = vim.fs.dirname(item.path)
-    if item.renamed and item.worktree_status == git2.GIT_STATUS_SHORT.UNCHANGED then
+    if item.renamed and item.worktree_status == git2.GIT_DELTA.UNMODIFIED then
       dirname = vim.fs.dirname(item.new_path)
     end
 
@@ -331,8 +331,8 @@ function NuiGitStatusTree:index_add_reset(repo, index, node)
       -- try to do full refresh
       inplace = false
     else
-      node.wstatus = git2.GIT_STATUS_SHORT.toshort(worktree_status)
-      node.istatus = git2.GIT_STATUS_SHORT.toshort(index_status)
+      node.wstatus = git2.status_char_dash(worktree_status)
+      node.istatus = git2.status_char_dash(index_status)
       node.color, node.stage_color, node.stage_icon = tree_node_colors(
         worktree_status, index_status, node.modified or false
       )
@@ -493,6 +493,7 @@ function NuiGitStatus:update()
       NuiLine { NuiText(string.format("Git2 Error Code: %d", git_error), "Error") }
     }
   else
+    -- update status panel
     self._git.head = git_status.head
 
     local head_line = NuiLine { NuiText("HEAD", "Fugit2Header") }
@@ -576,6 +577,7 @@ function NuiGitStatus:update()
     end
     table.insert(lines, upstream_line)
 
+    -- update files tree
     self._tree:update(git_status.status)
   end
 end
