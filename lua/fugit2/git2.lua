@@ -8,6 +8,7 @@ if libgit2_init_count == 0 then
   libgit2_init_count = libgit2.C.git_libgit2_init()
 end
 
+
 -- ========================
 -- | Libgit2 Enum section |
 -- ========================

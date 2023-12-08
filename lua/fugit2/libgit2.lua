@@ -333,6 +333,18 @@ M.GIT_REFERENCE = {
   ALL      = 3, -- Both GIT_REFERENCE_DIRECT | GIT_REFERENCE_SYMBOLIC
 }
 
+---@enum GIT_OBJECT
+M.GIT_OBJECT = {
+	ANY       = -2, -- Object can be any of the following.
+	INVALID   = -1, -- Object is invalid.
+	COMMIT    = 1, -- A commit object.
+	TREE      = 2, -- A tree (directory listing) object.
+	BLOB      = 3, -- A file revision object.
+	TAG       = 4, -- An annotated tag object.
+	OFS_DELTA = 6, -- A delta, base is given by an offset.
+	REF_DELTA = 7  -- A delta, base is given by object id.
+}
+
 ---@enum GIT_SORT
 M.GIT_SORT = {
   NONE        = 0, -- 0, default method from `git`: reverse chronological order
@@ -358,8 +370,8 @@ M.GIT_STATUS = {
   WT_RENAMED       = 2048,  -- 1u << 11
   WT_UNREADABLE    = 4096,  -- 1u << 12
 
-  IGNORED          = 16384, -- 1u << 14
-  CONFLICTED       = 32768, -- 1u << 15
+  IGNORED          = 0x4000, -- 1u << 14
+  CONFLICTED       = 0x8000, -- 1u << 15
 }
 
 ---@enum GIT_STATUS_SHOW
@@ -371,22 +383,22 @@ M.GIT_STATUS_SHOW = {
 
 ---@enum GIT_STATUS_OPT
 M.GIT_STATUS_OPT = {
-	INCLUDE_UNTRACKED               = 1, -- (1u << 0),
-	INCLUDE_IGNORED                 = 2, -- (1u << 1),
-	INCLUDE_UNMODIFIED              = 4, -- (1u << 2),
-	EXCLUDE_SUBMODULES              = 8, -- (1u << 3),
-	RECURSE_UNTRACKED_DIRS          = 16, -- (1u << 4),
-	DISABLE_PATHSPEC_MATCH          = 32, -- (1u << 5),
-	RECURSE_IGNORED_DIRS            = 64, -- (1u << 6),
-	RENAMES_HEAD_TO_INDEX           = 128, -- (1u << 7),
-	RENAMES_INDEX_TO_WORKDIR        = 256, -- (1u << 8),
-	SORT_CASE_SENSITIVELY           = 512, -- (1u << 9),
-	SORT_CASE_INSENSITIVELY         = 1024, -- (1u << 10),
-	RENAMES_FROM_REWRITES           = 2048, -- (1u << 11),
-	NO_REFRESH                      = 4096, -- (1u << 12),
-	UPDATE_INDEX                    = 8192, -- (1u << 13),
-	INCLUDE_UNREADABLE              = 16384, -- (1u << 14),
-	INCLUDE_UNREADABLE_AS_UNTRACKED = 32768, --(1u << 15)
+	INCLUDE_UNTRACKED               = 1,      -- (1u << 0),
+	INCLUDE_IGNORED                 = 2,      -- (1u << 1),
+	INCLUDE_UNMODIFIED              = 4,      -- (1u << 2),
+	EXCLUDE_SUBMODULES              = 8,      -- (1u << 3),
+	RECURSE_UNTRACKED_DIRS          = 16,     -- (1u << 4),
+	DISABLE_PATHSPEC_MATCH          = 32,     -- (1u << 5),
+	RECURSE_IGNORED_DIRS            = 64,     -- (1u << 6),
+	RENAMES_HEAD_TO_INDEX           = 128,    -- (1u << 7),
+	RENAMES_INDEX_TO_WORKDIR        = 256,    -- (1u << 8),
+	SORT_CASE_SENSITIVELY           = 512,    -- (1u << 9),
+	SORT_CASE_INSENSITIVELY         = 1024,   -- (1u << 10),
+	RENAMES_FROM_REWRITES           = 2048,   -- (1u << 11),
+	NO_REFRESH                      = 4096,   -- (1u << 12),
+	UPDATE_INDEX                    = 8192,   -- (1u << 13),
+	INCLUDE_UNREADABLE              = 0x4000, -- (1u << 14),
+	INCLUDE_UNREADABLE_AS_UNTRACKED = 0x8000, --(1u << 15)
 }
 
 ---@enum GIT_DELTA
@@ -402,18 +414,6 @@ M.GIT_DELTA = {
 	TYPECHANGE = 8,  -- type of entry changed between old and new
 	UNREADABLE = 9,  -- entry is unreadable
 	CONFLICTED = 10  -- entry in the index is conflicted
-}
-
----@enum GIT_OBJECT
-M.GIT_OBJECT = {
-	ANY       = -2, -- Object can be any of the following.
-	INVALID   = -1, -- Object is invalid.
-	COMMIT    = 1, -- A commit object.
-	TREE      = 2, -- A tree (directory listing) object.
-	BLOB      = 3, -- A file revision object.
-	TAG       = 4, -- An annotated tag object.
-	OFS_DELTA = 6, -- A delta, base is given by an offset.
-	REF_DELTA = 7  -- A delta, base is given by object id.
 }
 
 ---@enum GIT_REPOSITORY_OPEN
@@ -434,6 +434,90 @@ M.GIT_REPOSITORY_OPEN = {
 
   NO_DOTGIT = 8,
   FROM_ENV  = 16,
+}
+
+---@enum GIT_DIFF
+M.GIT_DIFF = {
+  NORMAL                 = 0,    --0: Normal diff, the default
+  REVERSE                = 1,    --(1 << 0): Reverse the sides of the diff
+  INCLUDE_IGNORED        = 2,    --(1 << 1): Include ignored files in the diff
+  RECURSE_IGNORED_DIRS   = 4,    --(1 << 2): adds files under the ignored directory as IGNORED entries
+  INCLUDE_UNTRACKED      = 8,    --(1 << 3): Include untracked files in the diff
+  RECURSE_UNTRACKED_DIRS = 0x10, --(1 << 4): adds files under untracked directories as UNTRACKED entries
+	INCLUDE_UNMODIFIED     = 0x20, --(1 << 5): include unmodified files in the diff
+  -- a type change between files will be converted into a
+  -- DELETED record for the old and an ADDED record for the new; this
+  -- options enabled the generation of TYPECHANGE delta records
+  INCLUDE_TYPECHANGE     = 0x40, --(1 << 6)
+  -- Even with GIT_DIFF_INCLUDE_TYPECHANGE, blob->tree changes still
+	-- generally show as a DELETED blob.  This flag tries to correctly
+	-- label blob->tree transitions as TYPECHANGE records with new_file's
+	-- mode set to tree.  Note: the tree SHA will not be available.
+  INCLUDE_TYPECHANGE_TREES = 0x80,  --(1 << 7)
+  IGNORE_FILEMODE          = 0x100, --(1u << 8): Ignore file mode changes
+	IGNORE_SUBMODULES        = 0x200, --(1u << 9): Treat all submodules as unmodified
+  IGNORE_CASE              = 0x400, --(1u << 10): case insensitive for filename comparisons
+  INCLUDE_CASECHANGE       = 0x800, --(1u << 11): combined with `IGNORE_CASE` to specify that a file that has changed case will be returned as an add/delete pair.
+
+  -- If the pathspec is set in the diff options, this flags indicates
+	-- that the paths will be treated as literal paths instead of fnmatch patterns.
+  -- Each path in the list must either be a full path to a file or a directory.
+  -- (A trailing slash indicates that the path will _only_ match a directory).
+  -- If a directory is specified, all children will be included.
+  DISABLE_PATHSPEC_MATCH = 0x1000, --(1u << 12)
+
+	-- Disable updating of the `binary` flag in delta records.  This is
+	-- useful when iterating over a diff if you don't need hunk and data
+	-- callbacks and want to avoid having to load file completely.
+	SKIP_BINARY_CHECK =  0x2000, --(1u << 13)
+
+	-- When diff finds an untracked directory, to match the behavior of
+	-- core Git, it scans the contents for IGNORED and UNTRACKED files.
+	-- If *all* contents are IGNORED, then the directory is IGNORED; if
+	-- any contents are not IGNORED, then the directory is UNTRACKED.
+	-- This is extra work that may not matter in many cases. This flag
+	-- turns off that scan and immediately labels an untracked directory
+	-- as UNTRACKED (changing the behavior to not match core Git).
+	ENABLE_FAST_UNTRACKED_DIRS = 0x4000, --(1u << 14)
+
+	-- When diff finds a file in the working directory with stat
+	-- information different from the index, but the OID ends up being the
+	-- same, write the correct stat information into the index.
+  -- Note: without this flag, diff will always leave the index untouched.
+	UPDATE_INDEX                    = 0x8000,  --(1u << 15)
+	INCLUDE_UNREADABLE              = 0x10000, -- 1u << 16): Include unreadable files in the diff
+  INCLUDE_UNREADABLE_AS_UNTRACKED = 0x20000, --(1u << 17): Include unreadable files as UNTRACKED
+
+  -- Options controlling how output will be generated
+
+	-- Use a heuristic that takes indentation and whitespace into account
+	-- which generally can produce better diffs when dealing with ambiguous
+	-- diff hunks.
+	INDENT_HEURISTIC         = 0x40000,   --(1u << 18)
+	IGNORE_BLANK_LINES       = 0x80000,   --(1u << 19): Ignore blank lines
+  FORCE_TEXT               = 0x100000,  --(1u << 20): Treat all files as text, disabling binary attributes & detection
+  FORCE_BINARY             = 0x200000,  --(1u << 21): Treat all files as binary, disabling text diffs
+  IGNORE_WHITESPACE        = 0x400000,  --(1u << 22): Ignore all whitespaces
+  IGNORE_WHITESPACE_CHANGE = 0x800000,  --(1u << 23): Ignore changes in amount of whitespace
+	IGNORE_WHITESPACE_EOL    = 0x1000000, --(1u << 24): Ignore whitespace at end of line
+
+	-- When generating patch text, include the content of untracked files.
+  -- This automatically turns on GIT_DIFF_INCLUDE_UNTRACKED but
+	-- it does not turn on GIT_DIFF_RECURSE_UNTRACKED_DIRS.
+  -- Add that flag if you want the content of every single UNTRACKED file.
+	SHOW_UNTRACKED_CONTENT = 0x2000000,  --(1u << 25)
+
+	-- When generating output, include the names of unmodified files if
+	-- they are included in the git_diff. Normally these are skipped in
+	-- the formats that list files (e.g. name-only, name-status, raw).
+	-- Even with this, these will not be included in patch format.
+	SHOW_UNMODIFIED = 0x4000000,  --(1u << 26)
+
+	PATIENCE        = 0x10000000, --(1u << 28): Use the "patience diff" algorithm
+	MINIMAL         = 0x20000000, --(1u << 29): Take extra time to find minimal diff
+	-- Include the necessary deflate / delta information so that `git-apply`
+	-- can apply given diff information to binary files.
+	SHOW_BINARY     = 0x40000000, --(1u << 30)
 }
 
 
