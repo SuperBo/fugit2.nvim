@@ -10,10 +10,13 @@ ffi.cdef[[
 
   typedef struct git_branch_iterator git_branch_iterator;
   typedef struct git_commit git_commit;
+  typedef struct git_diff git_diff;
+  typedef struct git_diff_stats git_diff_stats;
   typedef struct git_index git_index;
   typedef struct git_index_conflict_iterator git_index_conflict_iterator;
   typedef struct git_index_iterator git_index_iterator;
   typedef struct git_object git_object;
+  typedef struct git_patch git_patch;
   typedef struct git_reference git_reference;
   typedef struct git_remote git_remote;
   typedef struct git_repository git_repository;
@@ -21,23 +24,23 @@ ffi.cdef[[
   typedef struct git_status_list git_status_list;
   typedef struct git_tree git_tree;
 
-  typedef struct {
+  typedef struct git_strarray {
     char **strings;
     size_t count;
   } git_strarray;
 
-  typedef struct {
+  typedef struct git_strarray_readonly {
     const char **strings;
     size_t count;
   } git_strarray_readonly;
 
-  typedef struct {
+  typedef struct git_buf {
     char *ptr;
     size_t reserved;
     size_t size;
   } git_buf;
 
-  typedef struct {
+  typedef struct git_oid {
 	  unsigned char id[20];
   } git_oid;
 
@@ -53,16 +56,25 @@ ffi.cdef[[
     git_time when;
   } git_signature;
 
-  typedef struct {
+  typedef struct git_diff_hunk {
+    int    old_start;
+    int    old_lines;
+    int    new_start;
+    int    new_lines;
+    size_t header_len;
+    char   header[128];
+  } git_diff_hunk;
+
+  typedef struct git_diff_file {
     git_oid            id;
-    const char        *path;
+    const char *       path;
     git_object_size_t  size;
     uint32_t           flags;
     uint16_t           mode;
     uint16_t           id_abbrev;
   } git_diff_file;
 
-  typedef struct {
+  typedef struct git_diff_delta {
     int           status;
     uint32_t      flags;
     uint16_t      similarity;
@@ -71,13 +83,69 @@ ffi.cdef[[
     git_diff_file new_file;
   } git_diff_delta;
 
-  typedef struct {
+  typedef int (*git_diff_notify_cb)(
+    const git_diff *diff_so_far,
+    const struct git_diff_delta *delta_to_add,
+    const char *matched_pathspec,
+	  void *payload
+  );
+
+  typedef int (*git_diff_progress_cb)(
+    const git_diff *diff_so_far,
+    const char *old_path,
+    const char *new_path,
+    void *payload
+  );
+
+  typedef struct git_diff_options {
+    unsigned int         version;
+    uint32_t             flags;
+    unsigned int         ignore_submodules;
+    git_strarray         pathspec;
+    git_diff_notify_cb   notify_cb;
+    git_diff_progress_cb progress_cb;
+    void *               payload;
+    uint32_t             context_lines;
+    uint32_t             interhunk_lines;
+    unsigned int         oid_type;
+    uint16_t             id_abbrev;
+    int64_t              max_size;
+    const char *         old_prefix;
+    const char *         new_prefix;
+  } git_diff_options ;
+
+  typedef struct git_diff_similarity_metric {
+    int (*file_signature)(
+      void **out, const git_diff_file *file,
+      const char *fullpath, void *payload
+    );
+    int (*buffer_signature)(
+      void **out, const git_diff_file *file,
+      const char *buf, size_t buflen, void *payload
+    );
+    void (*free_signature)(void *sig, void *payload);
+    int (*similarity)(int *score, void *siga, void *sigb, void *payload);
+    void *payload;
+  } git_diff_similarity_metric;
+
+  typedef struct git_diff_find_options {
+    unsigned int version;
+    uint32_t     flags;
+    uint16_t     rename_threshold;
+    uint16_t     rename_from_rewrite_threshold;
+    uint16_t     copy_threshold;
+    uint16_t     break_rewrite_threshold;
+    size_t       rename_limit;
+    git_diff_similarity_metric *metric;
+  } git_diff_find_options;
+
+  typedef struct git_status_entry {
     unsigned int status;
-    git_diff_delta *head_to_index;
-    git_diff_delta *index_to_workdir;
+    struct git_diff_delta *head_to_index;
+    struct git_diff_delta *index_to_workdir;
   } git_status_entry;
 
-  typedef struct {
+  typedef struct git_status_options {
 	  unsigned int     version;
 	  int              show;
 	  unsigned int     flags;
@@ -137,6 +205,25 @@ ffi.cdef[[
     const git_tree *tree
   );
 
+  int git_diff_find_similar(git_diff *diff, const git_diff_find_options *options);
+  int git_diff_index_to_workdir(git_diff **diff, git_repository *repo, git_index *index, const git_diff_options *opts);
+  int git_diff_tree_to_index(git_diff **diff, git_repository *repo, git_tree *old_tree, git_index *index, const git_diff_options *opts);
+  int git_diff_to_buf(git_buf *out, git_diff *diff, unsigned int format);
+  int git_diff_get_stats(git_diff_stats **out, git_diff *diff);
+  size_t git_diff_num_deltas(const git_diff *diff);
+  void git_diff_free(git_diff *diff);
+
+  int git_diff_stats_to_buf(git_buf *out, const git_diff_stats *stats, unsigned int format, size_t width);
+  size_t git_diff_stats_files_changed(const git_diff_stats *stats);
+  size_t git_diff_stats_insertions(const git_diff_stats *stats);
+  size_t git_diff_stats_deletions(const git_diff_stats *stats);
+  void git_diff_stats_free(git_diff_stats *stats);
+
+  int git_patch_from_diff(git_patch **out, git_diff *diff, size_t idx);
+  int git_patch_to_buf(git_buf *out, git_patch *patch);
+  int git_patch_get_hunk(const git_diff_hunk **out, size_t *lines_in_hunk, git_patch *patch, size_t hunk_idx);
+  void git_patch_free(git_patch *patch);
+
   const char * git_reference_shorthand(const git_reference *ref);
   const char * git_reference_name(const git_reference *ref);
   int git_reference_resolve(git_reference **out, const git_reference *ref);
@@ -189,7 +276,6 @@ ffi.cdef[[
 
   int git_status_list_new(git_status_list **out, git_repository *repo, const git_status_options *opts);
   void git_status_list_free(git_status_list *statuslist);
-  int git_status_options_init(git_status_options *opts, unsigned int version);
   size_t git_status_list_entrycount(git_status_list *statuslist);
   const git_status_entry* git_status_byindex(git_status_list *statuslist, size_t idx);
   int git_status_should_ignore(int *ignored, git_repository *repo, const char *path);
@@ -219,20 +305,35 @@ M.const_char_pointer_array = ffi.typeof("const char *[?]")
 M.unsigned_int_array = ffi.typeof("unsigned int[?]")
 M.size_t_array = ffi.typeof("size_t[?]")
 
+---@type ffi.ctype* struct git_diff * [1]
+M.git_diff_double_pointer = ffi.typeof("git_diff*[1]")
+
+---@type ffi.ctype* struct git_diff_options [1]
+M.git_diff_options = ffi.typeof("git_diff_options[1]")
+
+---@type ffi.ctype* struct git_diff_find_options [1]
+M.git_diff_find_options = ffi.typeof("git_diff_find_options[1]")
+
+---@type ffi.ctype* struct git_diff_hunk *[1]
+M.git_diff_hunk_double_pointer = ffi.typeof("git_diff_hunk*[1]")
+
+---@type ffi.ctype* struct git_diff_stats *[1]
+M.git_diff_stats_double_pointer = ffi.typeof("git_diff_stats*[1]")
+
 ---@type ffi.ctype* struct git_repository*[1]
-M.git_repository_double_pointer = ffi.typeof("struct git_repository*[1]")
+M.git_repository_double_pointer = ffi.typeof("git_repository*[1]")
 
 ---@type ffi.ctype* struct git_repository*
-M.git_repository_pointer = ffi.typeof("struct git_repository*")
+M.git_repository_pointer = ffi.typeof("git_repository*")
 
 ---@type ffi.ctype* struct git_reference*[1]
-M.git_reference_double_pointer = ffi.typeof("struct git_reference*[1]")
+M.git_reference_double_pointer = ffi.typeof("git_reference*[1]")
 
 ---@type ffi.ctype* struct git_remote*[1]
-M.git_remote_double_pointer = ffi.typeof("struct git_remote*[1]")
+M.git_remote_double_pointer = ffi.typeof("git_remote*[1]")
 
 ---@type ffi.ctype* struct git_revwalk*[1]
-M.git_revwalk_double_pointer = ffi.typeof("struct git_revwalk*[1]")
+M.git_revwalk_double_pointer = ffi.typeof("git_revwalk*[1]")
 
 ---@type ffi.ctype* git_buf[1]
 M.git_buf = ffi.typeof("git_buf[1]")
@@ -241,10 +342,10 @@ M.git_buf = ffi.typeof("git_buf[1]")
 M.git_oid = ffi.typeof("git_oid[1]")
 
 ---@type ffi.ctype* git_commit*[1]
-M.git_commit_double_pointer = ffi.typeof("struct git_commit*[1]")
+M.git_commit_double_pointer = ffi.typeof("git_commit*[1]")
 
 ---@type ffi.ctype* git_commit*
-M.git_commit_pointer = ffi.typeof("struct git_commit*")
+M.git_commit_pointer = ffi.typeof("git_commit*")
 
 ---@type ffi.ctype* git_object *[1]
 M.git_object_double_pointer = ffi.typeof("git_object*[1]")
@@ -256,19 +357,28 @@ M.git_signature_double_pointer = ffi.typeof("git_signature*[1]")
 M.git_status_options = ffi.typeof("git_status_options[1]")
 
 ---@type ffi.ctype* struct git_status_list*[1]
-M.git_status_list_double_pointer = ffi.typeof("struct git_status_list*[1]")
+M.git_status_list_double_pointer = ffi.typeof("git_status_list*[1]")
 
 ---@type ffi.ctype* git_index*[1]
 M.git_index_double_pointer = ffi.typeof("git_index*[1]")
 
 ---@type ffi.ctype* struct git_branch_iterator *[1]
-M.git_branch_iterator_double_pointer = ffi.typeof("struct git_branch_iterator *[1]")
+M.git_branch_iterator_double_pointer = ffi.typeof("git_branch_iterator *[1]")
 
 ---@type ffi.ctype* git_strarray_readonly[1]
 M.git_strarray_readonly = ffi.typeof("git_strarray_readonly[1]")
 
----@type ffi.ctype* struct git_tree*[1]
-M.git_tree_double_pointer = ffi.typeof("struct git_tree*[1]")
+---@type ffi.ctype* struct git_tree * [1]
+M.git_tree_double_pointer = ffi.typeof("git_tree*[1]")
+
+
+-- ==========================
+-- | libgit2 struct version |
+-- ==========================
+
+M.GIT_STATUS_OPTIONS_VERSION = 1
+M.GIT_DIFF_OPTIONS_VERSION = 1
+M.GIT_DIFF_FIND_OPTIONS_VERSION = 1
 
 -- ================
 -- | libgit2 enum |
@@ -469,7 +579,7 @@ M.GIT_DIFF = {
 	-- Disable updating of the `binary` flag in delta records.  This is
 	-- useful when iterating over a diff if you don't need hunk and data
 	-- callbacks and want to avoid having to load file completely.
-	SKIP_BINARY_CHECK =  0x2000, --(1u << 13)
+	SKIP_BINARY_CHECK = 0x2000, --(1u << 13)
 
 	-- When diff finds an untracked directory, to match the behavior of
 	-- core Git, it scans the contents for IGNORED and UNTRACKED files.
@@ -519,6 +629,47 @@ M.GIT_DIFF = {
 	-- can apply given diff information to binary files.
 	SHOW_BINARY     = 0x40000000, --(1u << 30)
 }
+
+---@enum GIT_DIFF_FIND
+M.GIT_DIFF_FIND = {
+  FIND_BY_CONFIG                  = 0,      -- Obey `diff.renames
+	FIND_RENAMES                    = 1,      -- (1u << 0): Look for renames? (`--find-renames`)
+  FIND_RENAMES_FROM_REWRITES      = 2,      -- (1u << 1)
+  FIND_COPIES                     = 4,      -- (1u << 2)
+  FIND_COPIES_FROM_UNMODIFIED     = 8,      -- (1u << 3)
+  FIND_REWRITES                   = 16,     -- (1u << 4)
+  BREAK_REWRITES                  = 32,     -- (1u << 5),
+  FIND_AND_BREAK_REWRITES         = 48,     -- (GIT_DIFF_FIND_REWRITES | GIT_DIFF_BREAK_REWRITES)
+  FIND_FOR_UNTRACKED              = 64,     -- (1u << 6)
+  FIND_ALL                        = 0xff,   -- (0x0ff) Turn on all finding features.
+  FIND_IGNORE_LEADING_WHITESPACE  = 0,
+  FIND_IGNORE_WHITESPACE          = 0x1000, -- (1u << 12),
+  FIND_DONT_IGNORE_WHITESPACE     = 0x2000, -- (1u << 13),
+  FIND_EXACT_MATCH_ONLY           = 0x4000, -- (1u << 14),
+  BREAK_REWRITES_FOR_RENAMES_ONLY = 0x8000, -- (1u << 15),
+  FIND_REMOVE_UNMODIFIED          = 0x10000,-- (1u << 16)
+}
+
+---@enum GIT_SUBMODULE
+M.GIT_SUBMODULE = {
+	IGNORE_UNSPECIFIED = -1, -- use the submodule's configuration
+	IGNORE_NONE        = 1,  -- any change or untracked == dirty
+	IGNORE_UNTRACKED   = 2,  -- dirty if tracked files change
+	IGNORE_DIRTY       = 3,  -- only dirty if HEAD moved
+	IGNORE_ALL         = 4   -- never dirty
+}
+
+
+-- Inits helper
+
+local NULL = ffi.cast("void*", nil)
+
+M.GIT_STATUS_OPTIONS_INIT = { { M.GIT_STATUS_OPTIONS_VERSION } }
+M.GIT_DIFF_OPTIONS_INIT = {{
+  M.GIT_STATUS_OPTIONS_VERSION, 0, M.GIT_SUBMODULE.IGNORE_UNSPECIFIED,
+  { NULL, 0 }, NULL, NULL, NULL, 3
+}}
+M.GIT_DIFF_FIND_OPTIONS_INIT = {{ M.GIT_DIFF_FIND_OPTIONS_VERSION }}
 
 
 return M
