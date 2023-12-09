@@ -222,6 +222,7 @@ ffi.cdef[[
   int git_diff_tree_to_index(git_diff **diff, git_repository *repo, git_tree *old_tree, git_index *index, const git_diff_options *opts);
   int git_diff_to_buf(git_buf *out, git_diff *diff, unsigned int format);
   int git_diff_get_stats(git_diff_stats **out, git_diff *diff);
+  const git_diff_delta * git_diff_get_delta(const git_diff *diff, size_t idx);
   size_t git_diff_num_deltas(const git_diff *diff);
   void git_diff_free(git_diff *diff);
 
@@ -233,8 +234,10 @@ ffi.cdef[[
 
   int git_patch_from_diff(git_patch **out, git_diff *diff, size_t idx);
   int git_patch_to_buf(git_buf *out, git_patch *patch);
+  size_t git_patch_num_hunks(const git_patch *patch);
   int git_patch_get_hunk(const git_diff_hunk **out, size_t *lines_in_hunk, git_patch *patch, size_t hunk_idx);
   int git_patch_get_line_in_hunk(const git_diff_line **out, git_patch *patch, size_t hunk_idx, size_t line_of_hunk);
+  int git_patch_num_lines_in_hunk(const git_patch *patch, size_t hunk_idx);
   void git_patch_free(git_patch *patch);
 
   const char * git_reference_shorthand(const git_reference *ref);

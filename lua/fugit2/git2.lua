@@ -29,19 +29,18 @@ local GIT_REFERENCE_NAMESPACE = {
   NOTE   = 4, -- Reference is in Note namespace
 }
 
-
 local GIT_DELTA_STRING = {
   "UNMODIFIED",
-	"ADDED",
-	"DELETED",
-	"MODIFIED",
-	"RENAMED",
-	"COPIED",
-	"IGNORED",
-	"UNTRACKED",
-	"TYPECHANGE",
-	"UNREADABLE",
-	"CONFLICTED",
+  "ADDED",
+  "DELETED",
+  "MODIFIED",
+  "RENAMED",
+  "COPIED",
+  "IGNORED",
+  "UNTRACKED",
+  "TYPECHANGE",
+  "UNREADABLE",
+  "CONFLICTED",
 }
 
 
@@ -54,7 +53,6 @@ local GIT_DELTA_STRING = {
 ---@field path string git repository path
 local Repository = {}
 Repository.__index = Repository
-
 
 --- Creates new Repository object
 ---@param git_repository ffi.cdata* libgit2 struct git_repository*[1], own cdata
@@ -73,24 +71,20 @@ function Repository.new (git_repository)
   return repo
 end
 
-
 ---@class GitObject
 ---@field obj ffi.cdata* libgit2 struct git_object*[1]
 local Object = {}
 Object.__index = Object
-
 
 ---@class GitObjectId
 ---@field oid ffi.cdata* libgit2 git_oid struct
 local ObjectId = {}
 ObjectId.__index = ObjectId
 
-
 ---@class GitCommit
 ---@field commit ffi.cdata* libgit2 git_commit struct
 local Commit = {}
 Commit.__index = Commit
-
 
 ---@class GitReference
 ---@field ref ffi.cdata* libgit2 git_reference type
@@ -100,12 +94,10 @@ Commit.__index = Commit
 local Reference = {}
 Reference.__index = Reference
 
-
 ---@class GitIndex
 ---@field index ffi.cdata* libgit2 struct git_index*[1]
 local Index = {}
 Index.__index = Index
-
 
 ---@class GitRemote
 ---@field remote ffi.cdata* libgit2 struct git_remote*[1]
@@ -114,19 +106,16 @@ Index.__index = Index
 local Remote = {}
 Remote.__index = Remote
 
-
 ---@class GitRevisionWalker
 ---@field repo ffi.cdata* libgit2 struct git_repository*
 ---@field revwalk ffi.cdata* libgit2 struct git_revwalk*[1]
 local RevisionWalker = {}
 RevisionWalker.__index = RevisionWalker
 
-
 ---@class GitSignature
 ---@field sign ffi.cdata* libgit2 git_signature*[1]
 local Signature = {}
 Signature.__index = Signature
-
 
 ---@class GitPatch
 ---@field patch ffi.cdata* libgit2 git_patch*[1]
@@ -148,7 +137,6 @@ local DiffHunk = {}
 ---@field new_lineno integer
 ---@field num_lines integer
 ---@field content string
-
 
 -- ========================
 -- | Git Object functions |
@@ -782,6 +770,12 @@ function Patch:hunk_line(hunk_idx, line_idx)
   return ret, 0
 end
 
+---Gets the number of lines in a hunk.
+---@return integer
+function Patch:hunk_num_lines(i)
+  return libgit2.C.git_patch_num_lines_in_hunk(self.patch[0], i)
+end
+
 
 -- ========================
 -- | Repository functions |
@@ -829,24 +823,23 @@ end
 ---@field insertions integer
 ---@field delettions integer
 
----@class GitDiffItem
+---@class GitDiffPatchItem
+---@field status GIT_DELTA
 ---@field path string
 ---@field new_path string
----@field status GIT_DELTA
----@field renamed boolean extra flag to indicate whetehr item is renamed
+---@field num_hunks integer
 ---@field patch GitPatch
 
 ---@class GitDiffResult
 ---@field stats GitDiffStats
----@field patches GitDiffItem[]
+---@field patches GitDiffPatchItem[]
 
 
 function Repository:__tostring()
   return string.format("Git Repository: %s", self.path)
 end
 
-
--- Creates Git repository
+---Opens Git repository
 ---@param path string Path to repository
 ---@param search boolean Whether to search parent directories.
 ---@return GitRepository?
@@ -867,8 +860,7 @@ function Repository.open (path, search)
   return Repository.new(git_repo), 0
 end
 
-
--- Checks a Repository is empty or not
+---Checks a Repository is empty or not
 ---@return boolean is_empty Whether this git repo is empty
 function Repository:is_empty()
   local ret = libgit2.C.git_repository_is_empty(self.repo[0])
@@ -1304,7 +1296,7 @@ function Repository:status()
 end
 
 
--- Create a new action signature with default user and now timestamp.
+---Create a new action signature with default user and now timestamp.
 ---@return GitSignature?
 ---@return GIT_ERROR
 function Repository:signature_default()
@@ -1319,7 +1311,7 @@ function Repository:signature_default()
 end
 
 
--- Creates new commit in the repository.
+---Creates new commit in the repository.
 ---@param index GitIndex
 ---@param signature GitSignature
 ---@param message string
@@ -1370,7 +1362,7 @@ function Repository:commit(index, signature, message)
 end
 
 
--- Rewords HEAD commit.
+---Rewords HEAD commit.
 ---@param signature GitSignature
 ---@param message string
 ---@return GitObjectId?
@@ -1380,7 +1372,7 @@ function Repository:amend_reword(signature, message)
 end
 
 
--- Extend new index to HEAD commit.
+---Extends new index to HEAD commit.
 ---@param index GitIndex
 ---@return GitObjectId?
 ---@return GIT_ERROR
@@ -1388,7 +1380,7 @@ function Repository:amend_extend(index)
   return self:amend(index, nil, nil)
 end
 
--- Amends an existing commit by replacing only non-NULL values.
+---Amends an existing commit by replacing only non-NULL values.
 ---@param index GitIndex?
 ---@param signature GitSignature?
 ---@param message string?
@@ -1448,7 +1440,7 @@ function Repository:amend(index, signature, message)
 end
 
 
--- Return a GitRevisionWalker, cached it for the repo if possible.
+---Returns a GitRevisionWalker, cached it for the repo if possible.
 ---@return GitRevisionWalker?
 ---@return GIT_ERROR
 function Repository:walker()
@@ -1464,7 +1456,7 @@ function Repository:walker()
 end
 
 
--- Frees a cached GitRevisionWalker
+---Frees a cached GitRevisionWalker
 function Repository:free_walker()
   if self._walker then
     self._walker = nil
@@ -1571,16 +1563,27 @@ function Repository:diff_index_to_workdir(index, path)
     delettions = libgit2.C.git_diff_stats_deletions(stats[0])
   }
 
-  ---@type GitPatch[]
   patches = {}
 
   num_deltas = tonumber(libgit2.C.git_diff_num_deltas(diff[0]))
-  print("Num deltas", num_deltas)
   for i=0,num_deltas-1 do
-    local patch = libgit2.git_patch_double_pointer()
-    err = libgit2.C.git_patch_from_diff(patch, diff[0], i)
+    local delta = libgit2.C.git_diff_get_delta(diff[0], i)
+
+    local c_patch = libgit2.git_patch_double_pointer()
+    err = libgit2.C.git_patch_from_diff(c_patch, diff[0], i)
     if err == 0 then
-      table.insert(patches, Patch.new(patch))
+      local patch = Patch.new(c_patch)
+
+      ---@type GitDiffPatchItem
+      local patch_item = {
+        status    = delta.status,
+        path      = ffi.string(delta.old_file.path),
+        new_path  = ffi.string(delta.new_file.path),
+        num_hunks = tonumber(patch:nhunks()) or -1,
+        patch     = patch
+      }
+
+      table.insert(patches, patch_item)
     end
   end
 
@@ -1636,7 +1639,7 @@ local function status_string(delta)
 end
 
 
--- Prettifiy git message
+---Prettifiy git message
 ---@param msg string
 local function message_prettify(msg)
   local c_buf = libgit2.git_buf()
