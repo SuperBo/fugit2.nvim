@@ -7,6 +7,8 @@ local ffi = require "ffi"
 --- Load libgit2 via ffi
 ffi.cdef[[
   typedef uint64_t git_object_size_t;
+  typedef int64_t git_off_t;
+  typedef int64_t git_time_t;
 
   typedef struct git_branch_iterator git_branch_iterator;
   typedef struct git_commit git_commit;
@@ -45,7 +47,7 @@ ffi.cdef[[
   } git_oid;
 
   typedef struct git_time {
-    int64_t time;
+    git_time_t time;
     int offset;
     char sign;
   } git_time;
@@ -64,6 +66,16 @@ ffi.cdef[[
     size_t header_len;
     char   header[128];
   } git_diff_hunk;
+
+  typedef struct git_diff_line {
+    char   origin;
+    int    old_lineno;
+    int    new_lineno;
+    int    num_lines;
+    size_t content_len;
+    git_off_t content_offset;
+    const char *content;
+  } git_diff_line;
 
   typedef struct git_diff_file {
     git_oid            id;
@@ -222,6 +234,7 @@ ffi.cdef[[
   int git_patch_from_diff(git_patch **out, git_diff *diff, size_t idx);
   int git_patch_to_buf(git_buf *out, git_patch *patch);
   int git_patch_get_hunk(const git_diff_hunk **out, size_t *lines_in_hunk, git_patch *patch, size_t hunk_idx);
+  int git_patch_get_line_in_hunk(const git_diff_line **out, git_patch *patch, size_t hunk_idx, size_t line_of_hunk);
   void git_patch_free(git_patch *patch);
 
   const char * git_reference_shorthand(const git_reference *ref);
@@ -254,7 +267,6 @@ ffi.cdef[[
   int git_branch_remote_name(git_buf *out, git_repository *repo, const char *refname);
   int git_branch_upstream_remote(git_buf *buf, git_repository *repo, const char *refname);
 
-  /* int git_repository_open(git_repository **out, const char *path); */
   int git_repository_open_ext(git_repository **out, const char *path, unsigned int flags, const char *ceiling_dirs);
   void git_repository_free(git_repository *repo);
   const char* git_repository_path(const git_repository *repo);
@@ -315,10 +327,16 @@ M.git_diff_options = ffi.typeof("git_diff_options[1]")
 M.git_diff_find_options = ffi.typeof("git_diff_find_options[1]")
 
 ---@type ffi.ctype* struct git_diff_hunk *[1]
-M.git_diff_hunk_double_pointer = ffi.typeof("git_diff_hunk*[1]")
+M.git_diff_hunk_double_pointer = ffi.typeof("const git_diff_hunk*[1]")
+
+---@type ffi.ctype* const struct git_diff_line **out
+M.git_diff_line_double_pointer = ffi.typeof("const git_diff_line*[1]")
 
 ---@type ffi.ctype* struct git_diff_stats *[1]
 M.git_diff_stats_double_pointer = ffi.typeof("git_diff_stats*[1]")
+
+---@type ffi.ctype* struct git_patch *out[1]
+M.git_patch_double_pointer = ffi.typeof("git_patch*[1]")
 
 ---@type ffi.ctype* struct git_repository*[1]
 M.git_repository_double_pointer = ffi.typeof("git_repository*[1]")
@@ -657,6 +675,19 @@ M.GIT_SUBMODULE = {
 	IGNORE_UNTRACKED   = 2,  -- dirty if tracked files change
 	IGNORE_DIRTY       = 3,  -- only dirty if HEAD moved
 	IGNORE_ALL         = 4   -- never dirty
+}
+
+---@enum GIT_DIFF_LINE
+M.GIT_DIFF_LINE = {
+	CONTEXT       = ' ',
+	ADDITION      = '+',
+	DELETION      = '-',
+	CONTEXT_EOFNL = '=', --Both files have no LF at end
+	ADD_EOFNL     = '>', --Old has no LF at end, new does
+	DEL_EOFNL     = '<', --Old has LF at end, new does not
+	FILE_HDR      = 'F',
+	HUNK_HDR      = 'H',
+	BINARY        = 'B'  -- For "Binary files x and y differ"
 }
 
 

@@ -133,6 +133,22 @@ Signature.__index = Signature
 local Patch = {}
 Patch.__index = Patch
 
+---@class GitDiffHunk
+---@field num_lines integer
+---@field old_start integer
+---@field old_lines integer
+---@field new_start integer
+---@field new_lines integer
+---@field header string
+local DiffHunk = {}
+
+---@class GitDiffLine
+---@field origin string
+---@field old_lineno integer
+---@field new_lineno integer
+---@field num_lines integer
+---@field content string
+
 
 -- ========================
 -- | Git Object functions |
@@ -717,6 +733,7 @@ function Patch:nhunks()
 end
 
 ---@param idx integer Hunk index 0-based
+---@return GitDiffHunk?
 ---@return GIT_ERROR
 function Patch:hunk(idx)
   local num_lines = libgit2.size_t_array(1)
@@ -726,10 +743,43 @@ function Patch:hunk(idx)
     hunk, num_lines, self.patch[0], idx
   )
   if err ~= 0 then
-    return err
+    return nil, err
   end
 
-  return 0
+  ---@type GitDiffHunk
+  local diff_hunk = {
+    num_lines = num_lines[0],
+    old_start = hunk[0].old_start,
+    old_lines = hunk[0].old_lines,
+    new_start = hunk[0].new_start,
+    new_lines = hunk[0].new_lines,
+    header    = ffi.string(hunk[0].header, hunk[0].header_len)
+  }
+
+  return diff_hunk, 0
+end
+
+---@param hunk_idx integer Hunk index 0-based
+---@param line_idx integer Line index in hunk, 0-based
+---@return GitDiffLine?
+---@return GIT_ERROR
+function Patch:hunk_line(hunk_idx, line_idx)
+  local diff_line = libgit2.git_diff_line_double_pointer()
+
+  local err = libgit2.C.git_patch_get_line_in_hunk(diff_line, self.patch[0], hunk_idx, line_idx)
+  if err ~= 0 then
+    return nil, err
+  end
+
+  ---@type GitDiffLine
+  local ret = {
+    origin     = string.char(diff_line[0].origin),
+    old_lineno = diff_line[0].old_lineno,
+    new_lineno = diff_line[0].new_lineno,
+    num_lines  = diff_line[0].num_lines,
+    content    = ffi.string(diff_line[0].content, diff_line[0].content_len)
+  }
+  return ret, 0
 end
 
 
@@ -1500,7 +1550,7 @@ function Repository:diff_index_to_workdir(index, path)
     return nil, err
   end
 
-  local result, stats, diff_stats
+  local result, stats, diff_stats, patches, num_deltas
 
   -- call this to detect rename
   err = libgit2.C.git_diff_find_similar(diff[0], find_opts)
@@ -1520,10 +1570,24 @@ function Repository:diff_index_to_workdir(index, path)
     insertions = libgit2.C.git_diff_stats_insertions(stats[0]),
     delettions = libgit2.C.git_diff_stats_deletions(stats[0])
   }
+
+  ---@type GitPatch[]
+  patches = {}
+
+  num_deltas = tonumber(libgit2.C.git_diff_num_deltas(diff[0]))
+  print("Num deltas", num_deltas)
+  for i=0,num_deltas-1 do
+    local patch = libgit2.git_patch_double_pointer()
+    err = libgit2.C.git_patch_from_diff(patch, diff[0], i)
+    if err == 0 then
+      table.insert(patches, Patch.new(patch))
+    end
+  end
+
   ---@type GitDiffResult
   result = {
     stats = diff_stats,
-    patches = {},
+    patches = patches,
   }
 
   -- free C resources
