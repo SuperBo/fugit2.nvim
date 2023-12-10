@@ -1,0 +1,92 @@
+diff --git a/lua/fugit2/view/components/patch_view.lua b/lua/fugit2/view/components/patch_view.lua
+index fd118ca..0167db3 100644
+--- a/lua/fugit2/view/components/patch_view.lua
++++ b/lua/fugit2/view/components/patch_view.lua
+@@ -50,6 +50,11 @@ function PatchView:init(ns_id, title)
+   -- sub components
+   self.tree = nil
+   self.header = {}
++
++
++  -- keymaps
++  self.popup:map("n", "]", self:next_hunk_handler(), { noremap = true, nowait = true })
++  self.popup:map("n", "[", self:prev_hunk_handler(), { noremap = true, nowait = true })
+ end
+ 
+ local function tree_prepare_node(node)
+@@ -59,11 +64,20 @@ local function tree_prepare_node(node)
+ 
+   if node:has_children() then
+     -- line:append(node:is_expanded() and " " or " ")
+-  else
+-    line:append(" ", {
+-      virt_text = {{"?", "LineNr"}},
+-      virt_text_pos = "overlay",
+-    })
++  elseif node.text:sub(1, 1) == " " then
++    if node.last_line then
++      local whitespace = node.text:match("%s+")
++      local whitespace_len = whitespace and whitespace:len() - 1 or 0
++      line:append("", {
++        virt_text = {{"└" .. string.rep("─", whitespace_len), "Whitespace"}},
++        virt_text_pos = "overlay",
++      })
++    else
++      line:append("", {
++        virt_text = {{"│", "LineNr"}},
++        virt_text_pos = "overlay",
++      })
++    end
+   end
+ 
+   line:append(node.text)
+@@ -99,11 +113,20 @@ function PatchView:update(patch)
+ 
+     local children = {}
+     for j = start+1,stop do
+-      table.insert(children, NuiTree.Node({
+-        text = patch_lines[j],
+-        id = j,
+-        hunk_id = i
+-      }))
++      if j == stop then
++        table.insert(children, NuiTree.Node({
++          text = patch_lines[j],
++          id = j,
++          hunk_id = i,
++          last_line = true
++        }))
++      else
++        table.insert(children, NuiTree.Node({
++          text = patch_lines[j],
++          id = j,
++          hunk_id = i
++        }))
++      end
+     end
+ 
+     local hunk = NuiTree.Node({
+@@ -149,4 +172,23 @@ function PatchView:unmount()
+   return self.popup:unmount()
+ end
+ 
++-- keys handlers
++function PatchView:next_hunk_handler()
++  return function()
++    local node = self.tree:get_node()
++    if node and node.hunk_id then
++      -- TODO
++    end
++  end
++end
++
++function PatchView:prev_hunk_handler()
++  return function()
++    local node = self.tree:get_node()
++    if node and node.hunk_id then
++      -- TODO
++    end
++  end
++end
++
+ return PatchView
