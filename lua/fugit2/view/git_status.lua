@@ -4,6 +4,8 @@ local NuiLayout = require "nui.layout"
 local NuiLine = require "nui.line"
 local NuiText = require "nui.text"
 local NuiTree = require "nui.tree"
+local NuiPopup = require "nui.popup"
+local NuiMenu = require "nui.menu"
 local Object = require "nui.object"
 local WebDevIcons = require "nvim-web-devicons"
 
@@ -163,11 +165,11 @@ local function tree_prepare_node(node)
 end
 
 
----@class GitStatusTree
+---@class Fugit2GitStatusTree
 ---@field bufnr integer
 ---@field namespace integer
 ---@field tree NuiTree
-local GitStatusTree = Object("NuiGitStatusTree")
+local GitStatusTree = Object("Fugit2GitStatusTree")
 
 
 ---@param bufnr integer
@@ -376,15 +378,8 @@ local GitStatus = Object("Fugit2GitStatusView")
 ---Inits GitStatus.
 ---@param ns_id integer
 ---@param repo GitRepository
----@param info_popup NuiPopup
----@param file_popup NuiPopup
----@param input_popup NuiPopup
 ---param commit_menu Fugit2UIMenu
-function GitStatus:init(ns_id, repo, info_popup, file_popup, input_popup, commit_menu)
-  self.info_popup = info_popup
-  self.file_popup = file_popup
-  self.input_popup = input_popup
-
+function GitStatus:init(ns_id, repo)
   self.ns_id = -1
   if ns_id then
     self.ns_id = ns_id
@@ -403,13 +398,136 @@ function GitStatus:init(ns_id, repo, info_popup, file_popup, input_popup, commit
     sig, err = repo:signature_default()
     if sig then
       self.sign = sig
-
     end
   else
     error("Null repo")
   end
 
-  vim.api.nvim_buf_set_extmark(input_popup.bufnr, self.ns_id, 0, 0, {
+  -- setup popups
+  self.info_popup = NuiPopup {
+    enter = false,
+    focusable = true,
+    border = {
+      style = "rounded",
+      padding = {
+        top = 1,
+        bottom = 1,
+        left = 2,
+        right = 2,
+      },
+      text = {
+        top = " Status ",
+        top_align = "left",
+      },
+    },
+    win_options = {
+      winhighlight = "Normal:Normal,FloatBorder:FloatBorder",
+    },
+    buf_options = {
+      modifiable = true,
+      readonly = false,
+      swapfile = false,
+    },
+  }
+  self.file_popup = NuiPopup {
+    enter = true,
+    focusable = true,
+    zindex = 50,
+    border = {
+      style = "rounded",
+      padding = {
+        top = 0,
+        bottom = 0,
+        left = 1,
+        right = 1,
+      },
+      text = {
+        top = " 󰙅 Files ",
+        top_align = "left",
+        bottom = NuiText("[c]ommits", "FloatFooter"),
+        bottom_align = "right",
+      },
+    },
+    win_options = {
+      winblend = 0,
+      winhighlight = "Normal:Normal,FloatBorder:FloatBorder",
+      cursorline = true,
+    },
+    buf_options = {
+      modifiable = true,
+      readonly = false,
+      swapfile = false,
+    },
+  }
+
+  self.input_popup = NuiPopup {
+    enter = false,
+    focusable = true,
+    border = {
+      style = "rounded",
+      padding = {
+        left = 1, right = 1
+      },
+      text = {
+        top = NuiText(" Create commit ", "Fugit2MessageHeading"),
+        top_align = "left",
+        bottom = NuiText("[ctrl-c][esc][q]uit, [ctrl-enter][enter]", "FloatFooter"),
+        bottom_align = "right",
+      }
+    },
+    win_options = {
+      winhighlight = "Normal:Normal,FloatBorder:FloatBorder",
+    },
+    buf_options = {
+      modifiable = true,
+      filetype = "gitcommit",
+    }
+  }
+
+  -- menus
+  local menu_item_align = { text_align = "center" }
+  local commit_menu = UI.Menu({
+    enter = true,
+    position = "50%",
+    relative = "editor",
+    size = {
+      width = 36,
+      height = 8,
+    },
+    zindex = 52,
+    border = {
+      style = "single",
+      text = {
+        top = "Commit Menu",
+        top_align = "left",
+      },
+    },
+    win_options = {
+      winhighlight = "Normal:Normal,FloatBorder:Normal",
+    }
+  }, {
+    NuiMenu.separator(
+    NuiText("Create", "Fugit2MenuHead"),
+      menu_item_align
+    ),
+    NuiMenu.item(NuiLine({NuiText("c ", "Fugit2MenuKey"), NuiText("Commit")}), { id = "c" }),
+    NuiMenu.separator(
+      NuiLine { NuiText("Edit ", "Fugit2MenuHead"), NuiText("HEAD", "Fugit2Staged") },
+      menu_item_align
+    ),
+    NuiMenu.item(NuiLine { NuiText("e ", "Fugit2MenuKey"), NuiText("Extend") }, { id = "e" }),
+    NuiMenu.item(NuiLine { NuiText("w ", "Fugit2MenuKey"), NuiText("Reword") }, { id = "w" }),
+    NuiMenu.item(NuiLine { NuiText("a ", "Fugit2MenuKey"), NuiText("Amend") }, { id = "a" }),
+    NuiMenu.separator(
+      NuiText("View/Edit", "Fugit2MenuHead"),
+      menu_item_align
+    ),
+    NuiMenu.item(NuiLine { NuiText("g ", "Fugit2MenuKey"), NuiText("Graph") }, { id = "g" }),
+  })
+
+  -- setup others
+
+  vim.api.nvim_buf_set_extmark(self.input_popup.bufnr, self.ns_id, 0, 0, {
     id = 1,
     end_row = 0,
     virt_text = {
@@ -421,20 +539,20 @@ function GitStatus:init(ns_id, repo, info_popup, file_popup, input_popup, commit
 
   ---@type NuiLine[]
   self._status_lines = {}
-  ---@type GitStatusTree
+  ---@type Fugit2GitStatusTree
   self._tree = GitStatusTree(self.file_popup.bufnr, self.ns_id)
 
   -- setup layout
   self._boxes = {
     main = NuiLayout.Box({
-        NuiLayout.Box(info_popup, { size = 6 }),
-        NuiLayout.Box(file_popup, { grow = 1 }),
+        NuiLayout.Box(self.info_popup, { size = 6 }),
+        NuiLayout.Box(self.file_popup, { grow = 1 }),
       }, { dir = "col" }
     ),
     input = NuiLayout.Box({
-        NuiLayout.Box(info_popup, { size = 6 }),
-        NuiLayout.Box(input_popup, { size = 6 }),
-        NuiLayout.Box(file_popup, { grow = 1 }),
+        NuiLayout.Box(self.info_popup, { size = 6 }),
+        NuiLayout.Box(self.input_popup, { size = 6 }),
+        NuiLayout.Box(self.file_popup, { grow = 1 }),
       }, { dir = "col" }
     ),
   }
