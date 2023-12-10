@@ -221,6 +221,7 @@ ffi.cdef[[
   int git_diff_index_to_workdir(git_diff **diff, git_repository *repo, git_index *index, const git_diff_options *opts);
   int git_diff_tree_to_index(git_diff **diff, git_repository *repo, git_tree *old_tree, git_index *index, const git_diff_options *opts);
   int git_diff_to_buf(git_buf *out, git_diff *diff, unsigned int format);
+  int git_diff_from_buffer(git_diff **out, const char *content, size_t content_len);
   int git_diff_get_stats(git_diff_stats **out, git_diff *diff);
   const git_diff_delta * git_diff_get_delta(const git_diff *diff, size_t idx);
   size_t git_diff_num_deltas(const git_diff *diff);

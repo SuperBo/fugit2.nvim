@@ -122,6 +122,11 @@ Signature.__index = Signature
 local Patch = {}
 Patch.__index = Patch
 
+---@class GitDiff
+---@field diff ffi.cdata* libgit2 git_diff*[1]
+local Diff = {}
+Diff.__index = Diff
+
 ---@class GitDiffHunk
 ---@field num_lines integer
 ---@field old_start integer
@@ -458,12 +463,10 @@ function RevisionWalker.new(repo, revwalk)
   return git_walker
 end
 
-
 ---@return GIT_ERROR
 function RevisionWalker:reset()
   return libgit2.C.git_revwalk_reset(self.revwalk[0])
 end
-
 
 ---@param topo boolean sort in topo order
 ---@param time boolean sort by time
@@ -679,6 +682,38 @@ end
 ---@return boolean has_conflicts
 function Index:has_conflicts()
   return (libgit2.C.git_index_has_conflicts(self.index[0]) > 0)
+end
+
+-- ==================
+-- | Diff functions |
+-- ==================
+
+---Create new GitDiff object
+---@param diff ffi.cdata* libgit2 struct git_diff*[1], own cdata
+---@return GitDiff
+function Diff.new(diff)
+  local git_diff = { diff = diff }
+  setmetatable(git_diff, Diff)
+
+  ffi.gc(git_diff.diff, function(ptr)
+    libgit2.C.git_diff_free(ptr[0])
+  end)
+
+  return git_diff
+end
+
+---@parm diff_str string
+---@return GitDiff?
+---@return GIT_ERROR
+function Diff.from_buffer(diff_str)
+  local diff = libgit2.git_diff_double_pointer()
+
+  local err = libgit2.C.git_diff_from_buffer(diff, diff_str, diff_str:len())
+  if err ~= 0 then
+    return nil, err
+  end
+
+  return Diff.new(diff), 0
 end
 
 -- ===================
@@ -1669,6 +1704,7 @@ end
 ---@class Git2Module
 local M = {}
 
+M.Diff = Diff
 M.Repository = Repository
 M.Reference = Reference
 

@@ -53,5 +53,28 @@ function M.parse_patch(patch)
   }
 end
 
+---Creates a patch just incude one hunk
+---@param diff_header string[]
+---@param hunk_header string
+---@param hunk_lines string[]
+---@return string
+function M.partial_patch_from_hunk(diff_header, hunk_header, hunk_lines)
+  local patch_lines = {}
+
+  for i, line in ipairs(diff_header) do
+    patch_lines[i] = line
+  end
+
+  patch_lines[#diff_header+1] = hunk_header
+
+  for _, line in ipairs(hunk_lines) do
+    table.insert(patch_lines, line)
+  end
+
+  table.insert(patch_lines, "") -- final empty line
+
+  return table.concat(patch_lines, "\n")
+end
+
 
 return M

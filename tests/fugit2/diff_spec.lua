@@ -1,5 +1,6 @@
 local context = require "plenary.context_manager"
 local diff = require "fugit2.diff"
+local git2 = require "fugit2.git2"
 
 
 ---@param path string
@@ -44,5 +45,107 @@ describe("parse_patch", function()
     assert.equals(" ", hunk.lines[#hunk.lines].c)
     assert.equals(92, hunk.lines[#hunk.lines].linenr)
     assert.equals(23, #hunk.lines)
+  end)
+end)
+
+describe("partial_patch_from_hunk", function()
+  local patch = read_patch_file("tests/resources/patch_a.diff")
+  local function read_hunk(idx)
+    local patch_item = diff.parse_patch(patch)
+
+    local header = patch_item.header
+    local hunk_header = ""
+    local hunk_lines = {}
+
+    local hunk = patch_item.hunks[idx]
+    if hunk then
+      hunk_header = hunk.header
+      hunk_lines = vim.tbl_map(function (value)
+        return value.text
+      end, hunk.lines)
+    end
+
+    return header, hunk_header, hunk_lines
+  end
+
+  it("creates partial patch", function()
+    local header, hunk_header, hunk_lines = read_hunk(1)
+
+    local partial_patch = diff.partial_patch_from_hunk(header, hunk_header, hunk_lines)
+
+    assert.is_not_nil(partial_patch)
+    assert.equals("string", type(partial_patch))
+    assert.equals([[diff --git a/lua/fugit2/view/components/patch_view.lua b/lua/fugit2/view/components/patch_view.lua
+index fd118ca..0167db3 100644
+--- a/lua/fugit2/view/components/patch_view.lua
++++ b/lua/fugit2/view/components/patch_view.lua
+@@ -50,6 +50,11 @@ function PatchView:init(ns_id, title)
+   -- sub components
+   self.tree = nil
+   self.header = {}
++
++
++  -- keymaps
++  self.popup:map("n", "]", self:next_hunk_handler(), { noremap = true, nowait = true })
++  self.popup:map("n", "[", self:prev_hunk_handler(), { noremap = true, nowait = true })
+ end
+ 
+ local function tree_prepare_node(node)
+]],
+      partial_patch)
+  end)
+
+  it("creates partial patch 2", function()
+    local header, hunk_header, hunk_lines = read_hunk(4)
+
+    local partial_patch = diff.partial_patch_from_hunk(header, hunk_header, hunk_lines)
+
+    assert.is_not_nil(partial_patch)
+    assert.equals("string", type(partial_patch))
+    assert.equals([[diff --git a/lua/fugit2/view/components/patch_view.lua b/lua/fugit2/view/components/patch_view.lua
+index fd118ca..0167db3 100644
+--- a/lua/fugit2/view/components/patch_view.lua
++++ b/lua/fugit2/view/components/patch_view.lua
+@@ -149,4 +172,23 @@ function PatchView:unmount()
+   return self.popup:unmount()
+ end
+ 
++-- keys handlers
++function PatchView:next_hunk_handler()
++  return function()
++    local node = self.tree:get_node()
++    if node and node.hunk_id then
++      -- TODO
++    end
++  end
++end
++
++function PatchView:prev_hunk_handler()
++  return function()
++    local node = self.tree:get_node()
++    if node and node.hunk_id then
++      -- TODO
++    end
++  end
++end
++
+ return PatchView
+]],
+      partial_patch)
+  end)
+
+  it("create valid git2 diff", function()
+    local header, hunk_header, hunk_lines = read_hunk(4)
+
+    local partial_patch = diff.partial_patch_from_hunk(header, hunk_header, hunk_lines)
+
+    assert.is_not_nil(partial_patch)
+
+    local diff, err = git2.Diff.from_buffer(partial_patch)
+
+    assert.equals(0, err)
+    assert.is_not_nil(diff)
+    assert.is_not_nil(diff.diff)
+    assert.is_not_nil(diff.diff[0])
   end)
 end)
