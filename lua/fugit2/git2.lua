@@ -716,6 +716,69 @@ function Diff.from_buffer(diff_str)
   return Diff.new(diff), 0
 end
 
+---Gets accumulate diff statistics for all patches.
+---@return GitDiffStats?
+---@return GIT_ERROR
+function Diff:stats()
+  local diff_stats = libgit2.git_diff_stats_double_pointer()
+  local err = libgit2.C.git_diff_get_stats(diff_stats, self.diff[0]);
+  if err ~= 0 then
+    return nil, err
+  end
+  ---@type GitDiffStats
+  local stats = {
+    changed = libgit2.C.git_diff_stats_files_changed(diff_stats[0]),
+    insertions = libgit2.C.git_diff_stats_insertions(diff_stats[0]),
+    delettions = libgit2.C.git_diff_stats_deletions(diff_stats[0])
+  }
+
+  libgit2.C.git_diff_stats_free(diff_stats[0]);
+  return stats, 0
+end
+
+---Gets patches from diff as a list
+---@param sort_case_sensitive boolean
+---@return GitDiffPatchItem[]
+---@return GIT_ERROR
+function Diff:patches(sort_case_sensitive)
+  local patches = {}
+  local err = 0
+
+  local num_deltas = tonumber(libgit2.C.git_diff_num_deltas(self.diff[0]))
+  for i=0,num_deltas-1 do
+    local delta = libgit2.C.git_diff_get_delta(self.diff[0], i)
+
+    local c_patch = libgit2.git_patch_double_pointer()
+    err = libgit2.C.git_patch_from_diff(c_patch, self.diff[0], i)
+    if err ~= 0 then
+      break
+    end
+
+    local patch = Patch.new(c_patch)
+
+    ---@type GitDiffPatchItem
+    local patch_item = {
+      status    = delta.status,
+      path      = ffi.string(delta.old_file.path),
+      new_path  = ffi.string(delta.new_file.path),
+      num_hunks = tonumber(patch:nhunks()) or -1,
+      patch     = patch
+    }
+
+    table.insert(patches, patch_item)
+  end
+
+  if sort_case_sensitive then
+    -- sort patches by name
+    table.sort(patches, function (a, b)
+      return a.path < b.path
+    end)
+  end
+
+  return patches, err
+end
+
+
 -- ===================
 -- | Patch functions |
 -- ===================
@@ -864,10 +927,6 @@ end
 ---@field new_path string
 ---@field num_hunks integer
 ---@field patch GitPatch
-
----@class GitDiffResult
----@field stats GitDiffStats
----@field patches GitDiffPatchItem[]
 
 
 function Repository:__tostring()
@@ -1554,7 +1613,7 @@ end
 
 ---@param index GitIndex?
 ---@param path string?
----@return GitDiffResult?
+---@return GitDiff?
 ---@return GIT_ERROR
 function Repository:diff_index_to_workdir(index, path)
   local opts = libgit2.git_diff_options(libgit2.GIT_DIFF_OPTIONS_INIT)
@@ -1577,65 +1636,14 @@ function Repository:diff_index_to_workdir(index, path)
     return nil, err
   end
 
-  local result, stats, diff_stats, patches, num_deltas
-
   -- call this to detect rename
   err = libgit2.C.git_diff_find_similar(diff[0], find_opts)
   if err ~= 0 then
-    goto diff_index_to_workdir_end
+    libgit2.C.git_diff_free(diff[0])
+    return nil, err
   end
 
-  stats = libgit2.git_diff_stats_double_pointer()
-  err = libgit2.C.git_diff_get_stats(stats, diff[0]);
-  if err ~= 0 then
-    goto diff_index_to_workdir_end
-  end
-
-  ---@type GitDiffStats
-  diff_stats = {
-    changed = libgit2.C.git_diff_stats_files_changed(stats[0]),
-    insertions = libgit2.C.git_diff_stats_insertions(stats[0]),
-    delettions = libgit2.C.git_diff_stats_deletions(stats[0])
-  }
-
-  patches = {}
-
-  num_deltas = tonumber(libgit2.C.git_diff_num_deltas(diff[0]))
-  for i=0,num_deltas-1 do
-    local delta = libgit2.C.git_diff_get_delta(diff[0], i)
-
-    local c_patch = libgit2.git_patch_double_pointer()
-    err = libgit2.C.git_patch_from_diff(c_patch, diff[0], i)
-    if err == 0 then
-      local patch = Patch.new(c_patch)
-
-      ---@type GitDiffPatchItem
-      local patch_item = {
-        status    = delta.status,
-        path      = ffi.string(delta.old_file.path),
-        new_path  = ffi.string(delta.new_file.path),
-        num_hunks = tonumber(patch:nhunks()) or -1,
-        patch     = patch
-      }
-
-      table.insert(patches, patch_item)
-    end
-  end
-
-  ---@type GitDiffResult
-  result = {
-    stats = diff_stats,
-    patches = patches,
-  }
-
-  -- free C resources
-  ::diff_index_to_workdir_end::
-  if stats and stats[0] ~= nil then
-    libgit2.C.git_diff_stats_free(stats[0]);
-  end
-  libgit2.C.git_diff_free(diff[0])
-
-  return result, err
+  return Diff.new(diff), 0
 end
 
 

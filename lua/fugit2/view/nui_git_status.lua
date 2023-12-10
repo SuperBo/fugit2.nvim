@@ -620,6 +620,7 @@ function NuiGitStatus:off_input()
   )
   self._layout:update(self._boxes.main)
   vim.api.nvim_set_current_win(self.file_popup.winid)
+  vim.cmd("stopinsert")
 end
 
 function NuiGitStatus:insert_head_message_to_input()
@@ -985,7 +986,6 @@ function NuiGitStatus:setup_handlers()
 
   -- Message input
   local input_quit_fn = function()
-    vim.cmd("stopinsert")
     self:off_input()
   end
 
