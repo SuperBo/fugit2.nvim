@@ -4,7 +4,6 @@ local NuiLayout = require "nui.layout"
 local NuiLine = require "nui.line"
 local NuiText = require "nui.text"
 local Object = require "nui.object"
-local event = require "nui.utils.autocmd".event
 
 local git2 = require "fugit2.git2"
 local utils = require "fugit2.utils"
@@ -50,7 +49,7 @@ local SYMBOLS = {
 
 
 -- Helper class to store graph vis information
----@class NuiGitGraphCommitNodeVis
+---@class Fugit2GitGraphCommitNodeVis
 ---@field j integer graph j coordinate
 ---@field start boolean? this commit start a branch
 ---@field active_cols integer[]? current active branch j
@@ -59,46 +58,46 @@ local SYMBOLS = {
 
 
 -- Helper enum for graph column
----@enum NuiGitGraphColumn
+---@enum GitGraphColumn
 local GitGraphColumn = {
   NONE   = 1, -- column not allocated
   COMMIT = 2, -- column contains main commit
   ACTIVE = 3, -- column is allocated by other branch
 }
 
----@class NuiGitGraphLine
+---@class GitGraphLine
 ---@field cols string[]
 
 
----@class NuiGitGraphCommitNode
+---@class Fugit2GitGraphCommitNode
 ---@field oid string
 ---@field message string
 ---@field parents string[]
----@field vis NuiGitGraphCommitNodeVis?
-local NuiGitGraphCommitNode = Object "NuiGitGraphCommitNode"
+---@field vis Fugit2GitGraphCommitNodeVis?
+local GitGraphCommitNode = Object("Fugit2GitGraphCommitNode")
 
 
 -- Inits NuiGitGraphCommitNode
 ---@param oid string
 ---@param msg string
----@param parents NuiGitGraphCommitNode[]
-function NuiGitGraphCommitNode:init(oid, msg, parents)
+---@param parents Fugit2GitGraphCommitNode[]
+function GitGraphCommitNode:init(oid, msg, parents)
   self.oid = oid
   self.message = msg
   self.parents = parents
 end
 
 
----@class NuiGitGraphCommitGraph
-local NuiGitGraphCommitGraph = Object("NuiGitGraphCommitGraph")
+---@class Fugit2GitGraphCommitGraph
+local GitGraphCommitGraph = Object("Fugit2GitGraphCommitGraph")
 
 
----@class NuiGitGraph
+---@class Fugit2GitGraphView
 ---@field branch_popup NuiPopup Branch popup.
 ---@field commit_popup NuiPopup Commit popup.
 ---@field ns_id integer Namespace id.
 ---@field repo GitRepository
-local NuiGitGraph = Object("NuiGitGraph")
+local GitGraph = Object("Fugit2GitGraphView")
 
 
 -- Inits NuiGitGraph.
@@ -106,7 +105,7 @@ local NuiGitGraph = Object("NuiGitGraph")
 ---@param commit_popup NuiPopup
 ---@param ns_id integer
 ---@param repo GitRepository
-function NuiGitGraph:init(branch_popup, commit_popup, ns_id, repo)
+function GitGraph:init(branch_popup, commit_popup, ns_id, repo)
   self.branch_popup = branch_popup
   self.commit_popup = commit_popup
 
@@ -127,7 +126,7 @@ function NuiGitGraph:init(branch_popup, commit_popup, ns_id, repo)
   self._branch_lines, self._commit_lines = {}, {}
   ---@type GitBranch[]
   self._branches = {}
-  ---@type NuiGitGraphCommitNode[]
+  ---@type Fugit2GitGraphCommitNode[]
   self._commits = {}
 
   self._layout = NuiLayout(
@@ -155,7 +154,7 @@ end
 
 
 -- Updates git branch and commits.
-function NuiGitGraph:update()
+function GitGraph:update()
   for i=#self._branch_lines,1,-1 do
     self._branch_lines[i] = nil
   end
@@ -203,7 +202,7 @@ function NuiGitGraph:update()
         commit:parent_oids()
       )
 
-      ---@type NuiGitGraphCommitNode
+      ---@type Fugit2GitGraphCommitNode
       local node = {
         oid = id:tostring(20),
         message = commit:message(),
@@ -226,10 +225,10 @@ end
 
 
 -- Prepares node visulasation information for each commit
----@param nodes NuiGitGraphCommitNode[] Commit Node in topo order.
----@return NuiGitGraphCommitNode[] out_nodes
+---@param nodes Fugit2GitGraphCommitNode[] Commit Node in topo order.
+---@return Fugit2GitGraphCommitNode[] out_nodes
 ---@return integer graph_width
-function NuiGitGraph.prepare_commit_node_visualisation(nodes)
+function GitGraph.prepare_commit_node_visualisation(nodes)
   ---@type {[string]: ActiveBranchItem}
   local active_branches = {} -- mapping from oid to {j, out_cols? }
   ---@type ActiveBranchItem?
@@ -338,7 +337,7 @@ end
 ---@param width integer padding width, if == 0, no padding-right
 ---@param commit_j integer? commit column
 ---@return NuiLine
-function NuiGitGraph.draw_graph_line(cols, width, commit_j)
+function GitGraph.draw_graph_line(cols, width, commit_j)
   local graph_line = {}
   local space_pad, space_2_pad = "   ", "  "
   local dash_pad, dash_2_pad = "───", "──"
@@ -444,7 +443,7 @@ function NuiGitGraph.draw_graph_line(cols, width, commit_j)
 end
 
 
----@param vis NuiGitGraphCommitNodeVis
+---@param vis Fugit2GitGraphCommitNodeVis
 ---@return NuiLine pre_line
 local function draw_graph_node_pre_line_bare(vis)
   local max_pre_j = vis.j
@@ -464,11 +463,11 @@ local function draw_graph_node_pre_line_bare(vis)
     pre_cols[vis.j] = SYMBOLS.COMMIT_BRANCH
   end
 
-  return NuiGitGraph.draw_graph_line(pre_cols, 0)
+  return GitGraph.draw_graph_line(pre_cols, 0)
 end
 
 
----@param vis NuiGitGraphCommitNodeVis
+---@param vis Fugit2GitGraphCommitNodeVis
 ---@param width integer
 ---@return NuiLine commit_line
 local function draw_graph_node_commit_line_bare(vis, width)
@@ -483,11 +482,11 @@ local function draw_graph_node_commit_line_bare(vis, width)
 
   commit_cols[vis.j] = SYMBOLS.CURRENT_COMMIT
 
-  return NuiGitGraph.draw_graph_line(commit_cols, width, vis.j)
+  return GitGraph.draw_graph_line(commit_cols, width, vis.j)
 end
 
 
----@param vis NuiGitGraphCommitNodeVis
+---@param vis Fugit2GitGraphCommitNodeVis
 ---@param width integer
 ---@return NuiLine commit_line
 local function draw_graph_node_merge_line(vis, width)
@@ -518,11 +517,11 @@ local function draw_graph_node_merge_line(vis, width)
 
   commit_cols[vis.j] = SYMBOLS.MERGE_COMMIT
 
-  return NuiGitGraph.draw_graph_line(commit_cols, width, vis.j)
+  return GitGraph.draw_graph_line(commit_cols, width, vis.j)
 end
 
 
----@param vis NuiGitGraphCommitNodeVis
+---@param vis Fugit2GitGraphCommitNodeVis
 ---@param width integer
 ---@param commit_line_symbol boolean?
 ---@return NuiLine commit_line
@@ -554,15 +553,15 @@ local function draw_graph_node_branch_out_line(vis, width, commit_line_symbol)
     cols[vis.j] = SYMBOLS.CURRENT_COMMIT
   end
 
-  return NuiGitGraph.draw_graph_line(cols, width, vis.j)
+  return GitGraph.draw_graph_line(cols, width, vis.j)
 end
 
 
 -- Draws commit graph similar to flog
----@param nodes NuiGitGraphCommitNode[]
+---@param nodes Fugit2GitGraphCommitNode[]
 ---@param width integer
 ---@return NuiLine[] lines
-function NuiGitGraph.draw_commit_nodes(nodes, width)
+function GitGraph.draw_commit_nodes(nodes, width)
   local lines = {} -- output lines
   local pre_line, commit_line  = {}, {}
 
@@ -602,7 +601,7 @@ end
 
 
 -- Renders content for NuiGitGraph.
-function NuiGitGraph:render()
+function GitGraph:render()
   -- branch lines
   for i, line in ipairs(self._branch_lines) do
     line:render(self.branch_popup.bufnr, self.ns_id, i)
@@ -619,13 +618,13 @@ function NuiGitGraph:render()
 end
 
 
-function NuiGitGraph:mount()
+function GitGraph:mount()
   self._layout:mount()
 end
 
 
 -- Setups keymap handlers
-function NuiGitGraph:setup_handlers()
+function GitGraph:setup_handlers()
   local map_options = { noremap = true }
 
   -- exit func
@@ -661,7 +660,7 @@ function NuiGitGraph:setup_handlers()
 end
 
 
-NuiGitGraph.CommitNode = NuiGitGraphCommitNode
+GitGraph.CommitNode = GitGraphCommitNode
 
 
-return NuiGitGraph
+return GitGraph

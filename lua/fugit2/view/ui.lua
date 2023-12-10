@@ -3,9 +3,9 @@ local NuiMenu = require "nui.menu"
 local NuiPopup = require "nui.popup"
 local NuiText = require "nui.text"
 
-local UI = require "fugit2.view.components"
-local NuiGitStatus = require "fugit2.view.nui_git_status"
-local NuiGitGraph = require "fugit2.view.nui_git_graph"
+local UI = require "fugit2.view.components.menus"
+local GitStatus = require "fugit2.view.git_status"
+local GitGraph = require "fugit2.view.git_graph"
 
 
 ---@classs Fugit2UIModule
@@ -14,7 +14,7 @@ local M = {}
 -- Creates Fugit2 Main Floating Window
 ---@param namespace integer Nvim namespace
 ---@param repo GitRepository
----@return NuiGitStatus
+---@return Fugit2GitStatusView
 function M.new_fugit2_status_window(namespace, repo)
   local info_popup = NuiPopup {
     enter = false,
@@ -137,7 +137,7 @@ function M.new_fugit2_status_window(namespace, repo)
   })
 
   -- Status content
-  local status = NuiGitStatus(namespace, repo, info_popup, file_popup, message_popup, commit_menu)
+  local status = GitStatus(namespace, repo, info_popup, file_popup, message_popup, commit_menu)
   status:render()
 
   return status
@@ -206,7 +206,7 @@ function M.new_fugit2_graph_window(namespace, repo)
   }
 
   -- Status content
-  local graph = NuiGitGraph(branch_popup, commit_popup, namespace, repo)
+  local graph = GitGraph(branch_popup, commit_popup, namespace, repo)
   graph:render()
 
   return graph

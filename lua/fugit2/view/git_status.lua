@@ -7,7 +7,7 @@ local NuiTree = require "nui.tree"
 local Object = require "nui.object"
 local WebDevIcons = require "nvim-web-devicons"
 
-local UI = require "fugit2.view.components"
+local UI = require "fugit2.view.components.menus"
 local git2 = require "fugit2.git2"
 local utils = require "fugit2.utils"
 
@@ -163,16 +163,16 @@ local function tree_prepare_node(node)
 end
 
 
----@class NuiGitStatusTree
+---@class GitStatusTree
 ---@field bufnr integer
 ---@field namespace integer
 ---@field tree NuiTree
-local NuiGitStatusTree = Object("NuiGitStatusTree")
+local GitStatusTree = Object("NuiGitStatusTree")
 
 
 ---@param bufnr integer
 ---@param namespace integer
-function NuiGitStatusTree:init(bufnr, namespace)
+function GitStatusTree:init(bufnr, namespace)
   self.bufnr = bufnr
   self.namespace = namespace
 
@@ -191,7 +191,7 @@ end
 
 ---@return integer files_change
 ---@return integer files_remove
-function NuiGitStatusTree:index_count()
+function GitStatusTree:index_count()
   local files_change, files_remove = 0, 0
 
   ---@type (string | boolean)[]
@@ -217,7 +217,7 @@ end
 
 
 ---@param status GitStatusItem[]
-function NuiGitStatusTree:update(status)
+function GitStatusTree:update(status)
   -- get all bufs modified info
   local bufs = {}
   for _, bufnr in pairs(vim.tbl_filter(vim.api.nvim_buf_is_loaded, vim.api.nvim_list_bufs())) do
@@ -270,7 +270,7 @@ end
 ---@param node NuiTree.Node
 ---@return boolean updated Tree is updated or not.
 ---@return boolean refresh Whether needed to do full refresh.
-function NuiGitStatusTree:index_add_reset(repo, index, node)
+function GitStatusTree:index_add_reset(repo, index, node)
   local ret
   local updated = false
   local inplace = true -- whether can update status inplace
@@ -343,7 +343,7 @@ function NuiGitStatusTree:index_add_reset(repo, index, node)
 end
 
 
-function NuiGitStatusTree:render()
+function GitStatusTree:render()
   self.tree:render()
 end
 
@@ -365,22 +365,22 @@ local CommitMode = {
 -- ===================
 
 
----@class NuiGitStatus
+---@class Fugit2GitStatusView
 ---@field info_popup NuiPopup
 ---@field file_popup NuiPopup
 ---@field input_popup NuiPopup
 ---@field repo GitRepository
-local NuiGitStatus = Object("NuiGitStatus")
+local GitStatus = Object("Fugit2GitStatusView")
 
 
----Inits NuiGitStatus.
+---Inits GitStatus.
 ---@param ns_id integer
 ---@param repo GitRepository
 ---@param info_popup NuiPopup
 ---@param file_popup NuiPopup
 ---@param input_popup NuiPopup
 ---param commit_menu Fugit2UIMenu
-function NuiGitStatus:init(ns_id, repo, info_popup, file_popup, input_popup, commit_menu)
+function GitStatus:init(ns_id, repo, info_popup, file_popup, input_popup, commit_menu)
   self.info_popup = info_popup
   self.file_popup = file_popup
   self.input_popup = input_popup
@@ -421,8 +421,8 @@ function NuiGitStatus:init(ns_id, repo, info_popup, file_popup, input_popup, com
 
   ---@type NuiLine[]
   self._status_lines = {}
-  ---@type NuiGitStatusTree
-  self._tree = NuiGitStatusTree(self.file_popup.bufnr, self.ns_id)
+  ---@type GitStatusTree
+  self._tree = GitStatusTree(self.file_popup.bufnr, self.ns_id)
 
   -- setup layout
   self._boxes = {
@@ -478,7 +478,7 @@ end
 
 
 -- Updates git status.
-function NuiGitStatus:update()
+function GitStatus:update()
   local git_status, git_error = git2.status(self.repo)
 
   for i, _ in ipairs(self._status_lines) do
@@ -584,7 +584,7 @@ end
 
 
 -- Renders git status
-function NuiGitStatus:render()
+function GitStatus:render()
   for i, line in ipairs(self._status_lines) do
     line:render(self.info_popup.bufnr, self.ns_id, i)
   end
@@ -593,12 +593,12 @@ function NuiGitStatus:render()
 end
 
 
-function NuiGitStatus:mount()
+function GitStatus:mount()
   self._layout:mount()
 end
 
 
-function NuiGitStatus:write_index()
+function GitStatus:write_index()
   if self._updated then
     if self.index:write() == 0 then
       self._updated = false
@@ -607,13 +607,13 @@ function NuiGitStatus:write_index()
 end
 
 
-function NuiGitStatus:focus_input()
+function GitStatus:focus_input()
   self._layout:update(self._boxes.input)
   vim.api.nvim_set_current_win(self.input_popup.winid)
 end
 
 
-function NuiGitStatus:off_input()
+function GitStatus:off_input()
   vim.api.nvim_buf_set_lines(
     self.input_popup.bufnr,
     0, -1, true, {}
@@ -623,7 +623,7 @@ function NuiGitStatus:off_input()
   vim.cmd("stopinsert")
 end
 
-function NuiGitStatus:insert_head_message_to_input()
+function GitStatus:insert_head_message_to_input()
   vim.api.nvim_buf_set_lines(
     self.input_popup.bufnr, 0, -1, true,
     vim.split(self._git.head.message, "\n", { plain = true, trimempty = true })
@@ -657,7 +657,7 @@ end
 
 ---Makes a commit
 ---@param message string
-function NuiGitStatus:commit(message)
+function GitStatus:commit(message)
   local prettified = check_signature_message(self.sign, message)
 
   if self.sign and prettified then
@@ -677,7 +677,7 @@ end
 
 ---Extends HEAD commit
 ---add files in index to HEAD commit
-function NuiGitStatus:commit_extend()
+function GitStatus:commit_extend()
   self:write_index()
   local commit_id, err = self.repo:amend_extend(self.index)
   if commit_id then
@@ -694,7 +694,7 @@ end
 ---Reword HEAD commit
 ---change commit message of HEAD commit
 ---@param message string commit message
-function NuiGitStatus:commit_reword(message)
+function GitStatus:commit_reword(message)
   local prettified = check_signature_message(self.sign, message)
 
   if self.sign and prettified then
@@ -713,7 +713,7 @@ end
 ---Amend HEAD commit
 ---add files from index and also change message or HEAD commit
 ---@param message string
-function NuiGitStatus:commit_amend(message)
+function GitStatus:commit_amend(message)
   local prettified = check_signature_message(self.sign, message)
   if self.sign and prettified then
     self:write_index()
@@ -733,7 +733,7 @@ end
 ---@param init_str string
 ---@param include_changes boolean
 ---@param notify_empty boolean
-function NuiGitStatus:_set_input_popup_commit_title(init_str, include_changes, notify_empty)
+function GitStatus:_set_input_popup_commit_title(init_str, include_changes, notify_empty)
   local change, remove = 0, 0
   if include_changes then
     change, remove = self._tree:index_count()
@@ -757,7 +757,7 @@ end
 
 
 ---@return fun()
-function NuiGitStatus:commit_commit_handler()
+function GitStatus:commit_commit_handler()
   return function()
     self._commit_mode = CommitMode.COMMIT
 
@@ -770,7 +770,7 @@ end
 
 
 ---@return fun()
-function NuiGitStatus:commit_extend_handler()
+function GitStatus:commit_extend_handler()
   return function()
     self._commit_mode = CommitMode.EXTEND
 
@@ -786,7 +786,7 @@ end
 
 ---@param is_reword boolean reword only mode
 ---@return fun()
-function NuiGitStatus:commit_amend_handler(is_reword)
+function GitStatus:commit_amend_handler(is_reword)
   return function()
     self._commit_mode = is_reword and CommitMode.REWORD or CommitMode.AMEND
 
@@ -807,7 +807,7 @@ function NuiGitStatus:commit_amend_handler(is_reword)
 end
 
 
-function NuiGitStatus:amend_confirm_yes_handler()
+function GitStatus:amend_confirm_yes_handler()
   return function()
     if self._commit_mode == CommitMode.EXTEND then
       self:commit_extend()
@@ -826,7 +826,7 @@ end
 
 
 -- Setup keymap handlers
-function NuiGitStatus:setup_handlers()
+function GitStatus:setup_handlers()
   local map_options = { noremap = true, nowait = true }
   local tree = self._tree
 
@@ -1011,4 +1011,4 @@ function NuiGitStatus:setup_handlers()
 end
 
 
-return NuiGitStatus
+return GitStatus
