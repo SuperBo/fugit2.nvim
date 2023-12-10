@@ -993,7 +993,7 @@ function NuiGitStatus:setup_handlers()
   self.input_popup:map("n", "q", input_quit_fn, map_options)
   self.input_popup:map("n", "<esc>", input_quit_fn, map_options)
 
-  self.input_popup:map("n", "<cr>", function()
+  local input_enter_handler = function()
     local message = table.concat(
       vim.api.nvim_buf_get_lines(self.input_popup.bufnr, 0, -1, true),
       "\n"
@@ -1005,7 +1005,9 @@ function NuiGitStatus:setup_handlers()
     elseif self._commit_mode == CommitMode.AMEND then
       self:commit_amend(message)
     end
-  end, map_options)
+  end
+  self.input_popup:map("n", "<cr>", input_enter_handler, map_options)
+  self.input_popup:map("i", "<c-cr>", input_enter_handler, map_options)
 end
 
 

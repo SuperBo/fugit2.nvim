@@ -40,7 +40,6 @@ function M.new_fugit2_status_window(namespace, repo)
       modifiable = true,
       readonly = false,
       swapfile = false,
-
     },
   }
 
@@ -55,7 +54,7 @@ function M.new_fugit2_status_window(namespace, repo)
       text = {
         top = NuiText(" Create commit ", "Fugit2MessageHeading"),
         top_align = "left",
-        bottom = NuiText("[ctrl-c][esc][q]uit, [enter]", "FloatFooter"),
+        bottom = NuiText("[ctrl-c][esc][q]uit, [ctrl-enter][enter]", "FloatFooter"),
         bottom_align = "right",
       }
     },

@@ -4,6 +4,8 @@ local NuiTree = require "nui.tree"
 local NuiPopup = require "nui.popup"
 local Object = require "nui.object"
 
+local diff = require "fugit2.diff"
+
 
 ---@class Fugit2PatchView
 ---@field ns_id integer namespace id
@@ -44,6 +46,7 @@ function PatchView:init(ns_id, title)
     },
     win_options = {
       winhighlight = "Normal:Normal,FloatBorder:FloatBorder",
+      cursorline = true,
     },
   }
 
@@ -51,19 +54,27 @@ function PatchView:init(ns_id, title)
   self.tree = nil
   self.header = {}
 
-
   -- keymaps
-  self.popup:map("n", "]", self:next_hunk_handler(), { noremap = true, nowait = true })
-  self.popup:map("n", "[", self:prev_hunk_handler(), { noremap = true, nowait = true })
+  local opts = { noremap = true, nowait = true }
+  self.popup:map("n", "]", self:next_hunk_handler(), opts)
+  self.popup:map("n", "[", self:prev_hunk_handler(), opts)
+  local expand_collapse_handler = self:expand_collapse_handler()
+  self.popup:map("n", "<cr>", expand_collapse_handler, opts)
+  self.popup:map("n", "=", expand_collapse_handler, opts)
+  self.popup:map("n", "l", self:expand_handler(), opts)
+  self.popup:map("n", "H", self:collapse_all_handler(), opts)
+  self.popup:map("n", "L", self:expand_all_handler(), opts)
 end
 
 local function tree_prepare_node(node)
   local line = NuiLine()
-
-  -- line:append(string.rep("  ", node:get_depth() - 1))
+  local extmark
 
   if node:has_children() then
     -- line:append(node:is_expanded() and " " or " ")
+    if not node:is_expanded() then
+      extmark = "Visual"
+    end
   elseif node.text:sub(1, 1) == " " then
     if node.last_line then
       local whitespace = node.text:match("%s+")
@@ -80,7 +91,7 @@ local function tree_prepare_node(node)
     end
   end
 
-  line:append(node.text)
+  line:append(node.text, extmark)
 
   return line
 end
@@ -88,57 +99,30 @@ end
 ---Updates content with a given patch
 ---@param patch GitDiffPatchItem
 function PatchView:update(patch)
-  local nodes = {}
+  local patch_hunk = diff.parse_patch(tostring(patch.patch))
 
-  local header = {}
-  -- calculate hunk offsets
-  local offsets = {}
-  local start_idx = 5 -- first 4 lines are diff header
+  self.header = vim.tbl_map(function(line)
+    return NuiLine { NuiText(line) }
+  end, patch_hunk.header)
 
-  for i = 0,patch.num_hunks-1 do
-    offsets[i+1] = start_idx
-    local num_lines = patch.patch:hunk_num_lines(i)
-    start_idx = start_idx + num_lines + 1 -- 1 line for hunk signature
-  end
-  offsets[patch.num_hunks+1] = start_idx
+  local nodes = vim.tbl_map(function(hunk)
+    local children = vim.tbl_map(function(line)
+      return NuiTree.Node({
+        text = line.text,
+        c    = line.c,
+        id   = line.linenr
+      })
+    end, hunk.lines)
+    children[#children].last_line = true
 
-  local patch_lines = vim.split(tostring(patch.patch), "\n", { plain=true })
-
-  for i = 1,4 do
-    header[i] = NuiLine { NuiText(patch_lines[i]) }
-  end
-
-  for i = 1,#offsets-1 do
-    local start, stop = offsets[i], offsets[i+1]-1
-
-    local children = {}
-    for j = start+1,stop do
-      if j == stop then
-        table.insert(children, NuiTree.Node({
-          text = patch_lines[j],
-          id = j,
-          hunk_id = i,
-          last_line = true
-        }))
-      else
-        table.insert(children, NuiTree.Node({
-          text = patch_lines[j],
-          id = j,
-          hunk_id = i
-        }))
-      end
-    end
-
-    local hunk = NuiTree.Node({
-      text = patch_lines[start],
-      id = start,
-      hunk_id = i
+    local hunk_node = NuiTree.Node({
+      text = hunk.header,
+      id   = hunk.linenr
     }, children)
-    hunk:expand()
-    table.insert(nodes, hunk)
-  end
+    hunk_node:expand()
+    return hunk_node
+  end, patch_hunk.hunks)
 
-  self.header = header
   self.tree = NuiTree {
     ns_id = self.ns_id,
     bufnr = self.popup.bufnr,
@@ -173,20 +157,81 @@ function PatchView:unmount()
 end
 
 -- keys handlers
+
+---@return fun()
 function PatchView:next_hunk_handler()
   return function()
+    -- TODO
     local node = self.tree:get_node()
-    if node and node.hunk_id then
-      -- TODO
+  end
+end
+
+---@return fun()
+function PatchView:prev_hunk_handler()
+  return function()
+    -- TODO
+    local node = self.tree:get_node()
+  end
+end
+
+---@return fun()
+function PatchView:expand_handler()
+  return function()
+    local node = self.tree:get_node()
+    if node and node:has_children() and not node:is_expanded() then
+      node:expand()
+      self.tree:render()
+    else
+      vim.cmd("normal! l")
     end
   end
 end
 
-function PatchView:prev_hunk_handler()
+---@return fun()
+function PatchView:expand_collapse_handler()
   return function()
     local node = self.tree:get_node()
-    if node and node.hunk_id then
-      -- TODO
+    if node and not node:has_children() then
+      node = self.tree:get_node(node:get_parent_id() or 0)
+    end
+
+    if node then
+      if node:is_expanded() then
+        node:collapse()
+      else
+        node:expand()
+      end
+      self.tree:render()
+    end
+  end
+end
+
+---@return fun()
+function PatchView:collapse_all_handler()
+  return function()
+    local updated = false
+
+    for _, node in pairs(self.tree.nodes.by_id) do
+      updated = node:collapse() or updated
+    end
+
+    if updated then
+      self.tree:render()
+    end
+  end
+end
+
+---@return fun()
+function PatchView:expand_all_handler()
+  return function()
+    local updated = false
+
+    for _, node in pairs(self.tree.nodes.by_id) do
+      updated = node:expand() or updated
+    end
+
+    if updated then
+      self.tree:render()
     end
   end
 end
