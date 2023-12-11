@@ -7,9 +7,11 @@ local NuiTree = require "nui.tree"
 local NuiPopup = require "nui.popup"
 local NuiMenu = require "nui.menu"
 local Object = require "nui.object"
+local event = require "nui.utils.autocmd".event
 local WebDevIcons = require "nvim-web-devicons"
 
 local UI = require "fugit2.view.components.menus"
+local PatchView = require "fugit2.view.components.patch_view"
 local git2 = require "fugit2.git2"
 local utils = require "fugit2.utils"
 
@@ -191,6 +193,7 @@ function GitStatusTree:init(bufnr, namespace)
 end
 
 
+--TODO: remove after having diff
 ---@return integer files_change
 ---@return integer files_remove
 function GitStatusTree:index_count()
@@ -524,6 +527,10 @@ function GitStatus:init(ns_id, repo)
     ),
     NuiMenu.item(NuiLine { NuiText("g ", "Fugit2MenuKey"), NuiText("Graph") }, { id = "g" }),
   })
+  local amend_confirm = UI.Confirm(
+    self.ns_id,
+    NuiLine { NuiText("This commit has already been pushed to upstream, do you really want to modify it?") }
+  )
 
   -- setup others
 
@@ -567,19 +574,17 @@ function GitStatus:init(ns_id, repo)
     },
     self._boxes.main
   )
-  self._amend_confirm = UI.Confirm(
-    self.ns_id,
-    NuiLine { NuiText("This commit has already been pushed to upstream, do you really want to modify it?") }
-  )
+  self._menus = {
+    amend_confirm = amend_confirm,
+    commit = commit_menu
+  }
 
   -- setup menu
   self._commit_mode = CommitMode.COMMIT
-  ---@type table
+  ---@type {}
   self._git = {
-    head = nil, ahead = 0, behind = 0
-  }
-  self._menus = {
-    commit = commit_menu
+    head = nil, ahead = 0, behind = 0,
+    unstaged_diff = {}, staged_diff = {},
   }
 
   -- This commit has already been published to origin/dev, do you really want to modify it?
@@ -671,7 +676,7 @@ function GitStatus:update()
 
     local upstream_line = NuiLine { NuiText("Upstream ", "Fugit2Header") }
     if git_status.upstream then
-      self._amend_confirm:set_text(NuiLine {
+      self._menus.amend_confirm:set_text(NuiLine {
         NuiText("This commit has already been pushed to "),
         NuiText(git_status.upstream.name, "Fugit2SymbolicRef"),
         NuiText(", do you really want to modify it?")
@@ -893,7 +898,7 @@ function GitStatus:commit_extend_handler()
     self._commit_mode = CommitMode.EXTEND
 
     if self._git.ahead == 0 then
-      self._amend_confirm:show()
+      self._menus.amend_confirm:show()
       return
     end
 
@@ -909,7 +914,7 @@ function GitStatus:commit_amend_handler(is_reword)
     self._commit_mode = is_reword and CommitMode.REWORD or CommitMode.AMEND
 
     if self._git.ahead == 0 then
-      self._amend_confirm:show()
+      self._menus.amend_confirm:show()
       return
     end
 
@@ -942,15 +947,118 @@ function GitStatus:amend_confirm_yes_handler()
   end
 end
 
+function GitStatus:_init_diff_index_to_workdir()
+  if not self._diff_index_to_workdir then
+    self._diff_index_to_workdir = PatchView(" Workdir ")
+    self._boxes.diff_index_to_workdir = NuiLayout.Box({
+      NuiLayout.Box(self.info_popup, { size = 6 }),
+      NuiLayout.Box({
+        NuiLayout.Box(self.file_popup, { size = 30 }),
+        NuiLayout.Box(self._diff_index_to_workdir, { grow = 1 })
+      }, { dir = "row", grow = 1 })
+    }, { dir = "col" })
+  end
+end
 
--- Setup keymap handlers
+---Updates diff based on current node
+---@return GIT_ERROR
+function GitStatus:update_diff()
+  local node = self._tree.tree:get_node() -- get current node
+  -- depth first search to get first child
+  while node and node:has_children() do
+    local children = node:get_child_ids()
+    node = self._tree.tree:get_node(children[1])
+  end
+
+  if node and node.id then
+    local diff, patches, unstage_patch, staged_patch, err
+    local paths = { node.id, node.alt_path }
+
+    if node.wstatus ~= "-" and not self._git.unstaged_diff[node.id] then
+      diff, err = self.repo:diff_index_to_workdir(self.index, paths)
+      if not diff then
+        vim.notify("Failed to get unstaged diff " .. err, vim.logs.levels.ERROR)
+        return err
+      end
+      patches, err = diff:patches(false)
+      if err ~= 0 then
+        vim.notify("Failed to get unstage patch " .. err, vim.logs.levels.ERROR)
+        return err
+      end
+      self._git.unstaged_diff[node.id] = patches[1]
+    end
+
+    if node.istatus ~= "-" and not self._git.staged_diff[node.id] then
+      diff, err = self.repo:diff_head_to_index(self.index, paths)
+      if not diff then
+        vim.notify("Failed to get unstaged diff " .. err, vim.logs.levels.ERROR)
+        return err
+      end
+      patches, err = diff:patches(false)
+      if err ~= 0 then
+        vim.notify("Failed to get unstage patch " .. err, vim.logs.levels.ERROR)
+        return err
+      end
+      self._git.staged_diff[node.id] = patches[1]
+    end
+
+    print(node.id)
+    self._diff_unstaged:update(self._git.unstaged_diff[node.id])
+    --TODO same thing for diff_staged
+  end
+
+  return 0
+end
+
+function GitStatus:show_diff()
+  local box = self._boxes.diff_unstaged
+  if not box then
+    self._diff_unstaged = PatchView(" Unstaged ")
+    box = NuiLayout.Box({
+      NuiLayout.Box(self.info_popup, { size = 6 }),
+      NuiLayout.Box({
+        NuiLayout.Box(self.file_popup, { size = 60 }),
+        NuiLayout.Box(self._diff_unstaged.popup, { grow = 1 })
+      }, { dir = "row", grow = 1 })
+    }, { dir = "col" })
+    self._boxes.diff_unstaged = box
+  end
+  self._layout:update({
+    position = "50%",
+    size = { width = "80%", height = "60%" }
+  }, box)
+end
+
+function GitStatus:hide_diff()
+  self._layout:update({
+    position = "50%",
+    size = { width = "60%", height = "60%" }
+  }, self._boxes.main)
+end
+
+---@return fun()
+function GitStatus:diff_toggle_handler()
+  return function()
+    if self._diff_showned then
+      self:hide_diff()
+      self._diff_showned = false
+    else
+      self:show_diff()
+      self._diff_showned = true
+      self:update_diff()
+    end
+  end
+end
+
+
+-- Setup keymap and event handlers
 function GitStatus:setup_handlers()
   local map_options = { noremap = true, nowait = true }
   local tree = self._tree
 
   local exit_fn = function()
     self:write_index()
-    self._amend_confirm:unmount()
+    self._menus.amend_confirm:unmount()
     self._menus.commit:unmount()
     self._layout:unmount()
   end
@@ -1069,6 +1177,22 @@ function GitStatus:setup_handlers()
     map_options
   )
 
+  -- diff view
+  self.file_popup:map("n", "=", self:diff_toggle_handler(), map_options)
+
+  -- move cursor
+  local last_line = 1
+  self.file_popup:on(event.CursorMoved, function()
+    if self._diff_showned then
+      local cursor = vim.api.nvim_win_get_cursor(self.file_popup.winid)
+      if cursor[1] ~= last_line then
+        if self:update_diff() == 0 then
+          last_line = cursor[1]
+        end
+      end
+    end
+  end)
+
   -- Commit menu
   local commit_commit_fn = self:commit_commit_handler()
   local commit_extend_fn = self:commit_extend_handler()
@@ -1100,7 +1224,7 @@ function GitStatus:setup_handlers()
   end, map_options)
 
   -- Amend confirm
-  self._amend_confirm:on_yes(self:amend_confirm_yes_handler())
+  self._menus.amend_confirm:on_yes(self:amend_confirm_yes_handler())
 
   -- Message input
   local input_quit_fn = function()

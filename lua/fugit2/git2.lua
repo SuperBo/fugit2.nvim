@@ -396,7 +396,7 @@ end
 
 -- Recursively peel reference until commit object is found.
 ---@return GitCommit?
----@return integer Git Error code
+---@return GIT_ERROR err Error code
 function Reference:peel_commit()
   local c_object = libgit2.git_object_double_pointer()
 
@@ -768,7 +768,7 @@ function Diff:patches(sort_case_sensitive)
     table.insert(patches, patch_item)
   end
 
-  if sort_case_sensitive then
+  if #patches > 0 and sort_case_sensitive then
     -- sort patches by name
     table.sort(patches, function (a, b)
       return a.path < b.path
@@ -928,6 +928,13 @@ end
 ---@field num_hunks integer
 ---@field patch GitPatch
 
+local DEFAULT_STATUS_FLAGS = bit.bor(
+  libgit2.GIT_STATUS_OPT.INCLUDE_UNTRACKED,
+  libgit2.GIT_STATUS_OPT.RENAMES_HEAD_TO_INDEX,
+  libgit2.GIT_STATUS_OPT.RENAMES_INDEX_TO_WORKDIR,
+  libgit2.GIT_STATUS_OPT.RECURSE_UNTRACKED_DIRS,
+  libgit2.GIT_STATUS_OPT.SORT_CASE_SENSITIVELY
+)
 
 function Repository:__tostring()
   return string.format("Git Repository: %s", self.path)
@@ -997,9 +1004,7 @@ function Repository:head()
   local c_ref = libgit2.git_reference_double_pointer()
 
   local err = libgit2.C.git_repository_head(c_ref, self.repo[0])
-  if err == libgit2.GIT_ERROR.GIT_EUNBORNBRANCH or err == libgit2.GIT_ERROR.GIT_ENOTFOUND then
-    return nil, err
-  elseif err ~= 0 then
+  if err ~= 0 then
     return nil, err
   end
 
@@ -1117,12 +1122,12 @@ function Repository:reset_default(paths)
     if commit == nil then
       return err
     elseif #paths > 0 then
-      local c_paths = libgit2.const_char_pointer_array(#paths)
+      local c_paths = libgit2.const_char_pointer_array(#paths, paths)
       local strarray = libgit2.git_strarray_readonly()
 
-      for i, p in ipairs(paths) do
-        c_paths[i-1] = p
-      end
+      -- for i, p in ipairs(paths) do
+      --   c_paths[i-1] = p
+      -- end
 
       strarray[0].strings = c_paths
       strarray[0].count = #paths
@@ -1250,13 +1255,7 @@ function Repository:status()
   local opts = libgit2.git_status_options(libgit2.GIT_STATUS_OPTIONS_INIT)
   -- libgit2.C.git_status_options_init(opts, libgit2.GIT_STATUS_OPTIONS_VERSION)
   opts[0].show = libgit2.GIT_STATUS_SHOW.INDEX_AND_WORKDIR
-  opts[0].flags = bit.bor(
-    libgit2.GIT_STATUS_OPT.INCLUDE_UNTRACKED,
-    libgit2.GIT_STATUS_OPT.RENAMES_HEAD_TO_INDEX,
-    libgit2.GIT_STATUS_OPT.RENAMES_INDEX_TO_WORKDIR,
-    libgit2.GIT_STATUS_OPT.RECURSE_UNTRACKED_DIRS,
-    libgit2.GIT_STATUS_OPT.SORT_CASE_SENSITIVELY
-  )
+  opts[0].flags = DEFAULT_STATUS_FLAGS
 
   local status = libgit2.git_status_list_double_pointer()
   err = libgit2.C.git_status_list_new(status, self.repo[0], opts)
@@ -1611,43 +1610,83 @@ local function git_status_flags_to_diff_flags(status_flag)
 end
 
 
----@param index GitIndex?
----@param path string?
+---@param index GitIndex? Repository index, can be null
+---@param paths string[]? Git paths, can be null
 ---@return GitDiff?
 ---@return GIT_ERROR
-function Repository:diff_index_to_workdir(index, path)
+function Repository:diff_index_to_workdir(index, paths)
+  return self:diff_index(true, index, paths)
+end
+
+---@param index GitIndex? Repository index, can be null
+---@param paths string[]? Git paths, can be null
+---@return GitDiff?
+---@return GIT_ERROR
+function Repository:diff_head_to_index(index, paths)
+  return self:diff_index(false, index, paths)
+end
+
+---@param workdir_diff boolean Whether to do index_to_workdir or head_to_index diff
+---@param index GitIndex? Repository index, can be null
+---@param paths string[]? Git paths, can be null
+---@return GitDiff?
+---@return GIT_ERROR
+function Repository:diff_index(workdir_diff, index, paths)
+  local c_paths, err
   local opts = libgit2.git_diff_options(libgit2.GIT_DIFF_OPTIONS_INIT)
   local find_opts = libgit2.git_diff_find_options(libgit2.GIT_DIFF_FIND_OPTIONS_INIT)
   local diff = libgit2.git_diff_double_pointer()
 
-  local status_flags = bit.bor(
-    libgit2.GIT_STATUS_OPT.INCLUDE_UNTRACKED,
-    libgit2.GIT_STATUS_OPT.RENAMES_HEAD_TO_INDEX,
-    libgit2.GIT_STATUS_OPT.RENAMES_INDEX_TO_WORKDIR,
-    libgit2.GIT_STATUS_OPT.RECURSE_UNTRACKED_DIRS,
-    libgit2.GIT_STATUS_OPT.SORT_CASE_SENSITIVELY
-  )
-  opts[0].flags, find_opts[0].flags = git_status_flags_to_diff_flags(status_flags)
+  opts[0].id_abbrev = 8
+  opts[0].flags, find_opts[0].flags = git_status_flags_to_diff_flags(DEFAULT_STATUS_FLAGS)
 
-  local err = libgit2.C.git_diff_index_to_workdir(
-    diff, self.repo[0], index and index.index[0] or nil, opts
-  )
+  if paths and #paths > 0 then
+    c_paths = libgit2.const_char_pointer_array(#paths, paths)
+    opts[0].pathspec.strings = c_paths
+    opts[0].pathspec.count = #paths
+  end
+
+  if workdir_diff then
+    err = libgit2.C.git_diff_index_to_workdir(
+      diff, self.repo[0], index and index.index[0] or nil, opts
+    )
+  else
+    local head, head_tree
+    head, err = self:head()
+    -- if there is no HEAD, that's okay - we'll make an empty iterator
+    if err ~= 0 and err ~= libgit2.GIT_ERROR.GIT_ENOTFOUND and err ~= libgit2.GIT_ERROR.GIT_EUNBORNBRANCH then
+      return nil, err
+    end
+    if head then
+      head_tree, err = head:peel(libgit2.GIT_OBJECT.TREE)
+      if err ~= 0 then
+        return nil, err
+      end
+    end
+
+    err = libgit2.C.git_diff_tree_to_index(
+      diff, self.repo[0],
+      head_tree and ffi.cast(libgit2.git_tree_pointer, head_tree.obj[0]) or nil,
+      index and index.index[0] or nil, opts
+    )
+  end
+
   if err ~= 0 then
     return nil, err
   end
 
   -- call this to detect rename
-  err = libgit2.C.git_diff_find_similar(diff[0], find_opts)
-  if err ~= 0 then
-    libgit2.C.git_diff_free(diff[0])
-    return nil, err
+  if workdir_diff and bit.band(DEFAULT_STATUS_FLAGS, libgit2.GIT_STATUS.WT_RENAMED) ~= 0
+    or bit.band(DEFAULT_STATUS_FLAGS, libgit2.GIT_STATUS.INDEX_RENAMED) ~= 0
+  then
+    err = libgit2.C.git_diff_find_similar(diff[0], find_opts)
+    if err ~= 0 then
+      libgit2.C.git_diff_free(diff[0])
+      return nil, err
+    end
   end
 
   return Diff.new(diff), 0
-end
-
-
-function Repository:diff_head_to_index()
 end
 
 -- ===================

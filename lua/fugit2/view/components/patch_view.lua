@@ -66,6 +66,8 @@ function PatchView:init(ns_id, title)
   self.popup:map("n", "L", self:expand_all_handler(), opts)
 end
 
+---@param node NuiTree.Node
+---@return NuiLine
 local function tree_prepare_node(node)
   local line = NuiLine()
   local extmark
@@ -75,7 +77,7 @@ local function tree_prepare_node(node)
     if not node:is_expanded() then
       extmark = "Visual"
     end
-  elseif node.text:sub(1, 1) == " " then
+  elseif node.c == " " or node.c == "" then
     if node.last_line then
       local whitespace = node.text:match("%s+")
       local whitespace_len = whitespace and whitespace:len() - 1 or 0
@@ -92,7 +94,6 @@ local function tree_prepare_node(node)
   end
 
   line:append(node.text, extmark)
-
   return line
 end
 
@@ -119,7 +120,7 @@ function PatchView:update(patch)
       text = hunk.header,
       id   = hunk.linenr
     }, children)
-    hunk_node:expand()
+    -- hunk_node:expand()
     return hunk_node
   end, patch_hunk.hunks)
 

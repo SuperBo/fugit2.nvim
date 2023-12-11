@@ -110,20 +110,20 @@ ffi.cdef[[
   );
 
   typedef struct git_diff_options {
-    unsigned int         version;
-    uint32_t             flags;
-    unsigned int         ignore_submodules;
-    git_strarray         pathspec;
-    git_diff_notify_cb   notify_cb;
-    git_diff_progress_cb progress_cb;
-    void *               payload;
-    uint32_t             context_lines;
-    uint32_t             interhunk_lines;
-    unsigned int         oid_type;
-    uint16_t             id_abbrev;
-    int64_t              max_size;
-    const char *         old_prefix;
-    const char *         new_prefix;
+    unsigned int          version;
+    uint32_t              flags;
+    unsigned int          ignore_submodules;
+    git_strarray_readonly pathspec;
+    git_diff_notify_cb    notify_cb;
+    git_diff_progress_cb  progress_cb;
+    void *                payload;
+    uint32_t              context_lines;
+    uint32_t              interhunk_lines;
+    unsigned int          oid_type;
+    uint16_t              id_abbrev;
+    int64_t               max_size;
+    const char *          old_prefix;
+    const char *          new_prefix;
   } git_diff_options ;
 
   typedef struct git_diff_similarity_metric {
@@ -392,6 +392,7 @@ M.git_strarray_readonly = ffi.typeof("git_strarray_readonly[1]")
 
 ---@type ffi.ctype* struct git_tree * [1]
 M.git_tree_double_pointer = ffi.typeof("git_tree*[1]")
+M.git_tree_pointer = ffi.typeof("git_tree*")
 
 
 -- ==========================
