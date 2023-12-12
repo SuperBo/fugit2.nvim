@@ -563,6 +563,16 @@ function GitStatus:init(ns_id, repo)
       }, { dir = "col" }
     ),
   }
+  self._layout_opts = {
+    main = {
+      position = "50%",
+      size = { width = "60%", height = "60%" }
+    },
+    diff = {
+      position = "50%",
+      size = { width = "80%", height = "60%" }
+    }
+  }
   self._layout = NuiLayout(
     {
       relative = "editor",
@@ -947,18 +957,6 @@ function GitStatus:amend_confirm_yes_handler()
   end
 end
 
-function GitStatus:_init_diff_index_to_workdir()
-  if not self._diff_index_to_workdir then
-    self._diff_index_to_workdir = PatchView(" Workdir ")
-    self._boxes.diff_index_to_workdir = NuiLayout.Box({
-      NuiLayout.Box(self.info_popup, { size = 6 }),
-      NuiLayout.Box({
-        NuiLayout.Box(self.file_popup, { size = 30 }),
-        NuiLayout.Box(self._diff_index_to_workdir, { grow = 1 })
-      }, { dir = "row", grow = 1 })
-    }, { dir = "col" })
-  end
-end
 
 ---Updates diff based on current node
 ---@return GIT_ERROR
@@ -981,11 +979,12 @@ function GitStatus:update_diff()
         return err
       end
       patches, err = diff:patches(false)
-      if err ~= 0 then
+      if #patches == 0 then
         vim.notify("Failed to get unstage patch " .. err, vim.logs.levels.ERROR)
         return err
+      else
+        self._git.unstaged_diff[node.id] = patches[1]
       end
-      self._git.unstaged_diff[node.id] = patches[1]
     end
 
     if node.istatus ~= "-" and not self._git.staged_diff[node.id] then
@@ -1002,7 +1001,6 @@ function GitStatus:update_diff()
       self._git.staged_diff[node.id] = patches[1]
     end
 
-    print(node.id)
     self._diff_unstaged:update(self._git.unstaged_diff[node.id])
     --TODO same thing for diff_staged
   end
@@ -1010,30 +1008,37 @@ function GitStatus:update_diff()
   return 0
 end
 
+function GitStatus:_init_diff_unstaged()
+  self._diff_unstaged = PatchView(" Unstaged ")
+  local box = NuiLayout.Box({
+    NuiLayout.Box(self.info_popup, { size = 6 }),
+    NuiLayout.Box({
+      NuiLayout.Box(self.file_popup, { size = 60 }),
+      NuiLayout.Box(self._diff_unstaged.popup, { grow = 1 })
+    }, { dir = "row", grow = 1 })
+  }, { dir = "col" })
+  self._boxes.diff_unstaged = box
+
+
+  local exit_fn = function()
+    self._layout:update(self._layout_opts.main, self._boxes.main)
+  end
+  self._diff_unstaged.popup:map("n", "q", exit_fn, { noremap = true, nowait = true })
+  self._diff_unstaged.popup:map("n", "<esc>", exit_fn, { noremap = true, nowait = true })
+
+  return box
+end
+
 function GitStatus:show_diff()
   local box = self._boxes.diff_unstaged
   if not box then
-    self._diff_unstaged = PatchView(" Unstaged ")
-    box = NuiLayout.Box({
-      NuiLayout.Box(self.info_popup, { size = 6 }),
-      NuiLayout.Box({
-        NuiLayout.Box(self.file_popup, { size = 60 }),
-        NuiLayout.Box(self._diff_unstaged.popup, { grow = 1 })
-      }, { dir = "row", grow = 1 })
-    }, { dir = "col" })
-    self._boxes.diff_unstaged = box
+    box = self:_init_diff_unstaged()
   end
-  self._layout:update({
-    position = "50%",
-    size = { width = "80%", height = "60%" }
-  }, box)
+  self._layout:update(self._layout_opts.diff, box)
 end
 
 function GitStatus:hide_diff()
-  self._layout:update({
-    position = "50%",
-    size = { width = "60%", height = "60%" }
-  }, self._boxes.main)
+  self._layout:update(self._layout_opts.main, self._boxes.main)
 end
 
 ---@return fun()
@@ -1058,6 +1063,9 @@ function GitStatus:setup_handlers()
 
   local exit_fn = function()
     self:write_index()
+    if self._diff_showned then
+      self._diff_unstaged:unmount()
+    end
     self._menus.amend_confirm:unmount()
     self._menus.commit:unmount()
     self._layout:unmount()

@@ -220,6 +220,7 @@ ffi.cdef[[
   int git_diff_find_similar(git_diff *diff, const git_diff_find_options *options);
   int git_diff_index_to_workdir(git_diff **diff, git_repository *repo, git_index *index, const git_diff_options *opts);
   int git_diff_tree_to_index(git_diff **diff, git_repository *repo, git_tree *old_tree, git_index *index, const git_diff_options *opts);
+  int git_diff_tree_to_workdir(git_diff **diff, git_repository *repo, git_tree *old_tree, const git_diff_options *opts);
   int git_diff_to_buf(git_buf *out, git_diff *diff, unsigned int format);
   int git_diff_from_buffer(git_diff **out, const char *content, size_t content_len);
   int git_diff_get_stats(git_diff_stats **out, git_diff *diff);
@@ -567,6 +568,16 @@ M.GIT_REPOSITORY_OPEN = {
 
   NO_DOTGIT = 8,
   FROM_ENV  = 16,
+}
+
+---@enum GIT_DIFF_FORMAT
+M.GIT_DIFF_FORMAT = {
+  PATCH        = 1, -- full git diff
+  PATCH_HEADER = 2, -- just the file headers of patch
+  RAW          = 3, -- like git diff --raw
+  NAME_ONLY    = 4, -- like git diff --name-only
+  NAME_STATUS  = 5, -- like git diff --name-status
+  PATCH_ID     = 6, -- git diff as used by git patch-id
 }
 
 ---@enum GIT_DIFF

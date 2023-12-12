@@ -716,6 +716,25 @@ function Diff.from_buffer(diff_str)
   return Diff.new(diff), 0
 end
 
+---@param format GIT_DIFF_FORMAT
+---@return string
+function Diff:tostring(format)
+  local buf = libgit2.git_buf()
+  local err = libgit2.C.git_diff_to_buf(buf, self.diff[0], format)
+  if err ~= 0 then
+    libgit2.C.git_buf_dispose(buf)
+    return ""
+  end
+
+  local diff = ffi.string(buf[0].ptr, buf[0].size)
+  libgit2.C.git_buf_dispose(buf)
+  return diff
+end
+
+function Diff:__tostring()
+  return self:tostring(libgit2.GIT_DIFF_FORMAT.PATCH)
+end
+
 ---Gets accumulate diff statistics for all patches.
 ---@return GitDiffStats?
 ---@return GIT_ERROR
@@ -869,6 +888,7 @@ function Patch:hunk_line(hunk_idx, line_idx)
 end
 
 ---Gets the number of lines in a hunk.
+---@param i integer
 ---@return integer
 function Patch:hunk_num_lines(i)
   return libgit2.C.git_patch_num_lines_in_hunk(self.patch[0], i)
@@ -1576,7 +1596,10 @@ local function git_status_flags_to_diff_flags(status_flag)
 		diff_flag = bit.bor(diff_flag, libgit2.GIT_DIFF.INCLUDE_UNMODIFIED)
   end
 	if bit.band(status_flag, libgit2.GIT_STATUS_OPT.RECURSE_UNTRACKED_DIRS) ~= 0 then
-		diff_flag = bit.bor(diff_flag, libgit2.GIT_DIFF.RECURSE_UNTRACKED_DIRS)
+		diff_flag = bit.bor(diff_flag,
+      libgit2.GIT_DIFF.RECURSE_UNTRACKED_DIRS,
+      libgit2.GIT_DIFF.SHOW_UNTRACKED_CONTENT
+    )
   end
 	if bit.band(status_flag, libgit2.GIT_STATUS_OPT.DISABLE_PATHSPEC_MATCH) ~= 0 then
 		diff_flag = bit.bor(diff_flag, libgit2.GIT_DIFF.DISABLE_PATHSPEC_MATCH)
@@ -1587,7 +1610,7 @@ local function git_status_flags_to_diff_flags(status_flag)
 	if bit.band(status_flag, libgit2.GIT_STATUS_OPT.EXCLUDE_SUBMODULES) ~= 0 then
 		diff_flag = bit.bor(diff_flag, libgit2.GIT_DIFF.IGNORE_SUBMODULES)
   end
-	if bit.band(status_flag, libgit2.GIT_STATUS_OPT.UPDATE_INDEX)~= 0 then
+	if bit.band(status_flag, libgit2.GIT_STATUS_OPT.UPDATE_INDEX) ~= 0 then
 		diff_flag = bit.bor(diff_flag, libgit2.GIT_DIFF.UPDATE_INDEX)
   end
 	if bit.band(status_flag, libgit2.GIT_STATUS_OPT.INCLUDE_UNREADABLE) ~= 0 then
@@ -1612,26 +1635,40 @@ end
 
 ---@param index GitIndex? Repository index, can be null
 ---@param paths string[]? Git paths, can be null
+---@param reverse? boolean whether to reverse the diff
 ---@return GitDiff?
 ---@return GIT_ERROR
-function Repository:diff_index_to_workdir(index, paths)
-  return self:diff_index(true, index, paths)
+function Repository:diff_index_to_workdir(index, paths, reverse)
+  return self:diff_helper(true, true, index, paths, reverse)
 end
 
 ---@param index GitIndex? Repository index, can be null
 ---@param paths string[]? Git paths, can be null
+---@param reverse? boolean whether to reverse the diff
 ---@return GitDiff?
 ---@return GIT_ERROR
-function Repository:diff_head_to_index(index, paths)
-  return self:diff_index(false, index, paths)
+function Repository:diff_head_to_index(index, paths, reverse)
+  return self:diff_helper(false, true, index, paths, reverse)
 end
 
----@param workdir_diff boolean Whether to do index_to_workdir or head_to_index diff
+
 ---@param index GitIndex? Repository index, can be null
 ---@param paths string[]? Git paths, can be null
+---@param reverse? boolean whether to reverse the diff
 ---@return GitDiff?
 ---@return GIT_ERROR
-function Repository:diff_index(workdir_diff, index, paths)
+function Repository:diff_head_to_workdir(index, paths, reverse)
+  return self:diff_helper(true, false, index, paths, reverse)
+end
+
+---@param include_workdir boolean Whether to do include workd_dir in diff target
+---@param include_index boolean Wheter to include index in diff target
+---@param index GitIndex? Repository index, can be null
+---@param paths string[]? Git paths, can be null
+---@param reverse boolean? Reverse diff
+---@return GitDiff?
+---@return GIT_ERROR
+function Repository:diff_helper(include_workdir, include_index, index, paths, reverse)
   local c_paths, err
   local opts = libgit2.git_diff_options(libgit2.GIT_DIFF_OPTIONS_INIT)
   local find_opts = libgit2.git_diff_find_options(libgit2.GIT_DIFF_FIND_OPTIONS_INIT)
@@ -1640,17 +1677,24 @@ function Repository:diff_index(workdir_diff, index, paths)
   opts[0].id_abbrev = 8
   opts[0].flags, find_opts[0].flags = git_status_flags_to_diff_flags(DEFAULT_STATUS_FLAGS)
 
+  if reverse then
+    opts[0].flags = bit.bor(opts[0].flags, libgit2.GIT_DIFF.REVERSE)
+  end
+
   if paths and #paths > 0 then
     c_paths = libgit2.const_char_pointer_array(#paths, paths)
     opts[0].pathspec.strings = c_paths
     opts[0].pathspec.count = #paths
   end
 
-  if workdir_diff then
+  if include_workdir and include_index then
+    -- diff workdir to index
     err = libgit2.C.git_diff_index_to_workdir(
       diff, self.repo[0], index and index.index[0] or nil, opts
     )
-  else
+  elseif include_workdir or include_index then
+    -- diff workd_dir to head or index to head
+
     local head, head_tree
     head, err = self:head()
     -- if there is no HEAD, that's okay - we'll make an empty iterator
@@ -1664,11 +1708,23 @@ function Repository:diff_index(workdir_diff, index, paths)
       end
     end
 
-    err = libgit2.C.git_diff_tree_to_index(
-      diff, self.repo[0],
-      head_tree and ffi.cast(libgit2.git_tree_pointer, head_tree.obj[0]) or nil,
-      index and index.index[0] or nil, opts
-    )
+    if include_index then
+      -- diff index to head
+      err = libgit2.C.git_diff_tree_to_index(
+        diff, self.repo[0],
+        head_tree and ffi.cast(libgit2.git_tree_pointer, head_tree.obj[0]) or nil,
+        index and index.index[0] or nil, opts
+      )
+    else
+      -- diff workd_dir to head
+      err = libgit2.C.git_diff_tree_to_workdir(
+        diff, self.repo[0],
+        head_tree and ffi.cast(libgit2.git_tree_pointer, head_tree.obj[0]) or nil,
+        opts
+      )
+    end
+  else
+    return nil, 0
   end
 
   if err ~= 0 then
@@ -1676,8 +1732,8 @@ function Repository:diff_index(workdir_diff, index, paths)
   end
 
   -- call this to detect rename
-  if workdir_diff and bit.band(DEFAULT_STATUS_FLAGS, libgit2.GIT_STATUS.WT_RENAMED) ~= 0
-    or bit.band(DEFAULT_STATUS_FLAGS, libgit2.GIT_STATUS.INDEX_RENAMED) ~= 0
+  if include_workdir and bit.band(DEFAULT_STATUS_FLAGS, libgit2.GIT_STATUS.WT_RENAMED) ~= 0
+    or (include_index and bit.band(DEFAULT_STATUS_FLAGS, libgit2.GIT_STATUS.INDEX_RENAMED) ~= 0)
   then
     err = libgit2.C.git_diff_find_similar(diff[0], find_opts)
     if err ~= 0 then
