@@ -73,37 +73,6 @@ function PatchView:init(ns_id, title)
   -- self.popup:map("n", "L", self:expand_all_handler(), opts)
 end
 
----@param node NuiTree.Node
----@return NuiLine
-local function tree_prepare_node(node)
-  local line = NuiLine()
-  local extmark
-
-  if node:has_children() then
-    -- line:append(node:is_expanded() and " " or " ")
-    if not node:is_expanded() then
-      extmark = "Visual"
-    end
-  elseif node.c == " " or node.c == "" then
-    if node.last_line then
-      local whitespace = node.text:match("%s+")
-      local whitespace_len = whitespace and whitespace:len() - 1 or 0
-      line:append("", {
-        virt_text = {{"└" .. string.rep("─", whitespace_len), "Whitespace"}},
-        virt_text_pos = "overlay",
-      })
-    else
-      line:append("", {
-        virt_text = {{"│", "LineNr"}},
-        virt_text_pos = "overlay",
-      })
-    end
-  end
-
-  line:append(node.text, extmark)
-  return line
-end
-
 ---Updates content with a given patch
 ---@param patch_item GitDiffPatchItem
 function PatchView:update(patch_item)
@@ -163,96 +132,76 @@ function PatchView:unmount()
   return self.popup:unmount()
 end
 
--- keys handlers
+---Gets current hunk based current cursor position
+---@return integer hunk_index
+---@return integer hunk_offset
+---@return integer cursor_row
+---@return integer cursor_col
+function PatchView:get_current_hunk()
+  local cursor = vim.api.nvim_win_get_cursor(self.popup.winid)
+
+  if cursor[1] < self._hunks[1] then
+    return 0, 1, cursor[1], cursor[2]
+  end
+
+  if #self._hunks > 8 then
+    -- do binary search
+    local start, stop  = 1, #self._hunks
+    local mid, hunk_offset
+
+    while start < stop-1 do
+      mid = math.floor((start + stop) / 2)
+      hunk_offset = self._hunks[mid]
+      if cursor[1] == hunk_offset then
+        return mid, hunk_offset, cursor[1], cursor[2]
+      elseif cursor[1] < hunk_offset then
+        stop = mid
+      else
+        start = mid
+      end
+    end
+    return start, self._hunks[start], cursor[1], cursor[2]
+  else
+    -- do linear search
+    for i, hunk_offset in ipairs(self._hunks) do
+      if cursor[1] < hunk_offset then
+        return i-1, self._hunks[i-1] or 1, cursor[1], cursor[2]
+      elseif cursor[1] == hunk_offset then
+        return i, hunk_offset, cursor[1], cursor[2]
+      end
+    end
+  end
+
+  return 0, 1, cursor[1], cursor[2]
+end
 
 ---@return fun()
 function PatchView:next_hunk_handler()
   return function()
-    local cursor = vim.api.nvim_win_get_cursor(self.popup.winid)
-    for i, hunk_start in ipairs(self._hunks) do
-      if cursor[1] < hunk_start then
-        local new_row = i < #self._hunks and hunk_start or hunk_start - 1
-        vim.api.nvim_win_set_cursor(self.popup.winid, { new_row, cursor[2] })
-        break
-      end
+    local hunk_idx, _, _, col = self:get_current_hunk()
+    local new_row = self._hunks[hunk_idx+1]
+    if hunk_idx + 1 == #self._hunks then
+      new_row = new_row - 1
     end
+    vim.api.nvim_win_set_cursor(self.popup.winid, { new_row, col })
   end
 end
 
 ---@return fun()
 function PatchView:prev_hunk_handler()
   return function()
-    local cursor = vim.api.nvim_win_get_cursor(self.popup.winid)
-    for i, hunk_start in ipairs(self._hunks) do
-      if cursor[1] <= hunk_start then
-        local new_row = i > 1 and self._hunks[i-1] or 1
-        vim.api.nvim_win_set_cursor(self.popup.winid, { new_row, cursor[2] })
-        break
-      end
-    end
-  end
-end
-
----@return fun()
-function PatchView:expand_handler()
-  return function()
-    local node = self.tree:get_node()
-    if node and node:has_children() and not node:is_expanded() then
-      node:expand()
-      self.tree:render()
-    else
-      vim.cmd("normal! l")
-    end
-  end
-end
-
----@return fun()
-function PatchView:expand_collapse_handler()
-  return function()
-    local node = self.tree:get_node()
-    if node and not node:has_children() then
-      node = self.tree:get_node(node:get_parent_id() or 0)
-    end
-
-    if node then
-      if node:is_expanded() then
-        node:collapse()
+    local hunk_idx, hunk_offset, row, col = self:get_current_hunk()
+    local new_row = hunk_offset
+    if hunk_offset == row then
+      if hunk_idx <= 1 then
+        new_row = 1
       else
-        node:expand()
+        new_row = self._hunks[hunk_idx-1]
       end
-      self.tree:render()
     end
+    vim.api.nvim_win_set_cursor(self.popup.winid, { new_row, col })
   end
 end
 
----@return fun()
-function PatchView:collapse_all_handler()
-  return function()
-    local updated = false
-
-    for _, node in pairs(self.tree.nodes.by_id) do
-      updated = node:collapse() or updated
-    end
-
-    if updated then
-      self.tree:render()
-    end
-  end
-end
-
----@return fun()
-function PatchView:expand_all_handler()
-  return function()
-    local updated = false
-
-    for _, node in pairs(self.tree.nodes.by_id) do
-      updated = node:expand() or updated
-    end
-
-    if updated then
-      self.tree:render()
-    end
-  end
-end
 
 return PatchView

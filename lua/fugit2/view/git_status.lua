@@ -939,7 +939,6 @@ function GitStatus:commit_amend_handler(is_reword)
   end
 end
 
-
 function GitStatus:amend_confirm_yes_handler()
   return function()
     if self._commit_mode == CommitMode.EXTEND then
@@ -958,101 +957,162 @@ function GitStatus:amend_confirm_yes_handler()
 end
 
 
----Updates diff based on current node
----@return GIT_ERROR
-function GitStatus:update_diff()
-  local node = self._tree.tree:get_node() -- get current node
+---@return NuiTree.Node?
+---@return integer? linenr
+function GitStatus:get_child_node_linenr()
+  local node, linenr, _ = self._tree.tree:get_node() -- get current node
+
   -- depth first search to get first child
   while node and node:has_children() do
     local children = node:get_child_ids()
-    node = self._tree.tree:get_node(children[1])
+    node, linenr, _ = self._tree.tree:get_node(children[1])
   end
 
-  if node and node.id then
-    local diff, patches, unstage_patch, staged_patch, err
+  return node, linenr
+end
+
+
+---Updates diff based on current node
+---@param node NuiTree.Node
+---@return boolean unstaged_updated
+---@return boolean staged_udpated
+function GitStatus:update_diff(node)
+  local unstaged_updated, staged_updated = false, false
+
+  -- init in the first update
+  if not self._diff_staged or not self._diff_unstaged then
+    self:_init_diff_popups()
+  end
+
+  if node.id then
+    local diff, patches, err, found
     local paths = { node.id, node.alt_path }
 
-    if node.wstatus ~= "-" and not self._git.unstaged_diff[node.id] then
+    found = self._git.unstaged_diff[node.id]
+    if node.wstatus ~= "-" and not found then
       diff, err = self.repo:diff_index_to_workdir(self.index, paths)
       if not diff then
         vim.notify("Failed to get unstaged diff " .. err, vim.logs.levels.ERROR)
-        return err
+        goto git_status_update_diff_index
       end
       patches, err = diff:patches(false)
       if #patches == 0 then
         vim.notify("Failed to get unstage patch " .. err, vim.logs.levels.ERROR)
-        return err
-      else
-        self._git.unstaged_diff[node.id] = patches[1]
+        goto git_status_update_diff_index
       end
+      self._git.unstaged_diff[node.id] = patches[1]
+      found = patches[1]
     end
 
-    if node.istatus ~= "-" and not self._git.staged_diff[node.id] then
+    if found then
+      self._diff_unstaged:update(found)
+      unstaged_updated = true
+    end
+
+    ::git_status_update_diff_index::
+    found = self._git.staged_diff[node.id]
+    if node.istatus ~= "-" and node.istatus ~= "?" and not found then
       diff, err = self.repo:diff_head_to_index(self.index, paths)
       if not diff then
         vim.notify("Failed to get unstaged diff " .. err, vim.logs.levels.ERROR)
-        return err
+        goto git_status_update_diff_end
       end
       patches, err = diff:patches(false)
-      if err ~= 0 then
+      if #patches == 0 then
         vim.notify("Failed to get unstage patch " .. err, vim.logs.levels.ERROR)
-        return err
+        goto git_status_update_diff_end
       end
       self._git.staged_diff[node.id] = patches[1]
+      found = patches[1]
     end
 
-    self._diff_unstaged:update(self._git.unstaged_diff[node.id])
-    --TODO same thing for diff_staged
+    if found then
+      self._diff_staged:update(found)
+      staged_updated = true
+    end
   end
 
-  return 0
+  ::git_status_update_diff_end::
+  return unstaged_updated, staged_updated
 end
 
-function GitStatus:_init_diff_unstaged()
+function GitStatus:_init_diff_popups()
   self._diff_unstaged = PatchView(self.ns_id, "Unstaged")
-  local box = NuiLayout.Box({
-    NuiLayout.Box(self.info_popup, { size = 6 }),
-    NuiLayout.Box({
-      NuiLayout.Box(self.file_popup, { size = 60 }),
-      NuiLayout.Box(self._diff_unstaged.popup, { grow = 1 })
-    }, { dir = "row", grow = 1 })
-  }, { dir = "col" })
-  self._boxes.diff_unstaged = box
+  self._diff_staged = PatchView(self.ns_id, "Staged")
 
+  self._boxes.diff_unstaged = NuiLayout.Box(
+    {
+      NuiLayout.Box(self.info_popup, { size = 6 }),
+      NuiLayout.Box(
+        {
+          NuiLayout.Box(self.file_popup, { size = 60 }),
+          NuiLayout.Box(self._diff_unstaged.popup, { grow = 1 })
+        },
+        { dir = "row", grow = 1 }
+      ),
+    },
+    { dir = "col" }
+  )
 
+  self._boxes.diff_staged = NuiLayout.Box(
+    {
+      NuiLayout.Box(self.info_popup, { size = 6 }),
+      NuiLayout.Box(
+        {
+          NuiLayout.Box(self.file_popup, { size = 60 }),
+          NuiLayout.Box(self._diff_staged.popup, { grow = 1 })
+        },
+        { dir = "row", grow = 1 }
+      ),
+    },
+    { dir = "col" }
+  )
+
+  self._boxes.diff_unstaged_staged = NuiLayout.Box(
+    {
+      NuiLayout.Box(self.info_popup, { size = 6 }),
+      NuiLayout.Box(
+        {
+          NuiLayout.Box(self.file_popup, { size = 60 }),
+          NuiLayout.Box(self._diff_unstaged.popup, { grow = 1 }),
+          NuiLayout.Box(self._diff_staged.popup, { grow = 1 })
+        },
+        { dir = "row", grow = 1 }
+      ),
+    },
+    { dir = "col" }
+  )
+
+  local opts = { noremap = true, nowait= true }
   local exit_fn = function()
-    self._layout:update(self._layout_opts.main, self._boxes.main)
+    self:hide_diff()
   end
-  self._diff_unstaged.popup:map("n", "q", exit_fn, { noremap = true, nowait = true })
-  self._diff_unstaged.popup:map("n", "<esc>", exit_fn, { noremap = true, nowait = true })
-
-  return box
+  self._diff_unstaged.popup:map("n", "q", exit_fn, opts)
+  self._diff_unstaged.popup:map("n", "<esc>", exit_fn, opts)
+  self._diff_staged.popup:map("n", "q", exit_fn, opts)
+  self._diff_staged.popup:map("n", "<esc>", exit_fn, opts)
 end
 
-function GitStatus:show_diff()
-  local box = self._boxes.diff_unstaged
-  if not box then
-    box = self:_init_diff_unstaged()
+---@param unstaged boolean show unstaged diff
+---@param staged boolean show staged diff
+function GitStatus:show_diff(unstaged, staged)
+  local box
+  if unstaged and staged then
+    box = self._boxes.diff_unstaged_staged
+  elseif unstaged then
+    box = self._boxes.diff_unstaged
+  elseif staged then
+    box = self._boxes.diff_staged
+  else
+    return
   end
   self._layout:update(self._layout_opts.diff, box)
+  self._diff_showned = true
 end
 
 function GitStatus:hide_diff()
   self._layout:update(self._layout_opts.main, self._boxes.main)
-end
-
----@return fun()
-function GitStatus:diff_toggle_handler()
-  return function()
-    if self._diff_showned then
-      self:hide_diff()
-      self._diff_showned = false
-    else
-      self:show_diff()
-      self._diff_showned = true
-      self:update_diff()
-    end
-  end
+  self._diff_showned = false
 end
 
 
@@ -1065,6 +1125,7 @@ function GitStatus:setup_handlers()
     self:write_index()
     if self._diff_showned then
       self._diff_unstaged:unmount()
+      self._diff_staged:unmount()
     end
     self._menus.amend_confirm:unmount()
     self._menus.commit:unmount()
@@ -1185,21 +1246,37 @@ function GitStatus:setup_handlers()
     map_options
   )
 
-  -- diff view
-  self.file_popup:map("n", "=", self:diff_toggle_handler(), map_options)
-
-  -- move cursor
-  local last_line = 1
+  -- Diff view & move cursor
+  local last_diff_line = -1
+  local diff_staged_shown, diff_unstaged_shown = false, false
   self.file_popup:on(event.CursorMoved, function()
     if self._diff_showned then
-      local cursor = vim.api.nvim_win_get_cursor(self.file_popup.winid)
-      if cursor[1] ~= last_line then
-        if self:update_diff() == 0 then
-          last_line = cursor[1]
+      local node, linenr = self:get_child_node_linenr()
+      if node and linenr and linenr ~= last_diff_line then
+        diff_unstaged_shown, diff_staged_shown = self:update_diff(node)
+        if diff_unstaged_shown or diff_staged_shown then
+          self:show_diff(diff_unstaged_shown, diff_staged_shown)
+          last_diff_line = linenr
         end
       end
     end
   end)
+  self.file_popup:map("n", "=", function()
+    if self._diff_showned then
+      self:hide_diff()
+    else
+      local node, linenr = self:get_child_node_linenr()
+      if node and linenr and linenr ~= last_diff_line then
+        diff_unstaged_shown, diff_staged_shown = self:update_diff(node)
+        if diff_unstaged_shown or diff_staged_shown then
+          self:show_diff(diff_unstaged_shown, diff_staged_shown)
+          last_diff_line = linenr
+        end
+      elseif linenr then
+        self:show_diff(diff_unstaged_shown, diff_staged_shown)
+      end
+    end
+  end, map_options)
 
   -- Commit menu
   local commit_commit_fn = self:commit_commit_handler()
