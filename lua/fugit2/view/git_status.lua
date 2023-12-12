@@ -590,14 +590,21 @@ function GitStatus:init(ns_id, repo)
   }
 
   -- setup menu
-  self._commit_mode = CommitMode.COMMIT
   ---@type {}
   self._git = {
     head = nil, ahead = 0, behind = 0,
     unstaged_diff = {}, staged_diff = {},
   }
-
-  -- This commit has already been published to origin/dev, do you really want to modify it?
+  -- state variables for UI
+  ---@class Fugit2GitStatusInternal
+  ---@field commit_mode NuiGitCommitMode
+  ---@field last_diff_line integer
+  ---@field diff_shown boolean
+  ---@field diff_staged_shown boolean
+  ---@field diff_unstaged_shown boolean
+  self._states = {
+    commit_mode = CommitMode.COMMIT
+  }
 
   -- keymaps
   self:setup_handlers()
@@ -743,6 +750,10 @@ end
 function GitStatus:focus_input()
   self._layout:update(self._boxes.input)
   vim.api.nvim_set_current_win(self.input_popup.winid)
+end
+
+function GitStatus:focus_file()
+  vim.api.nvim_set_current_win(self.file_popup.winid)
 end
 
 
@@ -892,7 +903,7 @@ end
 ---@return fun()
 function GitStatus:commit_commit_handler()
   return function()
-    self._commit_mode = CommitMode.COMMIT
+    self._states.commit_mode = CommitMode.COMMIT
 
     self:_set_input_popup_commit_title("Create commit", true, true)
 
@@ -905,7 +916,7 @@ end
 ---@return fun()
 function GitStatus:commit_extend_handler()
   return function()
-    self._commit_mode = CommitMode.EXTEND
+    self._states.commit_mode = CommitMode.EXTEND
 
     if self._git.ahead == 0 then
       self._menus.amend_confirm:show()
@@ -921,7 +932,7 @@ end
 ---@return fun()
 function GitStatus:commit_amend_handler(is_reword)
   return function()
-    self._commit_mode = is_reword and CommitMode.REWORD or CommitMode.AMEND
+    self._states.commit_mode = is_reword and CommitMode.REWORD or CommitMode.AMEND
 
     if self._git.ahead == 0 then
       self._menus.amend_confirm:show()
@@ -941,10 +952,11 @@ end
 
 function GitStatus:amend_confirm_yes_handler()
   return function()
-    if self._commit_mode == CommitMode.EXTEND then
+    local mode = self._states.commit_mode
+    if mode == CommitMode.EXTEND then
       self:commit_extend()
-    elseif self._commit_mode == CommitMode.REWORD or self._commit_mode == CommitMode.AMEND then
-      if self._commit_mode == CommitMode.REWORD then
+    elseif mode == CommitMode.REWORD or mode == CommitMode.AMEND then
+      if mode == CommitMode.REWORD then
         self:_set_input_popup_commit_title("Reword HEAD", false, false)
       else
         self:_set_input_popup_commit_title("Amend HEAD", true, false)
@@ -1084,13 +1096,23 @@ function GitStatus:_init_diff_popups()
   )
 
   local opts = { noremap = true, nowait= true }
-  local exit_fn = function()
-    self:hide_diff()
+
+  local unstaged_exit_fn = function()
+    self:focus_file()
   end
-  self._diff_unstaged.popup:map("n", "q", exit_fn, opts)
-  self._diff_unstaged.popup:map("n", "<esc>", exit_fn, opts)
-  self._diff_staged.popup:map("n", "q", exit_fn, opts)
-  self._diff_staged.popup:map("n", "<esc>", exit_fn, opts)
+
+  local staged_exit_fn = function()
+    if self._states.diff_unstaged_shown then
+      self._diff_unstaged:focus()
+    else
+      self:focus_file()
+    end
+  end
+
+  self._diff_unstaged.popup:map("n", "q", unstaged_exit_fn, opts)
+  self._diff_unstaged.popup:map("n", "<esc>", unstaged_exit_fn, opts)
+  self._diff_staged.popup:map("n", "q", staged_exit_fn, opts)
+  self._diff_staged.popup:map("n", "<esc>", staged_exit_fn, opts)
 end
 
 ---@param unstaged boolean show unstaged diff
@@ -1107,12 +1129,12 @@ function GitStatus:show_diff(unstaged, staged)
     return
   end
   self._layout:update(self._layout_opts.diff, box)
-  self._diff_showned = true
+  self._states.diff_shown = true
 end
 
 function GitStatus:hide_diff()
   self._layout:update(self._layout_opts.main, self._boxes.main)
-  self._diff_showned = false
+  self._states.diff_shown = false
 end
 
 
@@ -1120,10 +1142,11 @@ end
 function GitStatus:setup_handlers()
   local map_options = { noremap = true, nowait = true }
   local tree = self._tree
+  local states = self._states
 
   local exit_fn = function()
     self:write_index()
-    if self._diff_showned then
+    if states.diff_shown then
       self._diff_unstaged:unmount()
       self._diff_staged:unmount()
     end
@@ -1203,23 +1226,6 @@ function GitStatus:setup_handlers()
     map_options
   )
 
-  -- collapse expand toggle
-  self.file_popup:map("n", "<cr>",
-    function ()
-      local node = tree.tree:get_node()
-
-      if node and node:has_children() then
-        if node:is_expanded() then
-          node:collapse()
-        else
-          node:expand()
-        end
-        tree:render()
-      end
-    end,
-    map_options
-  )
-
   -- add to index
   local add_reset_fn = function()
     local node = tree.tree:get_node()
@@ -1247,36 +1253,61 @@ function GitStatus:setup_handlers()
   )
 
   -- Diff view & move cursor
-  local last_diff_line = -1
-  local diff_staged_shown, diff_unstaged_shown = false, false
+  states.last_diff_line = -1
+  states.diff_staged_shown = false
+  states.diff_unstaged_shown = false
+
   self.file_popup:on(event.CursorMoved, function()
-    if self._diff_showned then
+    if states.diff_shown then
       local node, linenr = self:get_child_node_linenr()
-      if node and linenr and linenr ~= last_diff_line then
-        diff_unstaged_shown, diff_staged_shown = self:update_diff(node)
-        if diff_unstaged_shown or diff_staged_shown then
-          self:show_diff(diff_unstaged_shown, diff_staged_shown)
-          last_diff_line = linenr
+      if node and linenr and linenr ~= states.last_diff_line then
+        states.diff_unstaged_shown, states.diff_staged_shown = self:update_diff(node)
+        if states.diff_unstaged_shown or states.diff_staged_shown then
+          self:show_diff(states.diff_unstaged_shown, states.diff_staged_shown)
+          states.last_diff_line = linenr
         end
       end
     end
   end)
+
   self.file_popup:map("n", "=", function()
-    if self._diff_showned then
+    if states.diff_shown then
       self:hide_diff()
     else
       local node, linenr = self:get_child_node_linenr()
-      if node and linenr and linenr ~= last_diff_line then
-        diff_unstaged_shown, diff_staged_shown = self:update_diff(node)
-        if diff_unstaged_shown or diff_staged_shown then
-          self:show_diff(diff_unstaged_shown, diff_staged_shown)
-          last_diff_line = linenr
+      if node and linenr and linenr ~= states.last_diff_line then
+        states.diff_unstaged_shown, states.diff_staged_shown = self:update_diff(node)
+        if states.diff_unstaged_shown or states.diff_staged_shown then
+          self:show_diff(states.diff_unstaged_shown, states.diff_staged_shown)
+          states.last_diff_line = linenr
         end
       elseif linenr then
-        self:show_diff(diff_unstaged_shown, diff_staged_shown)
+        self:show_diff(states.diff_unstaged_shown, states.diff_staged_shown)
       end
     end
   end, map_options)
+
+  -- Enter: collapse expand toggle, move to file buffer and diff
+  self.file_popup:map("n", "<cr>",
+    function ()
+      local node = tree.tree:get_node()
+      if node and node:has_children() then
+        if node:is_expanded() then
+          node:collapse()
+        else
+          node:expand()
+        end
+        tree:render()
+      elseif states.diff_shown then
+        if states.diff_unstaged_shown then
+          self._diff_unstaged:focus()
+        elseif states.diff_staged_shown then
+          self._diff_staged:focus()
+        end
+      end
+    end,
+    map_options
+  )
 
   -- Commit menu
   local commit_commit_fn = self:commit_commit_handler()
@@ -1321,15 +1352,15 @@ function GitStatus:setup_handlers()
   self.input_popup:map("n", "<esc>", input_quit_fn, map_options)
 
   local input_enter_handler = function()
-    local message = table.concat(
+    local message = vim.trim(table.concat(
       vim.api.nvim_buf_get_lines(self.input_popup.bufnr, 0, -1, true),
       "\n"
-    )
-    if self._commit_mode == CommitMode.COMMIT then
+    ))
+    if states.commit_mode == CommitMode.COMMIT then
       self:commit(message)
-    elseif self._commit_mode == CommitMode.REWORD then
+    elseif states.commit_mode == CommitMode.REWORD then
       self:commit_reword(message)
-    elseif self._commit_mode == CommitMode.AMEND then
+    elseif states.commit_mode == CommitMode.AMEND then
       self:commit_amend(message)
     end
   end

@@ -132,6 +132,10 @@ function PatchView:unmount()
   return self.popup:unmount()
 end
 
+function PatchView:focus()
+  vim.api.nvim_set_current_win(self.popup.winid)
+end
+
 ---Gets current hunk based current cursor position
 ---@return integer hunk_index
 ---@return integer hunk_offset
