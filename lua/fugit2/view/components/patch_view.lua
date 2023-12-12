@@ -9,8 +9,8 @@ local diff = require "fugit2.diff"
 
 ---@class Fugit2PatchView
 ---@field ns_id integer namespace id
+---@field title string initial tile
 ---@field popup NuiPopup
----@field tree NuiTree
 local PatchView = Object("Fugit2PatchView")
 
 
@@ -18,6 +18,7 @@ local PatchView = Object("Fugit2PatchView")
 ---@param title string
 function PatchView:init(ns_id, title)
   self.ns_id = ns_id
+  self.title = title
 
   -- popup
   self.popup = NuiPopup {
@@ -34,10 +35,7 @@ function PatchView:init(ns_id, title)
         right = 1,
       },
       style = "rounded",
-      text = {
-        top = title,
-        top_align = "center",
-      },
+      text = { top = {} }
     },
     buf_options = {
       modifiable = false,
@@ -110,7 +108,17 @@ end
 ---@param patch_item GitDiffPatchItem
 function PatchView:update(patch_item)
   local patch = patch_item.patch
+  local stats
   local header, hunks = {}, {}
+
+  stats, _ = patch:stats()
+  if stats then
+    self.popup.border:set_text(
+      "top",
+      self.title .. " +" .. stats.insertions .. " -" .. stats.deletions,
+      "left"
+    )
+  end
 
   local lines = vim.split(tostring(patch), "\n", { plain=true, trimempty=true })
 

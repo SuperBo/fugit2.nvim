@@ -240,6 +240,7 @@ ffi.cdef[[
   int git_patch_get_hunk(const git_diff_hunk **out, size_t *lines_in_hunk, git_patch *patch, size_t hunk_idx);
   int git_patch_get_line_in_hunk(const git_diff_line **out, git_patch *patch, size_t hunk_idx, size_t line_of_hunk);
   int git_patch_num_lines_in_hunk(const git_patch *patch, size_t hunk_idx);
+  int git_patch_line_stats(size_t *total_context, size_t *total_additions, size_t *total_deletions, const git_patch *patch);
   void git_patch_free(git_patch *patch);
 
   const char * git_reference_shorthand(const git_reference *ref);

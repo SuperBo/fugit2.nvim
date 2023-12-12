@@ -748,7 +748,7 @@ function Diff:stats()
   local stats = {
     changed = libgit2.C.git_diff_stats_files_changed(diff_stats[0]),
     insertions = libgit2.C.git_diff_stats_insertions(diff_stats[0]),
-    delettions = libgit2.C.git_diff_stats_deletions(diff_stats[0])
+    deletions = libgit2.C.git_diff_stats_deletions(diff_stats[0])
   }
 
   libgit2.C.git_diff_stats_free(diff_stats[0]);
@@ -829,6 +829,24 @@ function Patch:__tostring()
   local patch = ffi.string(buf[0].ptr, buf[0].size)
   libgit2.C.git_buf_dispose(buf)
   return patch
+end
+
+---@return GitDiffStats?
+---@return GIT_ERROR
+function Patch:stats()
+  local number = libgit2.size_t_array(2)
+  local err = libgit2.C.git_patch_line_stats(
+    nil, number, number + 1, self.patch[0]
+  )
+  if err ~= 0 then
+    return nil, err
+  end
+
+  return {
+    changed = 1,
+    insertions = tonumber(number[0]),
+    deletions = tonumber(number[1])
+  }, 0
 end
 
 ---Gets the number of hunks in a patch
@@ -936,17 +954,10 @@ end
 ---@field type GIT_BRANCH
 
 
----@class GitDiffStats
----@field changed integer
----@field insertions integer
----@field delettions integer
+---@alias GitDiffStats {changed: integer, insertions: integer, deletions: integer} Diff stats
 
----@class GitDiffPatchItem
----@field status GIT_DELTA
----@field path string
----@field new_path string
----@field num_hunks integer
----@field patch GitPatch
+---@alias GitDiffPatchItem {status: GIT_DELTA, path: string, new_path:string, num_hunks: integer, patch: GitPatch}
+
 
 local DEFAULT_STATUS_FLAGS = bit.bor(
   libgit2.GIT_STATUS_OPT.INCLUDE_UNTRACKED,

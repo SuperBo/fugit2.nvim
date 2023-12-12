@@ -1009,7 +1009,7 @@ function GitStatus:update_diff()
 end
 
 function GitStatus:_init_diff_unstaged()
-  self._diff_unstaged = PatchView(" Unstaged ")
+  self._diff_unstaged = PatchView(self.ns_id, "Unstaged")
   local box = NuiLayout.Box({
     NuiLayout.Box(self.info_popup, { size = 6 }),
     NuiLayout.Box({
