@@ -151,6 +151,17 @@ ffi.cdef[[
     git_diff_similarity_metric *metric;
   } git_diff_find_options;
 
+  typedef int (* git_apply_delta_cb)(const git_diff_delta *delta, void *payload);
+  typedef int (* git_apply_hunk_cb)(const git_diff_hunk *hunk, void *payload);
+
+  typedef struct git_apply_options {
+    unsigned int version; /**< The version */
+    git_apply_delta_cb delta_cb;
+    git_apply_hunk_cb hunk_cb;
+    void *payload;
+    unsigned int flags;
+  } git_apply_options;
+
   typedef struct git_status_entry {
     unsigned int status;
     struct git_diff_delta *head_to_index;
@@ -182,6 +193,8 @@ ffi.cdef[[
 
   void git_object_free(git_object *object);
   const git_oid * git_object_id(const git_object *obj);
+
+  int git_apply(git_repository *repo, git_diff *diff, unsigned int location, const git_apply_options *options);
 
   int git_commit_lookup(git_commit **commit, git_repository *repo, const git_oid *id);
   int git_commit_lookup_prefix(git_commit **commit, git_repository *repo, const git_oid *id, size_t len);
@@ -323,6 +336,10 @@ M.const_char_pointer_array = ffi.typeof("const char *[?]")
 M.unsigned_int_array = ffi.typeof("unsigned int[?]")
 M.size_t_array = ffi.typeof("size_t[?]")
 
+
+---@type ffi.ctype* git_apply_options[1]
+M.git_apply_options = ffi.typeof("git_apply_options[1]")
+
 ---@type ffi.ctype* struct git_diff * [1]
 M.git_diff_double_pointer = ffi.typeof("git_diff*[1]")
 
@@ -401,6 +418,7 @@ M.git_tree_pointer = ffi.typeof("git_tree*")
 -- | libgit2 struct version |
 -- ==========================
 
+M.GIT_APPLY_OPTIONS_VERSION = 1
 M.GIT_STATUS_OPTIONS_VERSION = 1
 M.GIT_DIFF_OPTIONS_VERSION = 1
 M.GIT_DIFF_FIND_OPTIONS_VERSION = 1
@@ -409,6 +427,12 @@ M.GIT_DIFF_FIND_OPTIONS_VERSION = 1
 -- | libgit2 enum |
 -- ================
 
+---@enum GIT_APPLY_LOCATION
+M.GIT_APPLY_LOCATION = {
+  WORKDIR = 0,
+  INDEX   = 1,
+  BOTH    = 2,
+}
 
 ---@enum GIT_BRANCH
 M.GIT_BRANCH = {
@@ -712,6 +736,7 @@ M.GIT_DIFF_LINE = {
 
 local NULL = ffi.cast("void*", nil)
 
+M.GIT_APPLY_OPTIONS_INIT = {{  M.GIT_APPLY_OPTIONS_VERSION }}
 M.GIT_STATUS_OPTIONS_INIT = { { M.GIT_STATUS_OPTIONS_VERSION } }
 M.GIT_DIFF_OPTIONS_INIT = {{
   M.GIT_STATUS_OPTIONS_VERSION, 0, M.GIT_SUBMODULE.IGNORE_UNSPECIFIED,

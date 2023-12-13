@@ -1756,6 +1756,49 @@ function Repository:diff_helper(include_workdir, include_index, index, paths, re
   return Diff.new(diff), 0
 end
 
+---Applies a diff into workdir
+---@param diff GitDiff
+---@return GIT_ERROR
+function Repository:apply_workdir(diff)
+  return self:apply(diff, true, false)
+end
+
+---Applies a diff into index
+---@param diff GitDiff
+---@return GIT_ERROR
+function Repository:apply_index(diff)
+  return self:apply(diff, false, true)
+end
+
+---Applies a diff into index and workdir
+---@param diff GitDiff
+---@return GIT_ERROR
+function Repository:apply_workdir_index(diff)
+  return self:apply(diff, true, true)
+end
+
+---Applies a diff into workdir or index
+---@param diff GitDiff
+---@param workdir boolean Apply to workdir
+---@param index boolean Apply to index
+---@return GIT_ERROR
+function Repository:apply(diff, workdir, index)
+  if not (workdir or index) then
+    return 0
+  end
+
+  local opts = libgit2.git_apply_options(libgit2.GIT_APPLY_OPTIONS_INIT)
+  local location = 0
+  if workdir then
+    location = bit.bor(location, libgit2.GIT_APPLY_LOCATION.WORKDIR)
+  end
+  if index then
+    location = bit.bor(location, libgit2.GIT_APPLY_LOCATION.INDEX)
+  end
+
+  return libgit2.C.git_apply(self.repo[0], diff.diff[0], location, opts)
+end
+
 -- ===================
 -- | Utils functions |
 -- ===================

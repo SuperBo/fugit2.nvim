@@ -1061,22 +1061,66 @@ function GitStatus:_init_diff_popups()
   self._diff_staged = PatchView(self.ns_id, "Staged")
   local opts = { noremap = true, nowait= true }
 
-  local unstaged_exit_fn = function()
+  local exit_fn = function()
     self:focus_file()
+    vim.fn.feedkeys("q")
   end
 
-  local staged_exit_fn = function()
-    if self._states.diff_unstaged_shown then
-      self._diff_unstaged:focus()
+  self._diff_unstaged.popup:map("n", "q", exit_fn, opts)
+  self._diff_unstaged.popup:map("n", "<esc>", exit_fn, opts)
+  self._diff_staged.popup:map("n", "q", exit_fn, opts)
+  self._diff_staged.popup:map("n", "<esc>", exit_fn, opts)
+
+  local states = self._states
+
+  -- [h]: move left
+  self._diff_unstaged.popup:map("n", "h", function()
+    self:focus_file()
+  end, opts)
+  self._diff_staged.popup:map("n", "h", function()
+    if states.diff_unstaged_shown then self._diff_unstaged:focus()
     else
       self:focus_file()
     end
-  end
+  end, opts)
 
-  self._diff_unstaged.popup:map("n", "q", unstaged_exit_fn, opts)
-  self._diff_unstaged.popup:map("n", "<esc>", unstaged_exit_fn, opts)
-  self._diff_staged.popup:map("n", "q", staged_exit_fn, opts)
-  self._diff_staged.popup:map("n", "<esc>", staged_exit_fn, opts)
+  -- [l]: move right
+  self._diff_unstaged.popup:map("n", "l", function()
+    if states.diff_staged_shown then
+      self._diff_staged:focus()
+    else
+      vim.cmd("normal! l")
+    end
+  end, opts)
+
+  -- [=]: turn off
+  local turn_off_diff_fn = function()
+    self:focus_file()
+    vim.fn.feedkeys("=")
+  end
+  self._diff_staged.popup:map("n", "=", turn_off_diff_fn, opts)
+  self._diff_unstaged.popup:map("n", "=", turn_off_diff_fn, opts)
+
+  -- [-]: Stage handling
+  self._diff_unstaged.popup:map("n", "-", function()
+    local diff_str = self._diff_unstaged:get_partial_diff_hunk()
+    if not diff_str then
+      vim.notify("[Fugit2] Failed to get hunk", vim.log.levels.ERROR)
+      return
+    end
+
+    local diff, err = git2.Diff.from_buffer(diff_str)
+    if not diff then
+      vim.notify("[Fugit2] Failed to construct git2 diff, code " .. err, vim.log.levels.ERROR)
+      return
+    end
+
+    err = self.repo:apply_index(diff)
+    if err ~= 0 then
+      vim.notify("[Fugit2] Failed to apply diff, code " .. err, vim.log.levels.ERROR)
+      return
+    end
+  end, opts)
 end
 
 ---@param unstaged boolean show unstaged diff
@@ -1274,12 +1318,12 @@ function GitStatus:setup_handlers()
         node:expand()
       end
       tree:render()
-    elseif states.diff_shown then
-      if states.diff_unstaged_shown then
-        self._diff_unstaged:focus()
-      elseif states.diff_staged_shown then
-        self._diff_staged:focus()
-      end
+    -- elseif states.diff_shown then
+    --   if states.diff_unstaged_shown then
+    --     self._diff_unstaged:focus()
+    --   elseif states.diff_staged_shown then
+    --     self._diff_staged:focus()
+    --   end
     elseif node then
       exit_fn()
       vim.cmd.edit(vim.fn.fnameescape(node.id))

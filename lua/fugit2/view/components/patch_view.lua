@@ -63,9 +63,9 @@ function PatchView:init(ns_id, title)
 
   -- keymaps
   local opts = { noremap = true, nowait = true }
-  self.popup:map("n", "=", "za", opts)
-  self.popup:map("n", "]", self:next_hunk_handler(), opts)
-  self.popup:map("n", "[", self:prev_hunk_handler(), opts)
+  -- self.popup:map("n", "=", "za", opts)
+  self.popup:map("n", "J", self:next_hunk_handler(), opts)
+  self.popup:map("n", "K", self:prev_hunk_handler(), opts)
   -- local expand_collapse_handler = self:expand_collapse_handler()
   -- self.popup:map("n", "<cr>", expand_collapse_handler, opts)
   -- self.popup:map("n", "l", self:expand_handler(), opts)
@@ -204,6 +204,18 @@ function PatchView:prev_hunk_handler()
       end
     end
     vim.api.nvim_win_set_cursor(self.popup.winid, { new_row, col })
+  end
+end
+
+---@return string?
+function PatchView:get_partial_diff_hunk()
+  local hunk_idx, _, _, _ = self:get_current_hunk()
+  if hunk_idx > 0 then
+    local hunk = vim.api.nvim_buf_get_lines(
+      self.popup.bufnr, self._hunks[hunk_idx] - 1, self._hunks[hunk_idx+1] - 1, true
+    )
+    local diff_lines = vim.list_extend(vim.list_slice(self._header), hunk)
+    return table.concat(diff_lines, "\n") .. "\n"
   end
 end
 
