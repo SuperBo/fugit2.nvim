@@ -1,10 +1,6 @@
-local NuiText = require "nui.text"
-local NuiLine = require "nui.line"
 local NuiPopup = require "nui.popup"
 local Object = require "nui.object"
 local event = require "nui.utils.autocmd".event
-
-local diff = require "fugit2.diff"
 
 
 ---@class Fugit2PatchView
@@ -78,7 +74,7 @@ end
 function PatchView:update(patch_item)
   local patch = patch_item.patch
   local stats
-  local header, hunks = {}, {}
+  local header, hunks = {}, { 1 }
 
   stats, _ = patch:stats()
   if stats then
@@ -95,10 +91,11 @@ function PatchView:update(patch_item)
     if l:sub(1, 1) ~= "@" then
       header[i] = l
     else
-      hunks[1] = i
       break
     end
   end
+
+  local render_lines = vim.list_slice(lines, #header + 1)
 
   local line_num = hunks[1]
   local num_hunks = tonumber(patch:nhunks())
@@ -108,7 +105,7 @@ function PatchView:update(patch_item)
   end
 
   self._header, self._hunks = header, hunks
-  self:render(lines)
+  self:render(render_lines)
 end
 
 ---@param lines string[]

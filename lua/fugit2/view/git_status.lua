@@ -599,10 +599,10 @@ function GitStatus:init(ns_id, repo)
   -- state variables for UI
   ---@class Fugit2GitStatusInternal
   ---@field commit_mode NuiGitCommitMode
-  ---@field last_diff_line integer
-  ---@field diff_shown boolean
-  ---@field diff_staged_shown boolean
-  ---@field diff_unstaged_shown boolean
+  ---@field last_patch_line integer
+  ---@field patch_shown boolean?
+  ---@field patch_staged_shown boolean
+  ---@field patch_unstaged_shown boolean
   self._states = {
     commit_mode = CommitMode.COMMIT
   }
@@ -1000,8 +1000,8 @@ function GitStatus:update_diff(node)
   local unstaged_updated, staged_updated = false, false
 
   -- init in the first update
-  if not self._diff_staged or not self._diff_unstaged then
-    self:_init_diff_popups()
+  if not self._patch_staged or not self._patch_unstaged then
+    self:_init_patch_popups()
   end
 
   if node.id then
@@ -1025,7 +1025,7 @@ function GitStatus:update_diff(node)
     end
 
     if found then
-      self._diff_unstaged:update(found)
+      self._patch_unstaged:update(found)
       unstaged_updated = true
     end
 
@@ -1047,7 +1047,7 @@ function GitStatus:update_diff(node)
     end
 
     if found then
-      self._diff_staged:update(found)
+      self._patch_staged:update(found)
       staged_updated = true
     end
   end
@@ -1056,9 +1056,9 @@ function GitStatus:update_diff(node)
   return unstaged_updated, staged_updated
 end
 
-function GitStatus:_init_diff_popups()
-  self._diff_unstaged = PatchView(self.ns_id, "Unstaged")
-  self._diff_staged = PatchView(self.ns_id, "Staged")
+function GitStatus:_init_patch_popups()
+  self._patch_unstaged = PatchView(self.ns_id, "Unstaged")
+  self._patch_staged = PatchView(self.ns_id, "Staged")
   local opts = { noremap = true, nowait= true }
 
   local exit_fn = function()
@@ -1066,44 +1066,44 @@ function GitStatus:_init_diff_popups()
     vim.fn.feedkeys("q")
   end
 
-  self._diff_unstaged.popup:map("n", "q", exit_fn, opts)
-  self._diff_unstaged.popup:map("n", "<esc>", exit_fn, opts)
-  self._diff_staged.popup:map("n", "q", exit_fn, opts)
-  self._diff_staged.popup:map("n", "<esc>", exit_fn, opts)
+  self._patch_unstaged.popup:map("n", "q", exit_fn, opts)
+  self._patch_unstaged.popup:map("n", "<esc>", exit_fn, opts)
+  self._patch_staged.popup:map("n", "q", exit_fn, opts)
+  self._patch_staged.popup:map("n", "<esc>", exit_fn, opts)
 
   local states = self._states
 
   -- [h]: move left
-  self._diff_unstaged.popup:map("n", "h", function()
+  self._patch_unstaged.popup:map("n", "h", function()
     self:focus_file()
   end, opts)
-  self._diff_staged.popup:map("n", "h", function()
-    if states.diff_unstaged_shown then self._diff_unstaged:focus()
+  self._patch_staged.popup:map("n", "h", function()
+    if states.patch_unstaged_shown then self._patch_unstaged:focus()
     else
       self:focus_file()
     end
   end, opts)
 
   -- [l]: move right
-  self._diff_unstaged.popup:map("n", "l", function()
-    if states.diff_staged_shown then
-      self._diff_staged:focus()
+  self._patch_unstaged.popup:map("n", "l", function()
+    if states.patch_staged_shown then
+      self._patch_staged:focus()
     else
       vim.cmd("normal! l")
     end
   end, opts)
 
   -- [=]: turn off
-  local turn_off_diff_fn = function()
+  local turn_off_patch_fn = function()
     self:focus_file()
     vim.fn.feedkeys("=")
   end
-  self._diff_staged.popup:map("n", "=", turn_off_diff_fn, opts)
-  self._diff_unstaged.popup:map("n", "=", turn_off_diff_fn, opts)
+  self._patch_staged.popup:map("n", "=", turn_off_patch_fn, opts)
+  self._patch_unstaged.popup:map("n", "=", turn_off_patch_fn, opts)
 
   -- [-]: Stage handling
-  self._diff_unstaged.popup:map("n", "-", function()
-    local diff_str = self._diff_unstaged:get_partial_diff_hunk()
+  self._patch_unstaged.popup:map("n", "-", function()
+    local diff_str = self._patch_unstaged:get_partial_diff_hunk()
     if not diff_str then
       vim.notify("[Fugit2] Failed to get hunk", vim.log.levels.ERROR)
       return
@@ -1132,31 +1132,31 @@ function GitStatus:show_diff(unstaged, staged)
 
   local row
   if unstaged and staged then
-    row = self._boxes.diff_unstaged_staged
+    row = self._boxes.patch_unstaged_staged
     if not row then
       row = {
         NuiLayout.Box(self.file_popup, { size = 60 }),
-        NuiLayout.Box(self._diff_unstaged.popup, { grow = 1 }),
-        NuiLayout.Box(self._diff_staged.popup, { grow = 1 })
+        NuiLayout.Box(self._patch_unstaged.popup, { grow = 1 }),
+        NuiLayout.Box(self._patch_staged.popup, { grow = 1 })
       }
-      self._boxes.diff_unstaged_staged = row
+      self._boxes.patch_unstaged_staged = row
     end
   elseif unstaged then
-    row = self._boxes.diff_unstaged
+    row = self._boxes.patch_unstaged
     if not row then
       row = {
         NuiLayout.Box(self.file_popup, { size = 60 }),
-        NuiLayout.Box(self._diff_unstaged.popup, { grow = 1 }),
+        NuiLayout.Box(self._patch_unstaged.popup, { grow = 1 }),
       }
-      self._boxes.diff_unstaged = row
+      self._boxes.patch_unstaged = row
     end
   else
     if not row then
       row = {
         NuiLayout.Box(self.file_popup, { size = 60 }),
-        NuiLayout.Box(self._diff_staged.popup, { grow = 1 })
+        NuiLayout.Box(self._patch_staged.popup, { grow = 1 })
       }
-      self._boxes.diff_staged = row
+      self._boxes.patch_staged = row
     end
   end
 
@@ -1168,13 +1168,13 @@ function GitStatus:show_diff(unstaged, staged)
     },
     { dir = "col" }
   ))
-  self._states.diff_shown = true
+  self._states.patch_shown = true
 end
 
 function GitStatus:hide_diff()
   self._layout:update(self._layout_opts.main, self._boxes.main)
   self._main_row = NuiLayout.Box(self.file_popup, { grow = 1 })
-  self._states.diff_shown = false
+  self._states.patch_shown = false
 end
 
 
@@ -1187,9 +1187,9 @@ function GitStatus:setup_handlers()
 
   local exit_fn = function()
     self:write_index()
-    if states.diff_shown then
-      self._diff_unstaged:unmount()
-      self._diff_staged:unmount()
+    if states.patch_shown then
+      self._patch_unstaged:unmount()
+      self._patch_staged:unmount()
     end
     self._menus.amend_confirm:unmount()
     self._menus.commit:unmount()
@@ -1246,11 +1246,11 @@ function GitStatus:setup_handlers()
       if node:expand() then
         tree:render()
       end
-      if not node:has_children() and states.diff_shown then
-        if states.diff_unstaged_shown then
-          self._diff_unstaged:focus()
-        elseif states.diff_staged_shown then
-          self._diff_staged:focus()
+      if not node:has_children() and states.patch_shown then
+        if states.patch_unstaged_shown then
+          self._patch_unstaged:focus()
+        elseif states.patch_staged_shown then
+          self._patch_staged:focus()
         end
       end
     end
@@ -1274,36 +1274,36 @@ function GitStatus:setup_handlers()
   )
 
   -- Diff view & move cursor
-  states.last_diff_line = -1
-  states.diff_staged_shown = false
-  states.diff_unstaged_shown = false
+  states.last_patch_line = -1
+  states.patch_staged_shown = false
+  states.patch_unstaged_shown = false
 
   self.file_popup:on(event.CursorMoved, function()
-    if states.diff_shown then
+    if states.patch_shown then
       local node, linenr = self:get_child_node_linenr()
-      if node and linenr and linenr ~= states.last_diff_line then
-        states.diff_unstaged_shown, states.diff_staged_shown = self:update_diff(node)
-        if states.diff_unstaged_shown or states.diff_staged_shown then
-          self:show_diff(states.diff_unstaged_shown, states.diff_staged_shown)
-          states.last_diff_line = linenr
+      if node and linenr and linenr ~= states.last_patch_line then
+        states.patch_unstaged_shown, states.patch_staged_shown = self:update_diff(node)
+        if states.patch_unstaged_shown or states.patch_staged_shown then
+          self:show_diff(states.patch_unstaged_shown, states.patch_staged_shown)
+          states.last_patch_line = linenr
         end
       end
     end
   end)
 
   self.file_popup:map("n", "=", function()
-    if states.diff_shown then
+    if states.patch_shown then
       self:hide_diff()
     else
       local node, linenr = self:get_child_node_linenr()
-      if node and linenr and linenr ~= states.last_diff_line then
-        states.diff_unstaged_shown, states.diff_staged_shown = self:update_diff(node)
-        if states.diff_unstaged_shown or states.diff_staged_shown then
-          self:show_diff(states.diff_unstaged_shown, states.diff_staged_shown)
-          states.last_diff_line = linenr
+      if node and linenr and linenr ~= states.last_patch_line then
+        states.patch_unstaged_shown, states.patch_staged_shown = self:update_diff(node)
+        if states.patch_unstaged_shown or states.patch_staged_shown then
+          self:show_diff(states.patch_unstaged_shown, states.patch_staged_shown)
+          states.last_patch_line = linenr
         end
       elseif linenr then
-        self:show_diff(states.diff_unstaged_shown, states.diff_staged_shown)
+        self:show_diff(states.patch_unstaged_shown, states.patch_staged_shown)
       end
     end
   end, map_options)
@@ -1318,11 +1318,11 @@ function GitStatus:setup_handlers()
         node:expand()
       end
       tree:render()
-    -- elseif states.diff_shown then
-    --   if states.diff_unstaged_shown then
-    --     self._diff_unstaged:focus()
-    --   elseif states.diff_staged_shown then
-    --     self._diff_staged:focus()
+    -- elseif states.patch_shown then
+    --   if states.patch_unstaged_shown then
+    --     self._patch_unstaged:focus()
+    --   elseif states.patch_staged_shown then
+    --     self._patch_staged:focus()
     --   end
     elseif node then
       exit_fn()
@@ -1355,13 +1355,13 @@ function GitStatus:setup_handlers()
       git.staged_diff[node.id] = nil
       git.unstaged_diff[node.id] = nil
 
-      if not states.diff_shown then
-        states.last_diff_line = 0 -- remove cache behaviors
+      if not states.patch_shown then
+        states.last_patch_line = -1 -- remove cache behaviors
       else
-        states.diff_unstaged_shown, states.diff_staged_shown = self:update_diff(node)
-        if states.diff_unstaged_shown or states.diff_staged_shown then
-          self:show_diff(states.diff_unstaged_shown, states.diff_staged_shown)
-          states.last_diff_line = linenr
+        states.patch_unstaged_shown, states.patch_staged_shown = self:update_diff(node)
+        if states.patch_unstaged_shown or states.patch_staged_shown then
+          self:show_diff(states.patch_unstaged_shown, states.patch_staged_shown)
+          states.last_patch_line = linenr
         end
       end
     end
