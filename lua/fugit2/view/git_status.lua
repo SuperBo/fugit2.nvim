@@ -589,10 +589,16 @@ function GitStatus:init(ns_id, repo)
     commit = commit_menu
   }
 
-  -- setup menu
-  ---@type {}
+  ---@class Fugit2GitStatusGitStates
+  ---@field head GitStatusHead?
+  ---@field ahead integer
+  ---@field behind integer
+  ---@field index_updated boolean Whether git status is updated
+  ---@field unstaged_diff { [string]: GitPatch }
+  ---@field staged_diff { [string]: GitPatch }
   self._git = {
     head = nil, ahead = 0, behind = 0,
+    index_updated = false,
     unstaged_diff = {}, staged_diff = {},
   }
   -- state variables for UI
@@ -611,9 +617,6 @@ function GitStatus:init(ns_id, repo)
 
   -- get git content
   self:update()
-
-  -- Whether git status is updated
-  self._updated = false
 end
 
 
@@ -739,9 +742,9 @@ end
 
 
 function GitStatus:write_index()
-  if self._updated then
+  if self._git.index_updated then
     if self.index:write() == 0 then
-      self._updated = false
+      self._git.index_updated = false
     end
   end
 end
@@ -764,7 +767,7 @@ function GitStatus:off_input()
   )
   self._layout:update(self._boxes.main)
   vim.api.nvim_set_current_win(self.file_popup.winid)
-  vim.cmd("stopinsert")
+  vim.cmd.stopinsert()
 end
 
 function GitStatus:insert_head_message_to_input()
@@ -908,7 +911,7 @@ function GitStatus:commit_commit_handler()
     self:_set_input_popup_commit_title("Create commit", true, true)
 
     self:focus_input()
-    vim.cmd("startinsert")
+    vim.cmd.startinsert()
   end
 end
 
@@ -1143,6 +1146,7 @@ function GitStatus:setup_handlers()
   local map_options = { noremap = true, nowait = true }
   local tree = self._tree
   local states = self._states
+  local git = self._git
 
   local exit_fn = function()
     self:write_index()
@@ -1198,16 +1202,22 @@ function GitStatus:setup_handlers()
     map_options
   )
 
-  -- expand
-  self.file_popup:map("n", "l",
-    function()
-      local node = tree.tree:get_node()
-
-      if node and node:expand() then
+  -- Expand and move right
+  self.file_popup:map("n", "l", function()
+    local node = tree.tree:get_node()
+    if node then
+      if node:expand() then
         tree:render()
       end
-    end,
-    map_options
+      if not node:has_children() and states.diff_shown then
+        if states.diff_unstaged_shown then
+          self._diff_unstaged:focus()
+        elseif states.diff_staged_shown then
+          self._diff_staged:focus()
+        end
+      end
+    end
+  end, map_options
   )
 
   -- expand all
@@ -1221,32 +1231,6 @@ function GitStatus:setup_handlers()
 
       if updated then
         tree:render()
-      end
-    end,
-    map_options
-  )
-
-  -- add to index
-  local add_reset_fn = function()
-    local node = tree.tree:get_node()
-    if node and not node:has_children() then
-      local updated, refresh = tree:index_add_reset(self.repo, self.index, node)
-      if updated then
-        if refresh then
-          self:update()
-        end
-        self._updated = true
-        tree:render()
-      end
-    end
-  end
-  self.file_popup:map("n", "-", add_reset_fn, map_options)
-  self.file_popup:map("n", "<space>", add_reset_fn, map_options)
-
-  self.file_popup:map("n", "w",
-    function ()
-      if self.index:write() == 0 then
-        vim.notify("[Fugit2] Index saved", vim.log.levels.INFO)
       end
     end,
     map_options
@@ -1288,22 +1272,71 @@ function GitStatus:setup_handlers()
   end, map_options)
 
   -- Enter: collapse expand toggle, move to file buffer and diff
-  self.file_popup:map("n", "<cr>",
+  self.file_popup:map("n", "<cr>", function ()
+    local node = tree.tree:get_node()
+    if node and node:has_children() then
+      if node:is_expanded() then
+        node:collapse()
+      else
+        node:expand()
+      end
+      tree:render()
+    elseif states.diff_shown then
+      if states.diff_unstaged_shown then
+        self._diff_unstaged:focus()
+      elseif states.diff_staged_shown then
+        self._diff_staged:focus()
+      end
+    elseif node then
+      exit_fn()
+      vim.cmd.edit(vim.fn.fnameescape(node.id))
+    end
+  end, map_options)
+
+  -- Space/[-]: Add or remove index
+  local add_reset_fn = function()
+    local node, linenr = tree.tree:get_node()
+    if not node or node:has_children() then
+      return
+    end
+
+    local updated, refresh = tree:index_add_reset(self.repo, self.index, node)
+    if not updated then
+      return
+    end
+
+    if refresh then
+      self:update()
+    end
+    tree:render()
+
+    git.index_updated = true
+
+    node, linenr = tree.tree:get_node()
+    if node and linenr then
+      -- remove cached diff
+      git.staged_diff[node.id] = nil
+      git.unstaged_diff[node.id] = nil
+
+      if not states.diff_shown then
+        states.last_diff_line = 0 -- remove cache behaviors
+      else
+        states.diff_unstaged_shown, states.diff_staged_shown = self:update_diff(node)
+        if states.diff_unstaged_shown or states.diff_staged_shown then
+          self:show_diff(states.diff_unstaged_shown, states.diff_staged_shown)
+          states.last_diff_line = linenr
+        end
+      end
+    end
+  end
+  self.file_popup:map("n", "-", add_reset_fn, map_options)
+  self.file_popup:map("n", "<space>", add_reset_fn, map_options)
+
+  -- Write index
+  self.file_popup:map("n", "w",
     function ()
-      local node = tree.tree:get_node()
-      if node and node:has_children() then
-        if node:is_expanded() then
-          node:collapse()
-        else
-          node:expand()
-        end
-        tree:render()
-      elseif states.diff_shown then
-        if states.diff_unstaged_shown then
-          self._diff_unstaged:focus()
-        elseif states.diff_staged_shown then
-          self._diff_staged:focus()
-        end
+      if self.index:write() == 0 then
+        vim.notify("[Fugit2] Index saved", vim.log.levels.INFO)
       end
     end,
     map_options
