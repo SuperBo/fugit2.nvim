@@ -124,7 +124,6 @@ local function tree_node_data_from_item(item, bufs)
     rename = " -> " .. utils.make_relative_path(vim.fs.dirname(item.path), item.new_path)
     alt_path = item.new_path
   elseif item.renamed and item.worktree_status == git2.GIT_DELTA.UNMODIFIED then
-    print(vim.fs.dirname(item.new_path), item.path)
     rename = " <- " .. utils.make_relative_path(vim.fs.dirname(item.new_path), item.path)
     alt_path = item.path
   end
@@ -550,18 +549,14 @@ function GitStatus:init(ns_id, repo)
   self._tree = GitStatusTree(self.file_popup.bufnr, self.ns_id)
 
   -- setup layout
+  ---@type { [string]: NuiLayout.Box }
   self._boxes = {
     main = NuiLayout.Box({
         NuiLayout.Box(self.info_popup, { size = 6 }),
         NuiLayout.Box(self.file_popup, { grow = 1 }),
       }, { dir = "col" }
     ),
-    input = NuiLayout.Box({
-        NuiLayout.Box(self.info_popup, { size = 6 }),
-        NuiLayout.Box(self.input_popup, { size = 6 }),
-        NuiLayout.Box(self.file_popup, { grow = 1 }),
-      }, { dir = "col" }
-    ),
+    main_row = NuiLayout.Box(self.file_popup, { grow = 1 })
   }
   self._layout_opts = {
     main = {
@@ -751,7 +746,14 @@ end
 
 
 function GitStatus:focus_input()
-  self._layout:update(self._boxes.input)
+  self._layout:update(NuiLayout.Box(
+    {
+      NuiLayout.Box(self.info_popup, { size = 6 }),
+      NuiLayout.Box(self.input_popup, { size = 6 }),
+      NuiLayout.Box(self._boxes.main_row, { dir = "row", grow = 1 }),
+    },
+    { dir = "col" }
+  ))
   vim.api.nvim_set_current_win(self.input_popup.winid)
 end
 
@@ -759,15 +761,19 @@ function GitStatus:focus_file()
   vim.api.nvim_set_current_win(self.file_popup.winid)
 end
 
-
 function GitStatus:off_input()
   vim.api.nvim_buf_set_lines(
     self.input_popup.bufnr,
     0, -1, true, {}
   )
-  self._layout:update(self._boxes.main)
+  self._layout:update(NuiLayout.Box(
+    {
+      NuiLayout.Box(self.info_popup, { size = 6 }),
+      NuiLayout.Box(self._boxes.main_row, { dir = "row", grow = 1 }),
+    },
+    { dir = "col" }
+  ))
   vim.api.nvim_set_current_win(self.file_popup.winid)
-  vim.cmd.stopinsert()
 end
 
 function GitStatus:insert_head_message_to_input()
@@ -829,7 +835,6 @@ function GitStatus:commit_extend()
   local commit_id, err = self.repo:amend_extend(self.index)
   if commit_id then
     vim.notify("Extend HEAD " .. commit_id:tostring(8), vim.log.levels.INFO)
-    self:off_input()
     self:update()
     self:render()
   else
@@ -1054,50 +1059,6 @@ end
 function GitStatus:_init_diff_popups()
   self._diff_unstaged = PatchView(self.ns_id, "Unstaged")
   self._diff_staged = PatchView(self.ns_id, "Staged")
-
-  self._boxes.diff_unstaged = NuiLayout.Box(
-    {
-      NuiLayout.Box(self.info_popup, { size = 6 }),
-      NuiLayout.Box(
-        {
-          NuiLayout.Box(self.file_popup, { size = 60 }),
-          NuiLayout.Box(self._diff_unstaged.popup, { grow = 1 })
-        },
-        { dir = "row", grow = 1 }
-      ),
-    },
-    { dir = "col" }
-  )
-
-  self._boxes.diff_staged = NuiLayout.Box(
-    {
-      NuiLayout.Box(self.info_popup, { size = 6 }),
-      NuiLayout.Box(
-        {
-          NuiLayout.Box(self.file_popup, { size = 60 }),
-          NuiLayout.Box(self._diff_staged.popup, { grow = 1 })
-        },
-        { dir = "row", grow = 1 }
-      ),
-    },
-    { dir = "col" }
-  )
-
-  self._boxes.diff_unstaged_staged = NuiLayout.Box(
-    {
-      NuiLayout.Box(self.info_popup, { size = 6 }),
-      NuiLayout.Box(
-        {
-          NuiLayout.Box(self.file_popup, { size = 60 }),
-          NuiLayout.Box(self._diff_unstaged.popup, { grow = 1 }),
-          NuiLayout.Box(self._diff_staged.popup, { grow = 1 })
-        },
-        { dir = "row", grow = 1 }
-      ),
-    },
-    { dir = "col" }
-  )
-
   local opts = { noremap = true, nowait= true }
 
   local unstaged_exit_fn = function()
@@ -1121,22 +1082,54 @@ end
 ---@param unstaged boolean show unstaged diff
 ---@param staged boolean show staged diff
 function GitStatus:show_diff(unstaged, staged)
-  local box
-  if unstaged and staged then
-    box = self._boxes.diff_unstaged_staged
-  elseif unstaged then
-    box = self._boxes.diff_unstaged
-  elseif staged then
-    box = self._boxes.diff_staged
-  else
+  if not unstaged and not staged then
     return
   end
-  self._layout:update(self._layout_opts.diff, box)
+
+  local row
+  if unstaged and staged then
+    row = self._boxes.diff_unstaged_staged
+    if not row then
+      row = {
+        NuiLayout.Box(self.file_popup, { size = 60 }),
+        NuiLayout.Box(self._diff_unstaged.popup, { grow = 1 }),
+        NuiLayout.Box(self._diff_staged.popup, { grow = 1 })
+      }
+      self._boxes.diff_unstaged_staged = row
+    end
+  elseif unstaged then
+    row = self._boxes.diff_unstaged
+    if not row then
+      row = {
+        NuiLayout.Box(self.file_popup, { size = 60 }),
+        NuiLayout.Box(self._diff_unstaged.popup, { grow = 1 }),
+      }
+      self._boxes.diff_unstaged = row
+    end
+  else
+    if not row then
+      row = {
+        NuiLayout.Box(self.file_popup, { size = 60 }),
+        NuiLayout.Box(self._diff_staged.popup, { grow = 1 })
+      }
+      self._boxes.diff_staged = row
+    end
+  end
+
+  self._boxes.main_row = row
+  self._layout:update(self._layout_opts.diff, NuiLayout.Box(
+    {
+      NuiLayout.Box(self.info_popup, { size = 6 }),
+      NuiLayout.Box(row, { dir = "row", grow = 1 }),
+    },
+    { dir = "col" }
+  ))
   self._states.diff_shown = true
 end
 
 function GitStatus:hide_diff()
   self._layout:update(self._layout_opts.main, self._boxes.main)
+  self._main_row = NuiLayout.Box(self.file_popup, { grow = 1 })
   self._states.diff_shown = false
 end
 
@@ -1380,11 +1373,14 @@ function GitStatus:setup_handlers()
     self:off_input()
   end
 
-  self.input_popup:map("i", "<c-c>", input_quit_fn, map_options)
   self.input_popup:map("n", "q", input_quit_fn, map_options)
   self.input_popup:map("n", "<esc>", input_quit_fn, map_options)
+  self.input_popup:map("i", "<c-c>", function()
+    vim.cmd.stopinsert()
+    self:off_input()
+  end, map_options)
 
-  local input_enter_handler = function()
+  local input_enter_fn = function()
     local message = vim.trim(table.concat(
       vim.api.nvim_buf_get_lines(self.input_popup.bufnr, 0, -1, true),
       "\n"
@@ -1397,8 +1393,11 @@ function GitStatus:setup_handlers()
       self:commit_amend(message)
     end
   end
-  self.input_popup:map("n", "<cr>", input_enter_handler, map_options)
-  self.input_popup:map("i", "<c-cr>", input_enter_handler, map_options)
+  self.input_popup:map("n", "<cr>", input_enter_fn, map_options)
+  self.input_popup:map("i", "<c-cr>", function ()
+    vim.cmd.stopinsert()
+    input_enter_fn()
+  end, map_options)
 end
 
 
