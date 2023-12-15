@@ -10,6 +10,7 @@ ffi.cdef[[
   typedef int64_t git_off_t;
   typedef int64_t git_time_t;
 
+  typedef struct git_blob git_blob;
   typedef struct git_branch_iterator git_branch_iterator;
   typedef struct git_commit git_commit;
   typedef struct git_diff git_diff;
@@ -25,6 +26,7 @@ ffi.cdef[[
   typedef struct git_revwalk git_revwalk;
   typedef struct git_status_list git_status_list;
   typedef struct git_tree git_tree;
+  typedef struct git_tree_entry git_tree_entry;
 
   typedef struct git_strarray {
     char **strings;
@@ -177,6 +179,30 @@ ffi.cdef[[
 	  uint16_t         rename_threshold;
   } git_status_options;
 
+  typedef struct {
+    int32_t seconds;
+    /* nsec should not be stored as time_t compatible */
+    uint32_t nanoseconds;
+  } git_index_time;
+
+  typedef struct git_index_entry {
+    git_index_time ctime;
+    git_index_time mtime;
+
+    uint32_t dev;
+    uint32_t ino;
+    uint32_t mode;
+    uint32_t uid;
+    uint32_t gid;
+    uint32_t file_size;
+
+    git_oid id;
+
+    uint16_t flags;
+    uint16_t flags_extended;
+
+    const char *path;
+  } git_index_entry;
 
   int git_libgit2_init();
   int git_libgit2_shutdown();
@@ -185,6 +211,12 @@ ffi.cdef[[
 
   int git_buf_grow(git_buf *buffer, size_t target_size);
   void git_buf_dispose(git_buf *buffer);
+
+  int git_blob_lookup(git_blob **blob, git_repository *repo, const git_oid *id);
+  const void * git_blob_rawcontent(const git_blob *blob);
+  int git_blob_is_binary(const git_blob *blob);
+  git_object_size_t git_blob_rawsize(const git_blob *blob);
+  void git_blob_free(git_blob *blob);
 
   char * git_oid_tostr(char *out, size_t n, const git_oid *id);
 
@@ -304,6 +336,7 @@ ffi.cdef[[
   int git_index_remove_directory(git_index *index, const char *dir, int stage);
   size_t git_index_entrycount(const git_index *index);
   int git_index_has_conflicts(const git_index *index);
+  const git_index_entry * git_index_get_bypath(git_index *index, const char *path, int stage);
 
   int git_status_list_new(git_status_list **out, git_repository *repo, const git_status_options *opts);
   void git_status_list_free(git_status_list *statuslist);
@@ -314,6 +347,11 @@ ffi.cdef[[
 
   int git_tree_lookup(git_tree **out, git_repository *repo, const git_oid *id);
   void git_tree_free(git_tree *tree);
+  size_t git_tree_entrycount(const git_tree *tree);
+  int git_tree_entry_bypath(git_tree_entry **out, const git_tree *root, const char *path);
+
+  const git_oid * git_tree_entry_id(const git_tree_entry *entry);
+  void git_tree_entry_free(git_tree_entry *entry);
 
   int git_reset_default(git_repository *repo, const git_object *target, const git_strarray_readonly *pathspecs);
 
@@ -337,11 +375,47 @@ M.unsigned_int_array = ffi.typeof("unsigned int[?]")
 M.size_t_array = ffi.typeof("size_t[?]")
 
 
+---@type ffi.ctype* git_buf[1]
+M.git_buf = ffi.typeof("git_buf[1]")
+
+---@type ffi.ctype* git_oid[1]
+M.git_oid = ffi.typeof("git_oid[1]")
+
+---@type ffi.ctype* git_strarray_readonly[1]
+M.git_strarray_readonly = ffi.typeof("git_strarray_readonly[1]")
+
+---@type ffi.ctype* git_object **
+M.git_object_double_pointer = ffi.typeof("git_object*[1]")
+---@type ffi.ctype* git_object *
+M.git_object_pointer = ffi.typeof("git_object*")
+
+---@type ffi.ctype* git_commit **
+M.git_commit_double_pointer = ffi.typeof("git_commit*[1]")
+---@type ffi.ctype* git_commit *
+M.git_commit_pointer = ffi.typeof("git_commit*")
+
+---@type ffi.ctype* git_blob **
+M.git_blob_double_pointer = ffi.typeof("git_blob*[1]")
+---@type ffi.ctype* git_blob *
+M.git_blob_pointer = ffi.typeof("git_blob*")
+
+---@type ffi.ctype* git_tree **
+M.git_tree_double_pointer = ffi.typeof("git_tree*[1]")
+---@type ffi.ctype* git_tree *
+M.git_tree_pointer = ffi.typeof("git_tree*")
+
+---@type ffi.ctype* git_tree_entry **
+M.git_tree_entry_double_pointer = ffi.typeof("git_tree_entry*[1]")
+---@type ffi.ctype* git_tree_entry *
+M.git_tree_entry_pointer = ffi.typeof("git_tree_entry*")
+
 ---@type ffi.ctype* git_apply_options[1]
 M.git_apply_options = ffi.typeof("git_apply_options[1]")
 
----@type ffi.ctype* struct git_diff * [1]
+---@type ffi.ctype* struct git_diff **
 M.git_diff_double_pointer = ffi.typeof("git_diff*[1]")
+---@type ffi.ctype* struct git_diff *
+M.git_diff_pointer = ffi.typeof("git_diff*")
 
 ---@type ffi.ctype* struct git_diff_options [1]
 M.git_diff_options = ffi.typeof("git_diff_options[1]")
@@ -358,41 +432,37 @@ M.git_diff_line_double_pointer = ffi.typeof("const git_diff_line*[1]")
 ---@type ffi.ctype* struct git_diff_stats *[1]
 M.git_diff_stats_double_pointer = ffi.typeof("git_diff_stats*[1]")
 
----@type ffi.ctype* struct git_patch *out[1]
+---@type ffi.ctype* struct git_patch **
 M.git_patch_double_pointer = ffi.typeof("git_patch*[1]")
+---@type ffi.ctype* struct git_patch *
+M.git_patch_pointer = ffi.typeof("git_patch*")
 
----@type ffi.ctype* struct git_repository*[1]
+---@type ffi.ctype* struct git_repository**
 M.git_repository_double_pointer = ffi.typeof("git_repository*[1]")
-
 ---@type ffi.ctype* struct git_repository*
 M.git_repository_pointer = ffi.typeof("git_repository*")
 
 ---@type ffi.ctype* struct git_reference*[1]
 M.git_reference_double_pointer = ffi.typeof("git_reference*[1]")
 
----@type ffi.ctype* struct git_remote*[1]
-M.git_remote_double_pointer = ffi.typeof("git_remote*[1]")
+---@type ffi.ctype* struct git_reference*
+M.git_reference_pointer = ffi.typeof("git_reference*")
 
----@type ffi.ctype* struct git_revwalk*[1]
+---@type ffi.ctype* struct git_remote**
+M.git_remote_double_pointer = ffi.typeof("git_remote*[1]")
+---@type ffi.ctype* struct git_remote*
+M.git_remote_pointer = ffi.typeof("git_remote*")
+
+---@type ffi.ctype* struct git_revwalk**
 M.git_revwalk_double_pointer = ffi.typeof("git_revwalk*[1]")
 
----@type ffi.ctype* git_buf[1]
-M.git_buf = ffi.typeof("git_buf[1]")
+---@type ffi.ctype* struct git_revwalk*
+M.git_revwalk_pointer = ffi.typeof("git_revwalk*")
 
----@type ffi.ctype* git_oid[1]
-M.git_oid = ffi.typeof("git_oid[1]")
-
----@type ffi.ctype* git_commit*[1]
-M.git_commit_double_pointer = ffi.typeof("git_commit*[1]")
-
----@type ffi.ctype* git_commit*
-M.git_commit_pointer = ffi.typeof("git_commit*")
-
----@type ffi.ctype* git_object *[1]
-M.git_object_double_pointer = ffi.typeof("git_object*[1]")
-
----@type ffi.ctype* git_signature *[1]
+---@type ffi.ctype* git_signature **
 M.git_signature_double_pointer = ffi.typeof("git_signature*[1]")
+---@type ffi.ctype* git_signature *
+M.git_signature_pointer = ffi.typeof("git_signature*")
 
 ---@type ffi.ctype* git_status_options[1]
 M.git_status_options = ffi.typeof("git_status_options[1]")
@@ -400,18 +470,13 @@ M.git_status_options = ffi.typeof("git_status_options[1]")
 ---@type ffi.ctype* struct git_status_list*[1]
 M.git_status_list_double_pointer = ffi.typeof("git_status_list*[1]")
 
----@type ffi.ctype* git_index*[1]
+---@type ffi.ctype* git_index**
 M.git_index_double_pointer = ffi.typeof("git_index*[1]")
+---@type ffi.ctype* git_index*
+M.git_index_pointer = ffi.typeof("git_index*")
 
 ---@type ffi.ctype* struct git_branch_iterator *[1]
 M.git_branch_iterator_double_pointer = ffi.typeof("git_branch_iterator *[1]")
-
----@type ffi.ctype* git_strarray_readonly[1]
-M.git_strarray_readonly = ffi.typeof("git_strarray_readonly[1]")
-
----@type ffi.ctype* struct git_tree * [1]
-M.git_tree_double_pointer = ffi.typeof("git_tree*[1]")
-M.git_tree_pointer = ffi.typeof("git_tree*")
 
 
 -- ==========================
@@ -482,6 +547,15 @@ M.GIT_ERROR = {
   GIT_EAPPLYFAIL      = -35, -- Patch application failed
   GIT_EOWNER          = -36, -- The object is not owned by the current user
   GIT_TIMEOUT         = -37	 -- The operation timed out
+}
+
+---@enum GIT_INDEX_STAGE
+M.GIT_INDEX_STAGE = {
+  ANY      = -1,-- Match any index stage.
+  NORMAL   = 0, -- A normal staged file in the index.
+  ANCESTOR = 1, -- The ancestor side of a conflict.
+  OURS     = 2, -- The "ours" side of a conflict.
+  THEIRS   = 3, -- The "theirs" side of a conflict.
 }
 
 ---@enum GIT_REFERENCE
@@ -730,6 +804,7 @@ M.GIT_DIFF_LINE = {
 	HUNK_HDR      = 'H',
 	BINARY        = 'B'  -- For "Binary files x and y differ"
 }
+
 
 
 -- Inits helper
