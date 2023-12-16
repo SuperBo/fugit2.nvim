@@ -47,6 +47,7 @@ function Confirm:init(ns_id, msg_line)
       modifiable = true,
       readonly = true,
       swapfile = false,
+      buftype  = "nofile",
     },
   }
 

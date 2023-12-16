@@ -629,6 +629,7 @@ function GitGraph:setup_handlers()
 
   -- exit func
   local exit_fn = function()
+    self.repo:free_walker() -- free cached walker
     self._layout:unmount()
   end
   self.commit_popup:map("n", "q", exit_fn, map_options)

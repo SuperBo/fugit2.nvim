@@ -12,6 +12,7 @@ local WebDevIcons = require "nvim-web-devicons"
 
 local UI = require "fugit2.view.components.menus"
 local PatchView = require "fugit2.view.components.patch_view"
+local DiffView = require "fugit2.view.components.diff_view"
 local git2 = require "fugit2.git2"
 local utils = require "fugit2.utils"
 
@@ -368,6 +369,13 @@ local CommitMode = {
 -- | Main git status |
 -- ===================
 
+---@enum Fugit2GitStatusSidePanel
+local SidePanel = {
+  NONE       = 0,
+  PATCH_VIEW = 1,
+  DIFF_VIEW  = 2
+}
+
 
 ---@class Fugit2GitStatusView
 ---@field info_popup NuiPopup
@@ -380,8 +388,8 @@ local GitStatus = Object("Fugit2GitStatusView")
 ---Inits GitStatus.
 ---@param ns_id integer
 ---@param repo GitRepository
----param commit_menu Fugit2UIMenu
-function GitStatus:init(ns_id, repo)
+---@param last_window integer
+function GitStatus:init(ns_id, repo, last_window)
   self.ns_id = -1
   if ns_id then
     self.ns_id = ns_id
@@ -407,6 +415,7 @@ function GitStatus:init(ns_id, repo)
 
   -- setup popups
   self.info_popup = NuiPopup {
+    ns_id = ns_id,
     enter = false,
     focusable = true,
     border = {
@@ -429,9 +438,11 @@ function GitStatus:init(ns_id, repo)
       modifiable = true,
       readonly = false,
       swapfile = false,
+      buftype  = "nofile",
     },
   }
   self.file_popup = NuiPopup {
+    ns_id = ns_id,
     enter = true,
     focusable = true,
     zindex = 50,
@@ -459,10 +470,12 @@ function GitStatus:init(ns_id, repo)
       modifiable = true,
       readonly = false,
       swapfile = false,
+      buftype  = "nofile",
     },
   }
 
   self.input_popup = NuiPopup {
+    ns_id = ns_id,
     enter = false,
     focusable = true,
     border = {
@@ -489,6 +502,7 @@ function GitStatus:init(ns_id, repo)
   -- menus
   local menu_item_align = { text_align = "center" }
   local commit_menu = UI.Menu({
+    ns_id = ns_id,
     enter = true,
     position = "50%",
     relative = "editor",
@@ -589,6 +603,7 @@ function GitStatus:init(ns_id, repo)
   ---@field ahead integer
   ---@field behind integer
   ---@field index_updated boolean Whether git status is updated
+  ---@field head_tree GitTree
   ---@field unstaged_diff { [string]: GitPatch }
   ---@field staged_diff { [string]: GitPatch }
   self._git = {
@@ -598,13 +613,16 @@ function GitStatus:init(ns_id, repo)
   }
   -- state variables for UI
   ---@class Fugit2GitStatusInternal
+  ---@field last_window integer
   ---@field commit_mode NuiGitCommitMode
+  ---@field side_panel Fugit2GitStatusSidePanel
   ---@field last_patch_line integer
-  ---@field patch_shown boolean?
   ---@field patch_staged_shown boolean
   ---@field patch_unstaged_shown boolean
   self._states = {
-    commit_mode = CommitMode.COMMIT
+    last_window = last_window,
+    commit_mode = CommitMode.COMMIT,
+    side_panel  = SidePanel.NONE
   }
 
   -- keymaps
@@ -614,8 +632,81 @@ function GitStatus:init(ns_id, repo)
   self:update()
 end
 
+---Inits Diff View popup.
+function GitStatus:_init_diff_popups()
+  self._diff_head_buffer = vim.api.nvim_create_buf(false, true)
+  -- unstaged popup will use external buffer
+  self._diff_unstaged = DiffView(self.ns_id, "Unstaged", self._diff_head_buffer)
+  self._diff_staged = DiffView(self.ns_id, "Staged")
+end
 
--- Updates git status.
+---Inits Patch View popup
+function GitStatus:_init_patch_popups()
+  self._patch_unstaged = PatchView(self.ns_id, "Unstaged")
+  self._patch_staged = PatchView(self.ns_id, "Staged")
+  local opts = { noremap = true, nowait= true }
+
+  local exit_fn = function()
+    self:focus_file()
+    vim.fn.feedkeys("q")
+  end
+  self._patch_unstaged:map("n", { "q", "<esc" }, exit_fn, opts)
+  self._patch_staged:map("n", { "q", "<esc>" }, exit_fn, opts)
+
+  local states = self._states
+
+  -- [h]: move left
+  self._patch_unstaged:map("n", "h", function()
+    self:focus_file()
+  end, opts)
+  self._patch_staged:map("n", "h", function()
+    if states.patch_unstaged_shown then self._patch_unstaged:focus()
+    else
+      self:focus_file()
+    end
+  end, opts)
+
+  -- [l]: move right
+  self._patch_unstaged.popup:map("n", "l", function()
+    if states.patch_staged_shown then
+      self._patch_staged:focus()
+    else
+      vim.cmd("normal! l")
+    end
+  end, opts)
+
+  -- [=]: turn off
+  local turn_off_patch_fn = function()
+    self:focus_file()
+    vim.fn.feedkeys("=")
+  end
+  self._patch_staged:map("n", "=", turn_off_patch_fn, opts)
+  self._patch_unstaged:map("n", "=", turn_off_patch_fn, opts)
+
+  -- [-]: Stage handling
+  self._patch_unstaged.popup:map("n", "-", function()
+    local diff_str = self._patch_unstaged:get_partial_diff_hunk()
+    if not diff_str then
+      vim.notify("[Fugit2] Failed to get hunk", vim.log.levels.ERROR)
+      return
+    end
+
+    local diff, err = git2.Diff.from_buffer(diff_str)
+    if not diff then
+      vim.notify("[Fugit2] Failed to construct git2 diff, code " .. err, vim.log.levels.ERROR)
+      return
+    end
+
+    err = self.repo:apply_index(diff)
+    if err ~= 0 then
+      vim.notify("[Fugit2] Failed to apply diff, code " .. err, vim.log.levels.ERROR)
+      return
+    end
+  end, opts)
+end
+
+
+---Updates git status.
 function GitStatus:update()
   local git_status, git_error = git2.status(self.repo)
 
@@ -976,7 +1067,6 @@ function GitStatus:amend_confirm_yes_handler()
   end
 end
 
-
 ---@return NuiTree.Node?
 ---@return integer? linenr
 function GitStatus:get_child_node_linenr()
@@ -991,12 +1081,11 @@ function GitStatus:get_child_node_linenr()
   return node, linenr
 end
 
-
----Updates diff based on current node
+---Updates patch info based on node
 ---@param node NuiTree.Node
 ---@return boolean unstaged_updated
----@return boolean staged_udpated
-function GitStatus:update_diff(node)
+---@return boolean staged_updated
+function GitStatus:update_patch(node)
   local unstaged_updated, staged_updated = false, false
 
   -- init in the first update
@@ -1013,12 +1102,12 @@ function GitStatus:update_diff(node)
       diff, err = self.repo:diff_index_to_workdir(self.index, paths)
       if not diff then
         vim.notify("Failed to get unstaged diff " .. err, vim.logs.levels.ERROR)
-        goto git_status_update_diff_index
+        goto git_status_update_patch_index
       end
       patches, err = diff:patches(false)
       if #patches == 0 then
         vim.notify("Failed to get unstage patch " .. err, vim.logs.levels.ERROR)
-        goto git_status_update_diff_index
+        goto git_status_update_patch_index
       end
       self._git.unstaged_diff[node.id] = patches[1]
       found = patches[1]
@@ -1029,18 +1118,18 @@ function GitStatus:update_diff(node)
       unstaged_updated = true
     end
 
-    ::git_status_update_diff_index::
+    ::git_status_update_patch_index::
     found = self._git.staged_diff[node.id]
     if node.istatus ~= "-" and node.istatus ~= "?" and not found then
       diff, err = self.repo:diff_head_to_index(self.index, paths)
       if not diff then
         vim.notify("Failed to get unstaged diff " .. err, vim.logs.levels.ERROR)
-        goto git_status_update_diff_end
+        goto git_status_update_patch_end
       end
       patches, err = diff:patches(false)
       if #patches == 0 then
         vim.notify("Failed to get unstage patch " .. err, vim.logs.levels.ERROR)
-        goto git_status_update_diff_end
+        goto git_status_update_patch_end
       end
       self._git.staged_diff[node.id] = patches[1]
       found = patches[1]
@@ -1052,80 +1141,13 @@ function GitStatus:update_diff(node)
     end
   end
 
-  ::git_status_update_diff_end::
+  ::git_status_update_patch_end::
   return unstaged_updated, staged_updated
-end
-
-function GitStatus:_init_patch_popups()
-  self._patch_unstaged = PatchView(self.ns_id, "Unstaged")
-  self._patch_staged = PatchView(self.ns_id, "Staged")
-  local opts = { noremap = true, nowait= true }
-
-  local exit_fn = function()
-    self:focus_file()
-    vim.fn.feedkeys("q")
-  end
-
-  self._patch_unstaged.popup:map("n", "q", exit_fn, opts)
-  self._patch_unstaged.popup:map("n", "<esc>", exit_fn, opts)
-  self._patch_staged.popup:map("n", "q", exit_fn, opts)
-  self._patch_staged.popup:map("n", "<esc>", exit_fn, opts)
-
-  local states = self._states
-
-  -- [h]: move left
-  self._patch_unstaged.popup:map("n", "h", function()
-    self:focus_file()
-  end, opts)
-  self._patch_staged.popup:map("n", "h", function()
-    if states.patch_unstaged_shown then self._patch_unstaged:focus()
-    else
-      self:focus_file()
-    end
-  end, opts)
-
-  -- [l]: move right
-  self._patch_unstaged.popup:map("n", "l", function()
-    if states.patch_staged_shown then
-      self._patch_staged:focus()
-    else
-      vim.cmd("normal! l")
-    end
-  end, opts)
-
-  -- [=]: turn off
-  local turn_off_patch_fn = function()
-    self:focus_file()
-    vim.fn.feedkeys("=")
-  end
-  self._patch_staged.popup:map("n", "=", turn_off_patch_fn, opts)
-  self._patch_unstaged.popup:map("n", "=", turn_off_patch_fn, opts)
-
-  -- [-]: Stage handling
-  self._patch_unstaged.popup:map("n", "-", function()
-    local diff_str = self._patch_unstaged:get_partial_diff_hunk()
-    if not diff_str then
-      vim.notify("[Fugit2] Failed to get hunk", vim.log.levels.ERROR)
-      return
-    end
-
-    local diff, err = git2.Diff.from_buffer(diff_str)
-    if not diff then
-      vim.notify("[Fugit2] Failed to construct git2 diff, code " .. err, vim.log.levels.ERROR)
-      return
-    end
-
-    err = self.repo:apply_index(diff)
-    if err ~= 0 then
-      vim.notify("[Fugit2] Failed to apply diff, code " .. err, vim.log.levels.ERROR)
-      return
-    end
-  end, opts)
 end
 
 ---@param unstaged boolean show unstaged diff
 ---@param staged boolean show staged diff
-function GitStatus:show_diff(unstaged, staged)
+function GitStatus:show_patch_view(unstaged, staged)
   if not unstaged and not staged then
     return
   end
@@ -1134,29 +1156,27 @@ function GitStatus:show_diff(unstaged, staged)
   if unstaged and staged then
     row = self._boxes.patch_unstaged_staged
     if not row then
-      row = {
+      row = utils.update_table(self._boxes, "patch_unstaged_staged", {
         NuiLayout.Box(self.file_popup, { size = 60 }),
         NuiLayout.Box(self._patch_unstaged.popup, { grow = 1 }),
         NuiLayout.Box(self._patch_staged.popup, { grow = 1 })
-      }
-      self._boxes.patch_unstaged_staged = row
+      })
     end
   elseif unstaged then
     row = self._boxes.patch_unstaged
     if not row then
-      row = {
+      row = utils.update_table(self._boxes, "patch_unstaged", {
         NuiLayout.Box(self.file_popup, { size = 60 }),
         NuiLayout.Box(self._patch_unstaged.popup, { grow = 1 }),
-      }
-      self._boxes.patch_unstaged = row
+      })
     end
   else
+    row = self._boxes.patch_staged
     if not row then
-      row = {
+      row = utils.update_table(self._boxes, "patch_staged", {
         NuiLayout.Box(self.file_popup, { size = 60 }),
         NuiLayout.Box(self._patch_staged.popup, { grow = 1 })
-      }
-      self._boxes.patch_staged = row
+      })
     end
   end
 
@@ -1168,13 +1188,177 @@ function GitStatus:show_diff(unstaged, staged)
     },
     { dir = "col" }
   ))
-  self._states.patch_shown = true
+  self._states.side_panel = SidePanel.PATCH_VIEW
 end
 
-function GitStatus:hide_diff()
+function GitStatus:hide_patch_view()
   self._layout:update(self._layout_opts.main, self._boxes.main)
   self._main_row = NuiLayout.Box(self.file_popup, { grow = 1 })
-  self._states.patch_shown = false
+  self._states.side_panel = SidePanel.NONE
+end
+
+---Update diff view info based on node
+---@param node NuiTree.Node
+---@return boolean unstaged_updated
+---@return boolean staged_updated
+function GitStatus:update_diff_views(node)
+  -- init before update
+  if not self._diff_staged then
+    self:_init_diff_popups()
+  end
+
+  if not node.id then
+    return false, false
+  end
+
+  local blob, entry, err
+  local unstaged_updated, staged_updated = false, false
+
+  if node.wstatus ~= "-" then
+    unstaged_updated = true
+  end
+
+  -- file for staged
+  if node.istatus ~= "?" then
+    entry = self.index:get_bypath(node.id, git2.GIT_INDEX_STAGE.NORMAL)
+    if entry then
+      blob, err = self.repo:blob_lookup(entry.id)
+      if not blob then
+        vim.notify(
+          string.format("[Fugit2] Can't retrieve %s from index, code: %d", node.id, err),
+          vim.log.levels.ERROR
+        )
+        goto git_status_update_diff_views_head_file
+      end
+
+      staged_updated = true
+      vim.api.nvim_buf_set_lines(
+        self._diff_staged:bufnr(), 0, -1, true,
+        vim.split(blob:content(), "\n", { plain = true, trimempty = true })
+      )
+    end
+  end
+
+  -- file for head
+  ::git_status_update_diff_views_head_file::
+  if not self._git.head_tree then
+    local tree, err = self.repo:head_tree()
+    if err == git2.GIT_ERROR.GIT_EUNBORNBRANCH or err == git2.GIT_ERROR.GIT_ENOTFOUND then
+      vim.api.nvim_buf_set_lines(self._diff_head_buffer, 0, -1, true, {})
+      goto git_status_update_diff_views_end
+    end
+    if not tree then
+      vim.notify("[Fugit2] Can't get head tree, code " .. err, vim.log.levels.ERROR)
+      goto git_status_update_diff_views_end
+    end
+    self._git.head_tree = tree
+  end
+
+  entry, err = self._git.head_tree:entry_bypath(node.id)
+  if not entry then
+    vim.notify("[Fugit2] Can't find blob in HEAD, code " .. err, vim.log.levels.ERROR)
+    goto git_status_update_diff_views_end
+  end
+
+  blob, err = self.repo:blob_lookup(entry:id())
+  if not blob then
+    vim.notify("[Fugit2] Can't retrieve blob in HEAD, code " .. err, vim.log.levels.ERROR)
+    goto git_status_update_diff_views_end
+  end
+
+  vim.api.nvim_buf_set_lines(
+    self._diff_head_buffer, 0, -1, true,
+    vim.split(blob:content(), "\n", { plain = true, trimempty = true })
+  )
+
+  ::git_status_update_diff_views_end::
+  return unstaged_updated, staged_updated
+end
+
+---Show and setup diff view
+---@param unstaged boolean
+---@param staged boolean
+function GitStatus:show_diff_views(unstaged, staged)
+  if not unstaged and not staged then
+    return
+  end
+
+  local row
+  if unstaged and staged then
+    row = self._boxes.diff_unstaged_staged
+    if not row then
+      row = utils.update_table(self._boxes, "diff_unstaged_staged", {
+        NuiLayout.Box(self.file_popup, { size = 60 }),
+        NuiLayout.Box(self._diff_unstaged.popup, { grow = 1 }),
+        NuiLayout.Box(self._diff_staged.popup, { grow = 1 })
+      })
+    end
+  elseif unstaged then
+    row = self._boxes.diff_unstaged
+    if not row then
+      row = utils.update_table(self._boxes, "diff_unstaged", {
+        NuiLayout.Box(self.file_popup, { size = 60 }),
+        NuiLayout.Box(self._diff_unstaged.popup, { grow = 1 }),
+      })
+    end
+  else
+    row = self._boxes.diff_staged
+    if not row then
+      row = utils.update_table(self._boxes, "diff_staged", {
+        NuiLayout.Box(self.file_popup, { size = 60 }),
+        NuiLayout.Box(self._diff_staged.popup, { grow = 1 })
+      })
+    end
+  end
+
+  self._boxes.main_row = row
+  self._layout:update(self._layout_opts.diff, NuiLayout.Box(
+    {
+      NuiLayout.Box(self.info_popup, { size = 6 }),
+      NuiLayout.Box(row, { dir = "row", grow = 1 }),
+    },
+    { dir = "col" }
+  ))
+  self._states.side_panel = SidePanel.DIFF_VIEW
+end
+
+---@param file string
+function GitStatus:setup_diff_views(file)
+  -- update file for unstaged diff buffer
+  local file_bufnr
+  for _, bufnr in pairs(vim.api.nvim_list_bufs()) do
+    if vim.api.nvim_buf_is_loaded(bufnr)
+      and vim.api.nvim_buf_get_name(bufnr) == file
+    then
+      file_bufnr = bufnr
+      break
+    end
+  end
+
+  -- Unstaged File panel
+  vim.cmd.diffoff({ bang = true })
+  vim.api.nvim_set_current_win(self._diff_unstaged:winid())
+  if file_bufnr then
+    self._diff_unstaged:set_bufnr(file_bufnr)
+  else
+    vim.cmd.edit(vim.fn.fnameescape(file))
+    file_bufnr = vim.api.nvim_get_current_buf()
+  end
+  vim.cmd.diffthis()
+
+  -- Index file panel
+  vim.api.nvim_set_current_win(self._diff_staged.popup.winid)
+  vim.cmd.diffthis()
+
+  -- Head Scratch panel
+  vim.api.nvim_set_current_win(self._diff_unstaged:winid())
+  vim.api.nvim_set_current_buf(self._diff_head_buffer)
+  vim.cmd.diffthis()
+  vim.api.nvim_set_current_buf(file_bufnr)
+  self._diff_unstaged:set_bufnr(file_bufnr)
+  vim.fn.feedkeys("zM")
+  vim.fn.feedkeys("gg")
+
 end
 
 
@@ -1187,19 +1371,35 @@ function GitStatus:setup_handlers()
 
   local exit_fn = function()
     self:write_index()
-    if states.patch_shown then
+    if self._patch_unstaged then
       self._patch_unstaged:unmount()
+      self._patch_unstaged = nil
+    end
+    if self._patch_staged then
       self._patch_staged:unmount()
+      self._patch_staged = nil
+    end
+    if self._diff_unstaged then
+      self._diff_unstaged:unmount()
+      self._diff_unstaged = nil
+    end
+    if self._diff_staged then
+      self._diff_staged:unmount()
+      self._diff_staged = nil
+    end
+    if self._diff_head_buffer then
+      vim.cmd.bdelete(tostring(self._diff_head_buffer))
     end
     self._menus.amend_confirm:unmount()
     self._menus.commit:unmount()
     self._layout:unmount()
+
+    vim.api.nvim_set_current_win(states.last_window)
   end
 
   -- exit
-  self.file_popup:map("n", "q", exit_fn, map_options)
+  self.file_popup:map("n", {"q", "<esc>"}, exit_fn, map_options)
   self.file_popup:map("i", "q", exit_fn, map_options)
-  self.file_popup:map("n", "<esc>", exit_fn, map_options)
   -- popup:on(event.BufLeave, exit_fn)
 
   -- refresh
@@ -1246,7 +1446,7 @@ function GitStatus:setup_handlers()
       if node:expand() then
         tree:render()
       end
-      if not node:has_children() and states.patch_shown then
+      if not node:has_children() and states.side_panel == SidePanel.PATCH_VIEW then
         if states.patch_unstaged_shown then
           self._patch_unstaged:focus()
         elseif states.patch_staged_shown then
@@ -1279,36 +1479,37 @@ function GitStatus:setup_handlers()
   states.patch_unstaged_shown = false
 
   self.file_popup:on(event.CursorMoved, function()
-    if states.patch_shown then
+    if states.side_panel == SidePanel.PATCH_VIEW then
       local node, linenr = self:get_child_node_linenr()
       if node and linenr and linenr ~= states.last_patch_line then
-        states.patch_unstaged_shown, states.patch_staged_shown = self:update_diff(node)
+        states.patch_unstaged_shown, states.patch_staged_shown = self:update_patch(node)
         if states.patch_unstaged_shown or states.patch_staged_shown then
-          self:show_diff(states.patch_unstaged_shown, states.patch_staged_shown)
+          self:show_patch_view(states.patch_unstaged_shown, states.patch_staged_shown)
           states.last_patch_line = linenr
         end
       end
     end
   end)
 
+  ---- Turn on/off patch view
   self.file_popup:map("n", "=", function()
-    if states.patch_shown then
-      self:hide_diff()
-    else
+    if states.side_panel == SidePanel.PATCH_VIEW then
+      self:hide_patch_view()
+    elseif states.side_panel == SidePanel.NONE then
       local node, linenr = self:get_child_node_linenr()
       if node and linenr and linenr ~= states.last_patch_line then
-        states.patch_unstaged_shown, states.patch_staged_shown = self:update_diff(node)
+        states.patch_unstaged_shown, states.patch_staged_shown = self:update_patch(node)
         if states.patch_unstaged_shown or states.patch_staged_shown then
-          self:show_diff(states.patch_unstaged_shown, states.patch_staged_shown)
+          self:show_patch_view(states.patch_unstaged_shown, states.patch_staged_shown)
           states.last_patch_line = linenr
         end
       elseif linenr then
-        self:show_diff(states.patch_unstaged_shown, states.patch_staged_shown)
+        self:show_patch_view(states.patch_unstaged_shown, states.patch_staged_shown)
       end
     end
   end, map_options)
 
-  -- Enter: collapse expand toggle, move to file buffer and diff
+  ---- Enter: collapse expand toggle, move to file buffer and diff
   self.file_popup:map("n", "<cr>", function ()
     local node = tree.tree:get_node()
     if node and node:has_children() then
@@ -1330,7 +1531,7 @@ function GitStatus:setup_handlers()
     end
   end, map_options)
 
-  -- Space/[-]: Add or remove index
+  ---- Space/[-]: Add or remove index
   local add_reset_fn = function()
     local node, linenr = tree.tree:get_node()
     if not node or node:has_children() then
@@ -1355,21 +1556,20 @@ function GitStatus:setup_handlers()
       git.staged_diff[node.id] = nil
       git.unstaged_diff[node.id] = nil
 
-      if not states.patch_shown then
+      if states.side_panel == SidePanel.NONE then
         states.last_patch_line = -1 -- remove cache behaviors
-      else
-        states.patch_unstaged_shown, states.patch_staged_shown = self:update_diff(node)
+      elseif states.side_panel == SidePanel.PATCH_VIEW then
+        states.patch_unstaged_shown, states.patch_staged_shown = self:update_patch(node)
         if states.patch_unstaged_shown or states.patch_staged_shown then
-          self:show_diff(states.patch_unstaged_shown, states.patch_staged_shown)
+          self:show_patch_view(states.patch_unstaged_shown, states.patch_staged_shown)
           states.last_patch_line = linenr
         end
       end
     end
   end
-  self.file_popup:map("n", "-", add_reset_fn, map_options)
-  self.file_popup:map("n", "<space>", add_reset_fn, map_options)
+  self.file_popup:map("n", { "-", "<space>" }, add_reset_fn, map_options)
 
-  -- Write index
+  ---- Write index
   self.file_popup:map("n", "w",
     function ()
       if self.index:write() == 0 then
@@ -1379,7 +1579,30 @@ function GitStatus:setup_handlers()
     map_options
   )
 
-  -- Commit menu
+  -- Diff view
+
+  ---- turn on diffview
+  self.file_popup:map("n", "dd", function()
+    if states.side_panel == SidePanel.PATCH_VIEW then
+      self:hide_patch_view()
+    end
+
+    if states.side_panel == SidePanel.NONE then
+      local node, linenr = self:get_child_node_linenr()
+      if node and linenr then
+        local unstaged_show, staged_show = self:update_diff_views(node)
+        self:show_diff_views(true, true) -- show both panel
+        self:setup_diff_views(node.id)
+        -- self:show_diff_views(unstaged_show, staged_show)
+      end
+    end
+  end, map_options)
+
+  ---- turn off diffview
+  self.file_popup:map("n", "dq", function()
+  end, map_options)
+
+  ---- Commit menu
   local commit_commit_fn = self:commit_commit_handler()
   local commit_extend_fn = self:commit_extend_handler()
   local commit_reword_fn = self:commit_amend_handler(true)
@@ -1413,12 +1636,10 @@ function GitStatus:setup_handlers()
   self._menus.amend_confirm:on_yes(self:amend_confirm_yes_handler())
 
   -- Message input
-  local input_quit_fn = function()
+  self.input_popup:map("n", { "q", "<esc>" }, function()
     self:off_input()
-  end
+  end, map_options)
 
-  self.input_popup:map("n", "q", input_quit_fn, map_options)
-  self.input_popup:map("n", "<esc>", input_quit_fn, map_options)
   self.input_popup:map("i", "<c-c>", function()
     vim.cmd.stopinsert()
     self:off_input()

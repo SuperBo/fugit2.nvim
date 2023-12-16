@@ -12,7 +12,8 @@ local M = {}
 ---@param repo GitRepository
 ---@return Fugit2GitStatusView
 function M.new_fugit2_status_window(namespace, repo)
-  local status = GitStatus(namespace, repo)
+  local current_win = vim.api.nvim_get_current_win()
+  local status = GitStatus(namespace, repo, current_win)
   status:render()
   return status
 end

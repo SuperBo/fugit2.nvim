@@ -1,3 +1,5 @@
+-- Fugit2 Patch view pannel with git support
+
 local NuiPopup = require "nui.popup"
 local Object = require "nui.object"
 local event = require "nui.utils.autocmd".event
@@ -18,6 +20,7 @@ function PatchView:init(ns_id, title)
 
   -- popup
   self.popup = NuiPopup {
+    ns_id = ns_id,
     position = "50%",
     size = {
       width = 80,
@@ -37,6 +40,7 @@ function PatchView:init(ns_id, title)
       modifiable = false,
       readonly = true,
       filetype = "diff",
+      buftype = "nofile",
     },
     win_options = {
       winhighlight = "Normal:Normal,FloatBorder:FloatBorder",
@@ -131,6 +135,14 @@ end
 
 function PatchView:focus()
   vim.api.nvim_set_current_win(self.popup.winid)
+end
+
+---@param mode string
+---@param key string|string[]
+---@param fn fun()|string
+---@param opts table
+function PatchView:map(mode, key, fn, opts)
+  return self.popup:map(mode, key, fn, opts)
 end
 
 ---Gets current hunk based current cursor position

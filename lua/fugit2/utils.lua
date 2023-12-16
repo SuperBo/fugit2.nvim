@@ -315,6 +315,17 @@ function M.list_fill(lst, val, cols)
 end
 
 
+---@generic T
+---@param tbl table
+---@param key string
+---@param val T
+---@return T
+function M.update_table(tbl, key, val)
+  tbl[key] = val
+  return val
+end
+
+
 M.BitArray = BitArray
 
 
