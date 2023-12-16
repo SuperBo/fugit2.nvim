@@ -88,7 +88,7 @@ function PatchView:update(patch_item)
     self.popup.border:set_text(
       "top",
       NuiText(
-        string.format("<%s +%d -%d>", self.title, stats.insertions, stats.deletions ),
+        string.format(" %s +%d -%d ", self.title, stats.insertions, stats.deletions ),
         self.title_color
       ),
       "center"
