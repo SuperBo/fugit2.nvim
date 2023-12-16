@@ -1,5 +1,6 @@
 -- Fugit2 Patch view pannel with git support
 
+local NuiText = require "nui.text"
 local NuiPopup = require "nui.popup"
 local Object = require "nui.object"
 local event = require "nui.utils.autocmd".event
@@ -14,9 +15,11 @@ local PatchView = Object("Fugit2PatchView")
 
 ---@param ns_id integer
 ---@param title string
-function PatchView:init(ns_id, title)
+---@param title_color string
+function PatchView:init(ns_id, title, title_color)
   self.ns_id = ns_id
   self.title = title
+  self.title_color = title_color
 
   -- popup
   self.popup = NuiPopup {
@@ -84,8 +87,11 @@ function PatchView:update(patch_item)
   if stats then
     self.popup.border:set_text(
       "top",
-      self.title .. " +" .. stats.insertions .. " -" .. stats.deletions,
-      "left"
+      NuiText(
+        string.format("<%s +%d -%d>", self.title, stats.insertions, stats.deletions ),
+        self.title_color
+      ),
+      "center"
     )
   end
 

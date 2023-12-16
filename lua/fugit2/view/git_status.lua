@@ -476,7 +476,7 @@ function GitStatus:init(ns_id, repo, last_window)
 
   self.input_popup = NuiPopup {
     ns_id = ns_id,
-    enter = false,
+    enter = true,
     focusable = true,
     border = {
       style = "rounded",
@@ -642,8 +642,8 @@ end
 
 ---Inits Patch View popup
 function GitStatus:_init_patch_popups()
-  self._patch_unstaged = PatchView(self.ns_id, "Unstaged")
-  self._patch_staged = PatchView(self.ns_id, "Staged")
+  self._patch_unstaged = PatchView(self.ns_id, "Unstaged", "Fugit2Unstaged")
+  self._patch_staged = PatchView(self.ns_id, "Staged", "Fugit2Staged")
   local opts = { noremap = true, nowait= true }
 
   local exit_fn = function()
@@ -808,6 +808,18 @@ function GitStatus:update()
 
     -- update files tree
     self._tree:update(git_status.status)
+
+    -- clean cached diffs
+    if self._git.unstaged_diff then
+      for k, _ in pairs(self._git.unstaged_diff) do
+        self._git.unstaged_diff[k] = nil
+      end
+    end
+    if self._git.staged_diff then
+      for k, _ in pairs(self._git.staged_diff) do
+        self._git.staged_diff[k] = nil
+      end
+    end
   end
 end
 
@@ -852,18 +864,24 @@ function GitStatus:focus_file()
   vim.api.nvim_set_current_win(self.file_popup.winid)
 end
 
-function GitStatus:off_input()
+---@param back_to_main boolean
+function GitStatus:off_input(back_to_main)
   vim.api.nvim_buf_set_lines(
     self.input_popup.bufnr,
     0, -1, true, {}
   )
-  self._layout:update(NuiLayout.Box(
-    {
-      NuiLayout.Box(self.info_popup, { size = 6 }),
-      NuiLayout.Box(self._boxes.main_row, { dir = "row", grow = 1 }),
-    },
-    { dir = "col" }
-  ))
+  if back_to_main then
+    self._layout:update(self._layout_opts.main, self._boxes.main)
+  else
+    self._layout:update(NuiLayout.Box(
+      {
+        NuiLayout.Box(self.info_popup, { size = 6 }),
+        NuiLayout.Box(self._boxes.main_row, { dir = "row", grow = 1 }),
+      },
+      { dir = "col" }
+    ))
+  end
+
   vim.api.nvim_set_current_win(self.file_popup.winid)
 end
 
@@ -909,7 +927,7 @@ function GitStatus:commit(message)
     local commit_id, err = self.repo:commit(self.index, self.sign, prettified)
     if commit_id then
       vim.notify("New commit " .. commit_id:tostring(8), vim.log.levels.INFO)
-      self:off_input()
+      self:off_input(true)
       self:update()
       self:render()
     else
@@ -944,7 +962,7 @@ function GitStatus:commit_reword(message)
     local commit_id, err = self.repo:amend_reword(self.sign, prettified)
     if commit_id then
       vim.notify("Reword HEAD " .. commit_id:tostring(8), vim.log.levels.INFO)
-      self:off_input()
+      self:off_input(false)
       self:update()
       self:render()
     else
@@ -963,7 +981,7 @@ function GitStatus:commit_amend(message)
     local commit_id, err = self.repo:amend(self.index, self.sign, prettified)
     if commit_id then
       vim.notify("Amend HEAD " .. commit_id:tostring(8), vim.log.levels.INFO)
-      self:off_input()
+      self:off_input(true)
       self:update()
       self:render()
     else
@@ -1242,7 +1260,8 @@ function GitStatus:update_diff_views(node)
   -- file for head
   ::git_status_update_diff_views_head_file::
   if not self._git.head_tree then
-    local tree, err = self.repo:head_tree()
+    local tree
+    tree, err = self.repo:head_tree()
     if err == git2.GIT_ERROR.GIT_EUNBORNBRANCH or err == git2.GIT_ERROR.GIT_ENOTFOUND then
       vim.api.nvim_buf_set_lines(self._diff_head_buffer, 0, -1, true, {})
       goto git_status_update_diff_views_end
