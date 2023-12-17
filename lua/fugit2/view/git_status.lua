@@ -273,15 +273,17 @@ end
 -- Adds or unstage a node from index.
 ---@param repo GitRepository
 ---@param index GitIndex
+---@param add boolean enable add to index
+---@param reset boolean enable reset from index
 ---@param node NuiTree.Node
 ---@return boolean updated Tree is updated or not.
 ---@return boolean refresh Whether needed to do full refresh.
-function GitStatusTree:index_add_reset(repo, index, node)
+function GitStatusTree:index_add_reset(repo, index, add, reset, node)
   local ret
   local updated = false
   local inplace = true -- whether can update status inplace
 
-  if node.alt_path and (node.wstatus == "R" or node.wstatus == "M")  then
+  if add and node.alt_path and (node.wstatus == "R" or node.wstatus == "M")  then
     -- rename
     ret = index:add_bypath(node.alt_path)
     if ret ~= 0 then
@@ -295,7 +297,7 @@ function GitStatusTree:index_add_reset(repo, index, node)
 
     updated = true
     inplace = false -- requires full refresh
-  elseif node.wstatus == "?" or node.wstatus == "T" or node.wstatus == "M"  then
+  elseif add and node.wstatus == "?" or node.wstatus == "T" or node.wstatus == "M"  then
     -- add to index if worktree status is in (UNTRACKED, MODIFIED, TYPECHANGE)
     ret = index:add_bypath(node.id)
     if ret ~= 0 then
@@ -303,7 +305,7 @@ function GitStatusTree:index_add_reset(repo, index, node)
     end
 
     updated = true
-  elseif node.wstatus == "D" then
+  elseif add and node.wstatus == "D" then
     -- remove from index
     ret = index:remove_bypath(node.id)
     if ret ~= 0 then
@@ -311,7 +313,7 @@ function GitStatusTree:index_add_reset(repo, index, node)
     end
 
     updated = true
-  elseif node.alt_path and (node.istatus == "R" or node.istatus == "M") then
+  elseif reset and node.alt_path and (node.istatus == "R" or node.istatus == "M") then
     -- reset both path if rename in index
     ret = repo:reset_default({node.id, node.alt_path})
     if ret ~= 0 then
@@ -320,7 +322,7 @@ function GitStatusTree:index_add_reset(repo, index, node)
 
     updated = true
     inplace = false -- requires full refresh
-  elseif node.istatus ~= "-" and node.istatus ~= "?" then
+  elseif reset and node.istatus ~= "-" and node.istatus ~= "?" then
     -- else reset if index status is not in (UNCHANGED, UNTRACKED, RENAMED)
     ret = repo:reset_default({node.id})
     if ret ~= 0 then
@@ -676,7 +678,7 @@ function GitStatus:_init_patch_popups()
 
   local exit_fn = function()
     self:focus_file()
-    vim.fn.feedkeys("q")
+    vim.api.nvim_feedkeys("q", "m", true)
   end
   self._patch_unstaged:map("n", { "q", "<esc" }, exit_fn, opts)
   self._patch_staged:map("n", { "q", "<esc>" }, exit_fn, opts)
@@ -706,7 +708,7 @@ function GitStatus:_init_patch_popups()
   -- [=]: turn off
   local turn_off_patch_fn = function()
     self:focus_file()
-    vim.fn.feedkeys("=")
+    vim.api.nvim_feedkeys("=", "m", true)
   end
   self._patch_staged:map("n", "=", turn_off_patch_fn, opts)
   self._patch_unstaged:map("n", "=", turn_off_patch_fn, opts)
@@ -875,6 +877,50 @@ function GitStatus:write_index()
   end
 end
 
+---@param add boolean add to index enable
+---@param reset boolean reset from enable
+---@return fun()
+function GitStatus:index_add_reset_handler(add, reset)
+  local tree = self._tree
+  local git = self._git
+  local states = self._states
+
+  return function()
+    local node, linenr = tree.tree:get_node()
+    if not node or node:has_children() then
+      return
+    end
+
+    local updated, refresh = tree:index_add_reset(self.repo, self.index, add, reset, node)
+    if not updated then
+      return
+    end
+
+    if refresh then
+      self:update()
+    end
+    tree:render()
+
+    git.index_updated = true
+
+    node, linenr = tree.tree:get_node()
+    if node and linenr then
+      -- remove cached diff
+      git.staged_diff[node.id] = nil
+      git.unstaged_diff[node.id] = nil
+
+      if states.side_panel == SidePanel.NONE then
+        states.last_patch_line = -1 -- remove cache behaviors
+      elseif states.side_panel == SidePanel.PATCH_VIEW then
+        states.patch_unstaged_shown, states.patch_staged_shown = self:update_patch(node)
+        if states.patch_unstaged_shown or states.patch_staged_shown then
+          self:show_patch_view(states.patch_unstaged_shown, states.patch_staged_shown)
+          states.last_patch_line = linenr
+        end
+      end
+    end
+  end
+end
 
 function GitStatus:focus_input()
   self._layout:update(NuiLayout.Box(
@@ -1249,7 +1295,6 @@ function GitStatus:setup_handlers()
   local tree = self._tree
   local menus = self._menus
   local states = self._states
-  local git = self._git
 
   local exit_fn = function()
     self:write_index()
@@ -1274,13 +1319,10 @@ function GitStatus:setup_handlers()
   -- popup:on(event.BufLeave, exit_fn)
 
   -- refresh
-  self.file_popup:map("n", "r",
-    function ()
-      self:update()
-      tree:render()
-    end,
-    map_options
-  )
+  self.file_popup:map("n", "g", function ()
+    self:update()
+    tree:render()
+  end, map_options)
 
   -- collapse
   self.file_popup:map("n", "h",
@@ -1403,42 +1445,13 @@ function GitStatus:setup_handlers()
   end, map_options)
 
   ---- Space/[-]: Add or remove index
-  local add_reset_fn = function()
-    local node, linenr = tree.tree:get_node()
-    if not node or node:has_children() then
-      return
-    end
+  self.file_popup:map("n", { "-", "<space>" }, self:index_add_reset_handler(true, true), map_options)
 
-    local updated, refresh = tree:index_add_reset(self.repo, self.index, node)
-    if not updated then
-      return
-    end
+  ---- [s]: stage file
+  self.file_popup:map("n", "s", self:index_add_reset_handler(true, false), map_options)
 
-    if refresh then
-      self:update()
-    end
-    tree:render()
-
-    git.index_updated = true
-
-    node, linenr = tree.tree:get_node()
-    if node and linenr then
-      -- remove cached diff
-      git.staged_diff[node.id] = nil
-      git.unstaged_diff[node.id] = nil
-
-      if states.side_panel == SidePanel.NONE then
-        states.last_patch_line = -1 -- remove cache behaviors
-      elseif states.side_panel == SidePanel.PATCH_VIEW then
-        states.patch_unstaged_shown, states.patch_staged_shown = self:update_patch(node)
-        if states.patch_unstaged_shown or states.patch_staged_shown then
-          self:show_patch_view(states.patch_unstaged_shown, states.patch_staged_shown)
-          states.last_patch_line = linenr
-        end
-      end
-    end
-  end
-  self.file_popup:map("n", { "-", "<space>" }, add_reset_fn, map_options)
+  ---- [u]: unstage file
+  self.file_popup:map("n", "u", self:index_add_reset_handler(false, true), map_options)
 
   ---- Write index
   self.file_popup:map("n", "w",
@@ -1488,10 +1501,7 @@ function GitStatus:setup_handlers()
     self:off_input(false)
   end, map_options)
 
-  self.input_popup:map("i", "<c-c>", function()
-    vim.cmd.stopinsert()
-    self:off_input(false)
-  end, map_options)
+  self.input_popup:map("i", "<c-c>", "<esc>q", { nowait = true })
 
   local input_enter_fn = function()
     local message = vim.trim(table.concat(
@@ -1507,10 +1517,7 @@ function GitStatus:setup_handlers()
     end
   end
   self.input_popup:map("n", "<cr>", input_enter_fn, map_options)
-  self.input_popup:map("i", "<c-cr>", function ()
-    vim.cmd.stopinsert()
-    input_enter_fn()
-  end, map_options)
+  self.input_popup:map("i", "<c-cr>", "<esc><cr>", { nowait = true })
 
   -- Diff Menu
   self.file_popup:map("n", "d", function ()
