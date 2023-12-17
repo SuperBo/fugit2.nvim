@@ -144,6 +144,8 @@ local function tree_node_data_from_item(item, bufs)
   }
 end
 
+local FILE_ENTRY_PADDING = 45
+local FILE_WINDOW_WIDTH = 58
 
 ---@param node NuiTree.Node
 ---@return NuiLine
@@ -155,7 +157,7 @@ local function tree_prepare_node(node)
     line:append(node:is_expanded() and "  " or "  ", "Fugit2SymbolicRef")
     line:append(node.text)
   else
-    local format_str = "%s %-" .. (48 - node:get_depth() * 2) ..  "s"
+    local format_str = "%s %-" .. (FILE_ENTRY_PADDING - node:get_depth() * 2) ..  "s"
     line:append(string.format(format_str, node.icon, node.text), node.color)
 
     line:append(node.modified and "[+] " or "    ", node.color)
@@ -340,6 +342,21 @@ function GitStatusTree:index_add_reset(repo, index, node)
       node.color, node.stage_color, node.stage_icon = tree_node_colors(
         worktree_status, index_status, node.modified or false
       )
+
+      -- remove node
+      if node.wstatus == "-" and node.istatus == "-" then
+        local parent_id = node:get_parent_id()
+        self.tree:remove_node(node:get_id())
+        while parent_id ~= nil do
+          local n = self.tree:get_node(parent_id)
+          if n and not n:has_children() then
+            parent_id = n:get_parent_id()
+            self.tree:remove_node(n:get_id())
+          else
+            break
+          end
+        end
+      end
     end
   end
 
@@ -356,12 +373,19 @@ end
 -- |  Commit Message buffer |
 -- ==========================
 
----@enum NuiGitCommitMode
+---@enum Fugit2GitStatusCommitMode
 local CommitMode = {
   COMMIT = 1,
   REWORD = 2,
   EXTEND = 3,
   AMEND  = 4,
+}
+
+
+---@enum Fugit2GitStatusMenu
+local Menu = {
+  COMMIT = 1,
+  DIFF   = 2,
 }
 
 -- ===================
@@ -374,6 +398,7 @@ local SidePanel = {
   PATCH_VIEW = 1,
   DIFF_VIEW  = 2
 }
+
 
 
 ---@class Fugit2GitStatusView
@@ -456,7 +481,7 @@ function GitStatus:init(ns_id, repo, last_window)
       text = {
         top = " 󰙅 Files ",
         top_align = "left",
-        bottom = NuiText("[c]ommits", "FloatFooter"),
+        bottom = NuiText("[c]ommits [d]iff", "FloatFooter"),
         bottom_align = "right",
       },
     },
@@ -466,8 +491,8 @@ function GitStatus:init(ns_id, repo, last_window)
       cursorline = true,
     },
     buf_options = {
-      modifiable = true,
-      readonly = false,
+      modifiable = false,
+      readonly = true,
       swapfile = false,
       buftype  = "nofile",
     },
@@ -499,50 +524,14 @@ function GitStatus:init(ns_id, repo, last_window)
   }
 
   -- menus
-  local menu_item_align = { text_align = "center" }
-  local commit_menu = UI.Menu({
-    ns_id = ns_id,
-    enter = true,
-    position = "50%",
-    relative = "editor",
-    size = {
-      width = 36,
-      height = 8,
-    },
-    zindex = 52,
-    border = {
-      style = "single",
-      text = {
-        top = "Commit Menu",
-        top_align = "left",
-      },
-    },
-    win_options = {
-      winhighlight = "Normal:Normal,FloatBorder:Normal",
-    }
-  }, {
-    NuiMenu.separator(
-    NuiText("Create", "Fugit2MenuHead"),
-      menu_item_align
-    ),
-    NuiMenu.item(NuiLine({NuiText("c ", "Fugit2MenuKey"), NuiText("Commit")}), { id = "c" }),
-    NuiMenu.separator(
-      NuiLine { NuiText("Edit ", "Fugit2MenuHead"), NuiText("HEAD", "Fugit2Staged") },
-      menu_item_align
-    ),
-    NuiMenu.item(NuiLine { NuiText("e ", "Fugit2MenuKey"), NuiText("Extend") }, { id = "e" }),
-    NuiMenu.item(NuiLine { NuiText("w ", "Fugit2MenuKey"), NuiText("Reword") }, { id = "w" }),
-    NuiMenu.item(NuiLine { NuiText("a ", "Fugit2MenuKey"), NuiText("Amend") }, { id = "a" }),
-    NuiMenu.separator(
-      NuiText("View/Edit", "Fugit2MenuHead"),
-      menu_item_align
-    ),
-    NuiMenu.item(NuiLine { NuiText("g ", "Fugit2MenuKey"), NuiText("Graph") }, { id = "g" }),
-  })
   local amend_confirm = UI.Confirm(
     self.ns_id,
     NuiLine { NuiText("This commit has already been pushed to upstream, do you really want to modify it?") }
   )
+  self._menus = {
+    amend_confirm = amend_confirm,
+    commit        = self:_init_menus(Menu.COMMIT),
+  }
 
   -- setup others
 
@@ -574,7 +563,7 @@ function GitStatus:init(ns_id, repo, last_window)
   self._layout_opts = {
     main = {
       position = "50%",
-      size = { width = "60%", height = "60%" }
+      size = { width = 100, height = "60%" }
     },
     diff = {
       position = "50%",
@@ -582,20 +571,9 @@ function GitStatus:init(ns_id, repo, last_window)
     }
   }
   self._layout = NuiLayout(
-    {
-      relative = "editor",
-      position = "50%",
-      size = {
-        width = "60%",
-        height = "60%",
-      },
-    },
+    self._layout_opts.main,
     self._boxes.main
   )
-  self._menus = {
-    amend_confirm = amend_confirm,
-    commit = commit_menu
-  }
 
   ---@class Fugit2GitStatusGitStates
   ---@field head GitStatusHead?
@@ -613,7 +591,7 @@ function GitStatus:init(ns_id, repo, last_window)
   -- state variables for UI
   ---@class Fugit2GitStatusInternal
   ---@field last_window integer
-  ---@field commit_mode NuiGitCommitMode
+  ---@field commit_mode Fugit2GitStatusCommitMode
   ---@field side_panel Fugit2GitStatusSidePanel
   ---@field last_patch_line integer
   ---@field patch_staged_shown boolean
@@ -629,6 +607,65 @@ function GitStatus:init(ns_id, repo, last_window)
 
   -- get git content
   self:update()
+end
+
+
+---@param menu_type Fugit2GitStatusMenu menu to init
+---@return Fugit2UIMenu
+function GitStatus:_init_menus(menu_type)
+  local menu_items
+  local menu_item_align = { text_align = "center" }
+  local popup_opts = {
+    ns_id = self.ns_id,
+    enter = true,
+    position = "50%",
+    relative = "editor",
+    size = {
+      width = 36,
+      height = 8,
+    },
+    zindex = 52,
+    border = {
+      style = "single",
+      text = {
+        top = "",
+        top_align = "left",
+      },
+    },
+    win_options = {
+      winhighlight = "Normal:Normal,FloatBorder:Normal",
+    }
+  }
+
+  if menu_type == Menu.COMMIT then
+    popup_opts.border.text.top = "Committing"
+    menu_items = {
+      NuiMenu.separator(
+        NuiText("Create", "Fugit2MenuHead"),
+        menu_item_align
+      ),
+      NuiMenu.item(NuiLine({NuiText("c ", "Fugit2MenuKey"), NuiText("Commit")}), { id = "c" }),
+      NuiMenu.separator(
+        NuiLine { NuiText("Edit ", "Fugit2MenuHead"), NuiText("HEAD", "Fugit2Staged") },
+        menu_item_align
+      ),
+      NuiMenu.item(NuiLine { NuiText("e ", "Fugit2MenuKey"), NuiText("Extend") }, { id = "e" }),
+      NuiMenu.item(NuiLine { NuiText("w ", "Fugit2MenuKey"), NuiText("Reword") }, { id = "w" }),
+      NuiMenu.item(NuiLine { NuiText("a ", "Fugit2MenuKey"), NuiText("Amend") }, { id = "a" }),
+      NuiMenu.separator(
+        NuiText("View/Edit", "Fugit2MenuHead"),
+        menu_item_align
+      ),
+      NuiMenu.item(NuiLine { NuiText("g ", "Fugit2MenuKey"), NuiText("Graph") }, { id = "g" }),
+    }
+  elseif menu_type == Menu.DIFF then
+    popup_opts.border.text.top = "Diff"
+    menu_items = {
+      NuiMenu.item(NuiLine({NuiText("d ", "Fugit2MenuKey"), NuiText("Diffview")}), { id = "d" }),
+    }
+  end
+
+  return UI.Menu(popup_opts, menu_items)
 end
 
 ---Inits Patch View popup
@@ -1166,7 +1203,7 @@ function GitStatus:show_patch_view(unstaged, staged)
     row = self._boxes.patch_unstaged_staged
     if not row then
       row = utils.update_table(self._boxes, "patch_unstaged_staged", {
-        NuiLayout.Box(self.file_popup, { size = 60 }),
+        NuiLayout.Box(self.file_popup, { size = FILE_WINDOW_WIDTH }),
         NuiLayout.Box(self._patch_unstaged.popup, { grow = 1 }),
         NuiLayout.Box(self._patch_staged.popup, { grow = 1 })
       })
@@ -1175,7 +1212,7 @@ function GitStatus:show_patch_view(unstaged, staged)
     row = self._boxes.patch_unstaged
     if not row then
       row = utils.update_table(self._boxes, "patch_unstaged", {
-        NuiLayout.Box(self.file_popup, { size = 60 }),
+        NuiLayout.Box(self.file_popup, { size = FILE_WINDOW_WIDTH }),
         NuiLayout.Box(self._patch_unstaged.popup, { grow = 1 }),
       })
     end
@@ -1183,7 +1220,7 @@ function GitStatus:show_patch_view(unstaged, staged)
     row = self._boxes.patch_staged
     if not row then
       row = utils.update_table(self._boxes, "patch_staged", {
-        NuiLayout.Box(self.file_popup, { size = 60 }),
+        NuiLayout.Box(self.file_popup, { size = FILE_WINDOW_WIDTH }),
         NuiLayout.Box(self._patch_staged.popup, { grow = 1 })
       })
     end
@@ -1210,6 +1247,7 @@ end
 function GitStatus:setup_handlers()
   local map_options = { noremap = true, nowait = true }
   local tree = self._tree
+  local menus = self._menus
   local states = self._states
   local git = self._git
 
@@ -1306,7 +1344,7 @@ function GitStatus:setup_handlers()
     map_options
   )
 
-  -- Diff view & move cursor
+  -- Patch view & move cursor
   states.last_patch_line = -1
   states.patch_staged_shown = false
   states.patch_unstaged_shown = false
@@ -1412,30 +1450,7 @@ function GitStatus:setup_handlers()
     map_options
   )
 
-  -- Diff view
-
-  ---- turn on diffview
-  self.file_popup:map("n", { "dd", "dv" }, function()
-    -- if states.side_panel == SidePanel.PATCH_VIEW then
-    --   self:hide_patch_view()
-    -- end
-
-    if vim.fn.exists(":DiffviewOpen") > 0 then
-      exit_fn()
-      vim.cmd({ cmd = "DiffviewOpen" })
-    end
-
-  end, map_options)
-
-  ---- turn off diffview
-  self.file_popup:map("n", "dq", function()
-    if vim.fn.exists(":DiffviewClose") > 0 then
-      exit_fn()
-      vim.cmd({ cmd = "DiffviewClose" })
-    end
-  end, map_options)
-
-  ---- Commit menu
+  -- Commit Menu
   local commit_commit_fn = self:commit_commit_handler()
   local commit_extend_fn = self:commit_extend_handler()
   local commit_reword_fn = self:commit_amend_handler(true)
@@ -1495,6 +1510,24 @@ function GitStatus:setup_handlers()
   self.input_popup:map("i", "<c-cr>", function ()
     vim.cmd.stopinsert()
     input_enter_fn()
+  end, map_options)
+
+  -- Diff Menu
+  self.file_popup:map("n", "d", function ()
+    local m = menus.diff
+    if not m then
+      m = utils.update_table(menus, "diff", self:_init_menus(Menu.DIFF))
+      m:on_submit(function(item_id)
+        if item_id == "d" then
+          local node, _ = self:get_child_node_linenr()
+          if node and vim.fn.exists(":DiffviewOpen") > 0 then
+            exit_fn()
+            vim.cmd({ cmd = "DiffviewOpen", args = { "--selected-file=" .. vim.fn.fnameescape(node.id) } })
+          end
+        end
+      end)
+    end
+    m:mount()
   end, map_options)
 end
 
