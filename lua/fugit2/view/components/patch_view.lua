@@ -76,6 +76,10 @@ function PatchView:init(ns_id, title, title_color)
   -- self.popup:map("n", "L", self:expand_all_handler(), opts)
 end
 
+function PatchView:winid()
+  return self.popup.winid
+end
+
 ---Updates content with a given patch
 ---@param patch_item GitDiffPatchItem
 function PatchView:update(patch_item)

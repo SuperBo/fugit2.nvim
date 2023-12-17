@@ -221,6 +221,20 @@ function GitStatusTree:index_count()
   return files_change, files_remove
 end
 
+---@return NuiTree.Node?
+---@return integer? linenr
+function GitStatusTree:get_child_node_linenr()
+  local node, linenr, _ = self.tree:get_node() -- get current node
+
+  -- depth first search to get first child
+  while node and node:has_children() do
+    local children = node:get_child_ids()
+    node, linenr, _ = self.tree:get_node(children[1])
+  end
+
+  return node, linenr
+end
+
 
 ---@param status GitStatusItem[]
 function GitStatusTree:update(status)
@@ -334,35 +348,51 @@ function GitStatusTree:index_add_reset(repo, index, add, reset, node)
 
   -- inplace update
   if updated and inplace then
-    local worktree_status, index_status, err = repo:status_file(node.id)
-    if err ~= 0 then
-      -- try to do full refresh
+    if self:update_single_node(repo, node) ~= 0 then
+      -- try to do full refresh if update failed
       inplace = false
-    else
-      node.wstatus = git2.status_char_dash(worktree_status)
-      node.istatus = git2.status_char_dash(index_status)
-      node.color, node.stage_color, node.stage_icon = tree_node_colors(
-        worktree_status, index_status, node.modified or false
-      )
-
-      -- remove node
-      if node.wstatus == "-" and node.istatus == "-" then
-        local parent_id = node:get_parent_id()
-        self.tree:remove_node(node:get_id())
-        while parent_id ~= nil do
-          local n = self.tree:get_node(parent_id)
-          if n and not n:has_children() then
-            parent_id = n:get_parent_id()
-            self.tree:remove_node(n:get_id())
-          else
-            break
-          end
-        end
-      end
     end
   end
 
   return updated, not inplace
+end
+
+---Updates file node status info, usually called after stage/unstage
+---@param repo GitRepository
+---@param node NuiTree.Node
+---@return GIT_ERROR
+function GitStatusTree:update_single_node(repo, node)
+  if not node.id then
+    return 0
+  end
+
+  local worktree_status, index_status, err = repo:status_file(node.id)
+  if err ~= 0 then
+    return err
+  end
+
+  node.wstatus = git2.status_char_dash(worktree_status)
+  node.istatus = git2.status_char_dash(index_status)
+  node.color, node.stage_color, node.stage_icon = tree_node_colors(
+    worktree_status, index_status, node.modified or false
+  )
+
+  -- remove node when status == "--"
+  if node.wstatus == "-" and node.istatus == "-" then
+    local parent_id = node:get_parent_id()
+    self.tree:remove_node(node:get_id())
+    while parent_id ~= nil do
+      local n = self.tree:get_node(parent_id)
+      if n and not n:has_children() then
+        parent_id = n:get_parent_id()
+        self.tree:remove_node(n:get_id())
+      else
+        break
+      end
+    end
+  end
+
+  return 0
 end
 
 
@@ -672,24 +702,40 @@ end
 
 ---Inits Patch View popup
 function GitStatus:_init_patch_popups()
-  self._patch_unstaged = PatchView(self.ns_id, "Unstaged", "Fugit2Unstaged")
-  self._patch_staged = PatchView(self.ns_id, "Staged", "Fugit2Staged")
+  local patch_unstaged = PatchView(self.ns_id, "Unstaged", "Fugit2Unstaged")
+  local patch_staged = PatchView(self.ns_id, "Staged", "Fugit2Staged")
   local opts = { noremap = true, nowait= true }
+  local states = self._states
+  self._patch_unstaged = patch_unstaged
+  self._patch_staged = patch_staged
 
   local exit_fn = function()
     self:focus_file()
     vim.api.nvim_feedkeys("q", "m", true)
   end
-  self._patch_unstaged:map("n", { "q", "<esc" }, exit_fn, opts)
-  self._patch_staged:map("n", { "q", "<esc>" }, exit_fn, opts)
+  patch_unstaged:map("n", { "q", "<esc" }, exit_fn, opts)
+  patch_staged:map("n", { "q", "<esc>" }, exit_fn, opts)
 
-  local states = self._states
+  local commit_menu_fn = function()
+    self._menus.commit:mount()
+  end
+  patch_unstaged:map("n", "c", commit_menu_fn, opts)
+  patch_staged:map("n", "c", commit_menu_fn, opts)
+
+  local diff_menu_fn = function()
+    if not self._menus.diff then
+      self._menus.diff = self:_init_diff_menu()
+    end
+    self._menus.diff:mount()
+  end
+  patch_unstaged:map("n", "d", diff_menu_fn, opts)
+  patch_staged:map("n", "d", diff_menu_fn, opts)
 
   -- [h]: move left
-  self._patch_unstaged:map("n", "h", function()
+  patch_unstaged:map("n", "h", function()
     self:focus_file()
   end, opts)
-  self._patch_staged:map("n", "h", function()
+  patch_staged:map("n", "h", function()
     if states.patch_unstaged_shown then self._patch_unstaged:focus()
     else
       self:focus_file()
@@ -697,7 +743,7 @@ function GitStatus:_init_patch_popups()
   end, opts)
 
   -- [l]: move right
-  self._patch_unstaged.popup:map("n", "l", function()
+  patch_unstaged.popup:map("n", "l", function()
     if states.patch_staged_shown then
       self._patch_staged:focus()
     else
@@ -710,11 +756,11 @@ function GitStatus:_init_patch_popups()
     self:focus_file()
     vim.api.nvim_feedkeys("=", "m", true)
   end
-  self._patch_staged:map("n", "=", turn_off_patch_fn, opts)
-  self._patch_unstaged:map("n", "=", turn_off_patch_fn, opts)
+  patch_unstaged:map("n", "=", turn_off_patch_fn, opts)
+  patch_staged:map("n", "=", turn_off_patch_fn, opts)
 
-  -- [-]: Stage handling
-  self._patch_unstaged.popup:map("n", "-", function()
+  -- [-]/[s]: Stage handling
+  patch_unstaged.popup:map("n", { "-", "s" }, function()
     local diff_str = self._patch_unstaged:get_partial_diff_hunk()
     if not diff_str then
       vim.notify("[Fugit2] Failed to get hunk", vim.log.levels.ERROR)
@@ -731,6 +777,34 @@ function GitStatus:_init_patch_popups()
     if err ~= 0 then
       vim.notify("[Fugit2] Failed to apply diff, code " .. err, vim.log.levels.ERROR)
       return
+    end
+
+    -- update node status in file tree
+    local node, _ = self._tree:get_child_node_linenr()
+    if node then
+      local wstatus, istatus = node.wstatus, node.istatus
+      self._tree:update_single_node(self.repo, node)
+      if wstatus ~= node.wstatus or istatus ~= node.istatus then
+        self._tree:render()
+      end
+    end
+
+    -- invalidate cache
+    if node then
+      self._git.unstaged_diff[node.id] = nil
+      self._git.staged_diff[node.id] = nil
+      -- local unstaged_shown, staged_shown = states.patch_unstaged_shown, states.patch_staged_shown
+      states.patch_unstaged_shown, states.patch_staged_shown = self:update_patch(node)
+      if states.patch_unstaged_shown or states.patch_staged_shown then
+        self:show_patch_view(states.patch_unstaged_shown, states.patch_staged_shown)
+      end
+      if not states.patch_unstaged_shown and states.patch_staged_shown then
+        -- no more diff in unstaged
+        self._patch_staged:focus()
+      elseif not states.patch_staged_shown and not states.patch_staged_shown then
+        -- no more diff in both
+        vim.api.nvim_set_current_win(self.file_popup.winid)
+      end
     end
   end, opts)
 end
@@ -956,7 +1030,7 @@ function GitStatus:off_input(back_to_main)
     ))
   end
 
-  vim.api.nvim_set_current_win(self.file_popup.winid)
+  self:focus_file()
 end
 
 function GitStatus:insert_head_message_to_input()
@@ -991,7 +1065,7 @@ local function check_signature_message(signature, message)
 end
 
 
----Makes a commit
+---Creates a commit
 ---@param message string
 function GitStatus:commit(message)
   local prettified = check_signature_message(self.sign, message)
@@ -1159,20 +1233,6 @@ function GitStatus:amend_confirm_yes_handler()
   end
 end
 
----@return NuiTree.Node?
----@return integer? linenr
-function GitStatus:get_child_node_linenr()
-  local node, linenr, _ = self._tree.tree:get_node() -- get current node
-
-  -- depth first search to get first child
-  while node and node:has_children() do
-    local children = node:get_child_ids()
-    node, linenr, _ = self._tree.tree:get_node(children[1])
-  end
-
-  return node, linenr
-end
-
 ---Updates patch info based on node
 ---@param node NuiTree.Node
 ---@return boolean unstaged_updated
@@ -1193,12 +1253,12 @@ function GitStatus:update_patch(node)
     if node.wstatus ~= "-" and not found then
       diff, err = self.repo:diff_index_to_workdir(self.index, paths)
       if not diff then
-        vim.notify("Failed to get unstaged diff " .. err, vim.logs.levels.ERROR)
+        vim.notify("Failed to get unstaged diff " .. err, vim.log.levels.ERROR)
         goto git_status_update_patch_index
       end
       patches, err = diff:patches(false)
       if #patches == 0 then
-        vim.notify("Failed to get unstage patch " .. err, vim.logs.levels.ERROR)
+        vim.notify("Failed to get unstage patch " .. err, vim.log.levels.ERROR)
         goto git_status_update_patch_index
       end
       self._git.unstaged_diff[node.id] = patches[1]
@@ -1215,12 +1275,12 @@ function GitStatus:update_patch(node)
     if node.istatus ~= "-" and node.istatus ~= "?" and not found then
       diff, err = self.repo:diff_head_to_index(self.index, paths)
       if not diff then
-        vim.notify("Failed to get unstaged diff " .. err, vim.logs.levels.ERROR)
+        vim.notify("Failed to get unstaged diff " .. err, vim.log.levels.ERROR)
         goto git_status_update_patch_end
       end
       patches, err = diff:patches(false)
       if #patches == 0 then
-        vim.notify("Failed to get unstage patch " .. err, vim.logs.levels.ERROR)
+        vim.notify("Failed to get unstage patch " .. err, vim.log.levels.ERROR)
         goto git_status_update_patch_end
       end
       self._git.staged_diff[node.id] = patches[1]
@@ -1287,6 +1347,25 @@ function GitStatus:hide_patch_view()
   self._layout:update(self._layout_opts.main, self._boxes.main)
   self._main_row = NuiLayout.Box(self.file_popup, { grow = 1 })
   self._states.side_panel = SidePanel.NONE
+end
+
+-- GitStatus Diff Menu
+---@return Fugit2UIMenu
+function GitStatus:_init_diff_menu()
+  local m = self:_init_menus(Menu.DIFF)
+  m:on_submit(function(item_id)
+    if item_id == "d" then
+      local node, _ = self._tree:get_child_node_linenr()
+      if node and vim.fn.exists(":DiffviewOpen") > 0 then
+        self:focus_file()
+        vim.api.nvim_feedkeys("q", "m", true)
+        vim.defer_fn(function()
+          vim.cmd({ cmd = "DiffviewOpen", args = { "--selected-file=" .. vim.fn.fnameescape(node.id) } })
+        end, 100)
+      end
+    end
+  end)
+  return m
 end
 
 -- Setup keymap and event handlers
@@ -1393,7 +1472,7 @@ function GitStatus:setup_handlers()
 
   self.file_popup:on(event.CursorMoved, function()
     if states.side_panel == SidePanel.PATCH_VIEW then
-      local node, linenr = self:get_child_node_linenr()
+      local node, linenr = tree:get_child_node_linenr()
       if node and linenr and linenr ~= states.last_patch_line then
         states.patch_unstaged_shown, states.patch_staged_shown = self:update_patch(node)
         if states.patch_unstaged_shown or states.patch_staged_shown then
@@ -1409,7 +1488,7 @@ function GitStatus:setup_handlers()
     if states.side_panel == SidePanel.PATCH_VIEW then
       self:hide_patch_view()
     elseif states.side_panel == SidePanel.NONE then
-      local node, linenr = self:get_child_node_linenr()
+      local node, linenr = tree:get_child_node_linenr()
       if node and linenr and linenr ~= states.last_patch_line then
         states.patch_unstaged_shown, states.patch_staged_shown = self:update_patch(node)
         if states.patch_unstaged_shown or states.patch_staged_shown then
@@ -1501,6 +1580,7 @@ function GitStatus:setup_handlers()
     self:off_input(false)
   end, map_options)
 
+
   self.input_popup:map("i", "<c-c>", "<esc>q", { nowait = true })
 
   local input_enter_fn = function()
@@ -1521,20 +1601,10 @@ function GitStatus:setup_handlers()
 
   -- Diff Menu
   self.file_popup:map("n", "d", function ()
-    local m = menus.diff
-    if not m then
-      m = utils.update_table(menus, "diff", self:_init_menus(Menu.DIFF))
-      m:on_submit(function(item_id)
-        if item_id == "d" then
-          local node, _ = self:get_child_node_linenr()
-          if node and vim.fn.exists(":DiffviewOpen") > 0 then
-            exit_fn()
-            vim.cmd({ cmd = "DiffviewOpen", args = { "--selected-file=" .. vim.fn.fnameescape(node.id) } })
-          end
-        end
-      end)
+    if not menus.diff then
+      menus.diff = self:_init_diff_menu()
     end
-    m:mount()
+    menus.diff:mount()
   end, map_options)
 end
 
