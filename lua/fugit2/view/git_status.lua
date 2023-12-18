@@ -311,7 +311,7 @@ function GitStatusTree:index_add_reset(repo, index, add, reset, node)
 
     updated = true
     inplace = false -- requires full refresh
-  elseif add and node.wstatus == "?" or node.wstatus == "T" or node.wstatus == "M"  then
+  elseif add and (node.wstatus == "?" or node.wstatus == "T" or node.wstatus == "M") then
     -- add to index if worktree status is in (UNTRACKED, MODIFIED, TYPECHANGE)
     ret = index:add_bypath(node.id)
     if ret ~= 0 then

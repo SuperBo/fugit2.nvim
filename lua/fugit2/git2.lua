@@ -923,7 +923,7 @@ function Diff:patches(sort_case_sensitive)
       status    = delta.status,
       path      = ffi.string(delta.old_file.path),
       new_path  = ffi.string(delta.new_file.path),
-      num_hunks = tonumber(patch:nhunks()) or -1,
+      num_hunks = patch:nhunks(),
       patch     = patch
     }
 
@@ -993,7 +993,7 @@ end
 ---Gets the number of hunks in a patch
 ---@return integer
 function Patch:nhunks()
-  return libgit2.C.git_patch_num_hunks(self.patch)
+  return tonumber(libgit2.C.git_patch_num_hunks(self.patch)) or 0
 end
 
 ---@param idx integer Hunk index 0-based
@@ -1012,7 +1012,7 @@ function Patch:hunk(idx)
 
   ---@type GitDiffHunk
   local diff_hunk = {
-    num_lines = num_lines[0],
+    num_lines = tonumber(num_lines[0]) or 0,
     old_start = hunk[0].old_start,
     old_lines = hunk[0].old_lines,
     new_start = hunk[0].new_start,

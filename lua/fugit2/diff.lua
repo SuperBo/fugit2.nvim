@@ -76,15 +76,44 @@ function M.partial_patch_from_hunk(diff_header, hunk_header, hunk_lines)
   return table.concat(patch_lines, "\n")
 end
 
+---@param hunk_header string
+---@return string
+local function extract_hunk_header(hunk_header)
+  local _, header_end = hunk_header:find("@@.+@@", 1, false)
+  local header_text = ""
+  if header_end then
+    -- libgit2 header include newline
+    header_text = hunk_header:sub(header_end+1, -2)
+  end
+  return header_text
+end
+
+---Converts a hunk in a patch line to appliable single hunk.
+---@param hunk GitDiffHunk
+---@param hunk_lines string[]
+---@return string[]
+function M.partial_hunk(hunk, hunk_lines)
+  local header = string.format(
+    "@@ -%d,%d +%d,%d @@%s",
+    hunk.old_start, hunk.old_lines,
+    math.max(hunk.old_start, 1), hunk.new_lines,
+    extract_hunk_header(hunk.header)
+  )
+
+  local lines = { header }
+  vim.list_extend(lines, hunk_lines, 2, #hunk_lines)
+  return lines
+end
+
 ---@param hunk GitDiffHunk
 ---@param hunk_lines string[] hunk content, including signature in the first line
 ---@return string[]
 function M.reverse_hunk(hunk, hunk_lines)
   local reverse_header = string.format(
-    "@@ -%d,%d +%d,%d @@ %s",
+    "@@ -%d,%d +%d,%d @@%s",
     hunk.new_start, hunk.new_lines,
     hunk.old_start, hunk.old_lines,
-    hunk.header
+    extract_hunk_header(hunk.header)
   )
 
   local lines = { reverse_header }

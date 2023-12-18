@@ -5,6 +5,8 @@ local NuiPopup = require "nui.popup"
 local Object = require "nui.object"
 local event = require "nui.utils.autocmd".event
 
+local diff_utils = require "fugit2.diff"
+
 
 ---@class Fugit2PatchView
 ---@field ns_id integer namespace id
@@ -52,8 +54,12 @@ function PatchView:init(ns_id, title, title_color)
   }
 
   -- sub components
+  ---@type string[]
   self._header = {}
-  self._hunks = {}
+  ---@type integer[]
+  self._hunk_offsets = {}
+  ---@type GitDiffHunk[]
+  self._hunk_diffs = {}
 
   self.popup:on(event.BufEnter, function()
     -- to avoid conflict with vim-ufo
@@ -85,7 +91,7 @@ end
 function PatchView:update(patch_item)
   local patch = patch_item.patch
   local stats
-  local header, hunks = {}, { 1 }
+  local header, hunk_offsets, hunk_diffs = {}, { 1 }, {}
 
   stats, _ = patch:stats()
   if stats then
@@ -111,14 +117,20 @@ function PatchView:update(patch_item)
 
   local render_lines = vim.list_slice(lines, #header + 1)
 
-  local line_num = hunks[1]
-  local num_hunks = tonumber(patch:nhunks())
-  for i = 0,num_hunks-1 do
-    line_num = line_num + patch:hunk_num_lines(i) + 1
-    hunks[i+2] = line_num
+  local line_num = hunk_offsets[1]
+  for i = 0,patch_item.num_hunks-1 do
+    local diff_hunk, _ = patch:hunk(i)
+    if diff_hunk then
+      hunk_diffs[i+1] = diff_hunk
+      line_num = line_num + diff_hunk.num_lines + 1
+    end
+    hunk_offsets[i+2] = line_num
   end
 
-  self._header, self._hunks = header, hunks
+  self._header = header
+  self._hunk_offsets = hunk_offsets
+  self._hunk_diffs = hunk_diffs
+
   self:render(render_lines)
 end
 
@@ -161,20 +173,21 @@ end
 ---@return integer cursor_row
 ---@return integer cursor_col
 function PatchView:get_current_hunk()
+  local offsets = self._hunk_offsets
   local cursor = vim.api.nvim_win_get_cursor(self.popup.winid)
 
-  if cursor[1] < self._hunks[1] then
+  if cursor[1] < offsets[1] then
     return 0, 1, cursor[1], cursor[2]
   end
 
-  if #self._hunks > 8 then
+  if #offsets > 8 then
     -- do binary search
-    local start, stop  = 1, #self._hunks
+    local start, stop  = 1, #offsets
     local mid, hunk_offset
 
     while start < stop-1 do
       mid = math.floor((start + stop) / 2)
-      hunk_offset = self._hunks[mid]
+      hunk_offset = offsets[mid]
       if cursor[1] == hunk_offset then
         return mid, hunk_offset, cursor[1], cursor[2]
       elseif cursor[1] < hunk_offset then
@@ -183,12 +196,12 @@ function PatchView:get_current_hunk()
         start = mid
       end
     end
-    return start, self._hunks[start], cursor[1], cursor[2]
+    return start, offsets[start], cursor[1], cursor[2]
   else
     -- do linear search
-    for i, hunk_offset in ipairs(self._hunks) do
+    for i, hunk_offset in ipairs(offsets) do
       if cursor[1] < hunk_offset then
-        return i-1, self._hunks[i-1] or 1, cursor[1], cursor[2]
+        return i-1, offsets[i-1] or 1, cursor[1], cursor[2]
       elseif cursor[1] == hunk_offset then
         return i, hunk_offset, cursor[1], cursor[2]
       end
@@ -202,8 +215,8 @@ end
 function PatchView:next_hunk_handler()
   return function()
     local hunk_idx, _, _, col = self:get_current_hunk()
-    local new_row = self._hunks[hunk_idx+1]
-    if hunk_idx + 1 == #self._hunks then
+    local new_row = self._hunk_offsets[hunk_idx+1]
+    if hunk_idx + 1 == #self._hunk_offsets then
       new_row = new_row - 1
     end
     vim.api.nvim_win_set_cursor(self.popup.winid, { new_row, col })
@@ -219,7 +232,7 @@ function PatchView:prev_hunk_handler()
       if hunk_idx <= 1 then
         new_row = 1
       else
-        new_row = self._hunks[hunk_idx-1]
+        new_row = self._hunk_offsets[hunk_idx-1]
       end
     end
     vim.api.nvim_win_set_cursor(self.popup.winid, { new_row, col })
@@ -229,11 +242,33 @@ end
 ---@return string?
 function PatchView:get_partial_diff_hunk()
   local hunk_idx, _, _, _ = self:get_current_hunk()
-  if hunk_idx > 0 then
-    local hunk = vim.api.nvim_buf_get_lines(
-      self.popup.bufnr, self._hunks[hunk_idx] - 1, self._hunks[hunk_idx+1] - 1, true
+  if hunk_idx > 0 and hunk_idx < #self._hunk_offsets then
+    local hunk_lines = vim.api.nvim_buf_get_lines(
+      self.popup.bufnr,
+      self._hunk_offsets[hunk_idx] - 1, self._hunk_offsets[hunk_idx+1] - 1, true
     )
-    local diff_lines = vim.list_extend(vim.list_slice(self._header), hunk)
+    local hunk_diff = self._hunk_diffs[hunk_idx]
+    local partial_hunk = diff_utils.partial_hunk(hunk_diff, hunk_lines)
+
+    local diff_lines = vim.list_extend(
+      vim.list_slice(self._header), partial_hunk
+    )
+    return table.concat(diff_lines, "\n") .. "\n"
+  end
+end
+
+---@return string?
+function PatchView:get_partial_diff_hunk_reverse()
+  local hunk_idx, _, _, _ = self:get_current_hunk()
+  if hunk_idx > 0 and hunk_idx < #self._hunk_offsets then
+    local hunk_lines = vim.api.nvim_buf_get_lines(
+      self.popup.bufnr,
+      self._hunk_offsets[hunk_idx] - 1, self._hunk_offsets[hunk_idx+1] - 1, true
+    )
+    local hunk_diff = self._hunk_diffs[hunk_idx]
+    local hunk_reversed = diff_utils.reverse_hunk(hunk_diff, hunk_lines)
+
+    local diff_lines = vim.list_extend(vim.list_slice(self._header), hunk_reversed)
     return table.concat(diff_lines, "\n") .. "\n"
   end
 end

@@ -149,6 +149,66 @@ index fd118ca..0167db3 100644
   end)
 end)
 
+describe("partial_hunk", function()
+  it("extracts partial_hunk", function()
+    local hunk = {
+      old_start = 219,
+      old_lines = 7,
+      new_start = 232,
+      new_lines = 7,
+      header = "@@ -219,7 +232,7 @@ function PatchView:prev_hunk_handler()\n"
+    }
+    local hunk_lines = vim.split([[
+@@ -219,7 +232,7 @@ function PatchView:prev_hunk_handler()
+       if hunk_idx <= 1 then
+         new_row = 1
+       else
+-        new_row = self._hunks[hunk_idx-1]
++        new_row = self._hunk_offsets[hunk_idx-1]
+       end
+     end
+     vim.api.nvim_win_set_cursor(self.popup.winid, { new_row, col })]],
+      "\n", { plain = true, trimempty = true }
+    )
+
+    local partial = diff.partial_hunk(hunk, hunk_lines)
+
+    assert.array(partial).has.no.holes()
+    assert.equals(#hunk_lines, #partial)
+    assert.equals("@@ -219,7 +219,7 @@ function PatchView:prev_hunk_handler()", partial[1])
+    assert.equals("       if hunk_idx <= 1 then", partial[2])
+  end)
+
+  it("extracts untracked hunk", function()
+    local hunk = {
+      old_start = 0,
+      old_lines = 0,
+      new_start = 1,
+      new_lines = 10,
+      header    = "@@ -0,0 +1,10 @@\n"
+    }
+    local hunk_lines = vim.split([[
+@@ -0,0 +1,10 @@
++{
++    "workspace.library": [
++        "/Users/a/",
++        "/opt/a/",
++        "/Users/",
++        "${3rd}/luv/library",
++        "/nui.nvim/lua"
++    ],
++    "workspace.checkThirdParty": false
++}
+    ]], "\n", { plain = true, trimempty = true })
+
+    local partial = diff.partial_hunk(hunk, hunk_lines)
+
+    assert.array(partial).has.no.holes()
+    assert.equals(#hunk_lines, #partial)
+    assert.equals("@@ -0,0 +1,10 @@", partial[1])
+  end)
+end)
+
 describe("reverse_hunk", function()
   it("reverses hunk", function()
     local hunk = {
@@ -156,16 +216,18 @@ describe("reverse_hunk", function()
       old_lines = 5,
       new_start = 2,
       new_lines = 5,
-      header = "test_header"
+      header = "@@ -1,5 +2,5 @@ test_header" .. "\n"
     }
-    local hunk_lines = vim.split(vim.trim([[
+    local hunk_lines = vim.split([[
 @@ -1,5 +2,5 @@ test_header
  This is line i
  This is line i
 -This is line 2
  This is line i
  This is line i
-+This is line i]]), "\n", { plain = true, trimempty = true })
++This is line i]],
+      "\n", { plain = true, trimempty = true }
+    )
 
     local reversed = diff.reverse_hunk(hunk, hunk_lines)
 
