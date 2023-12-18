@@ -76,5 +76,32 @@ function M.partial_patch_from_hunk(diff_header, hunk_header, hunk_lines)
   return table.concat(patch_lines, "\n")
 end
 
+---@param hunk GitDiffHunk
+---@param hunk_lines string[] hunk content, including signature in the first line
+---@return string[]
+function M.reverse_hunk(hunk, hunk_lines)
+  local reverse_header = string.format(
+    "@@ -%d,%d +%d,%d @@ %s",
+    hunk.new_start, hunk.new_lines,
+    hunk.old_start, hunk.old_lines,
+    hunk.header
+  )
+
+  local lines = { reverse_header }
+  for i=2,#hunk_lines do
+    local line = hunk_lines[i]
+    local char = line:sub(1, 1)
+    if char == "+" then
+      lines[i] = "-" .. line:sub(2, -1)
+    elseif char == "-" then
+      lines[i] = "+" .. line:sub(2, -1)
+    else
+      lines[i] = line
+    end
+  end
+
+  return lines
+end
+
 
 return M

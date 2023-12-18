@@ -146,6 +146,33 @@ index fd118ca..0167db3 100644
     assert.equals(0, err)
     assert.is_not_nil(diff)
     assert.is_not_nil(diff.diff)
-    assert.is_not_nil(diff.diff[0])
+  end)
+end)
+
+describe("reverse_hunk", function()
+  it("reverses hunk", function()
+    local hunk = {
+      old_start = 1,
+      old_lines = 5,
+      new_start = 2,
+      new_lines = 5,
+      header = "test_header"
+    }
+    local hunk_lines = vim.split(vim.trim([[
+@@ -1,5 +2,5 @@ test_header
+ This is line i
+ This is line i
+-This is line 2
+ This is line i
+ This is line i
++This is line i]]), "\n", { plain = true, trimempty = true })
+
+    local reversed = diff.reverse_hunk(hunk, hunk_lines)
+
+    assert.array(reversed).has.no.holes()
+    assert.equals("@@ -2,5 +1,5 @@ test_header", reversed[1])
+    assert.equals(" This is line i", reversed[2])
+    assert.equals("+This is line 2", reversed[4])
+    assert.equals("-This is line i", reversed[7])
   end)
 end)

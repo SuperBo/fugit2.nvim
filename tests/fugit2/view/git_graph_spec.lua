@@ -1,11 +1,11 @@
 local context = require "plenary.context_manager"
 
-local Graph = require "fugit2.view.nui_git_graph"
+local Graph = require "fugit2.view.git_graph"
 local CommitNode = Graph.CommitNode
 
 ---@param path string
 ---@param read_output boolean Read expected output or not
----@return NuiGitGraphCommitNode[]
+---@return Fugit2GitGraphCommitNode[]
 ---@return string[]
 local function read_graph_file(path, read_output)
   local nodes = {}
