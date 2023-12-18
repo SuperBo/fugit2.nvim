@@ -232,9 +232,39 @@ describe("reverse_hunk", function()
     local reversed = diff.reverse_hunk(hunk, hunk_lines)
 
     assert.array(reversed).has.no.holes()
-    assert.equals("@@ -2,5 +1,5 @@ test_header", reversed[1])
+    assert.equals("@@ -2,5 +2,5 @@ test_header", reversed[1])
     assert.equals(" This is line i", reversed[2])
     assert.equals("+This is line 2", reversed[4])
     assert.equals("-This is line i", reversed[7])
+  end)
+
+  it("reverses untracked hunk", function()
+    local hunk = {
+      old_start = 0,
+      old_lines = 0,
+      new_start = 1,
+      new_lines = 10,
+      header    = "@@ -0,0 +1,10 @@\n"
+    }
+    local hunk_lines = vim.split([[
+@@ -0,0 +1,10 @@
++{
++    "workspace.library": [
++        "/Users/a/",
++        "/opt/a/",
++        "/Users/",
++        "${3rd}/luv/library",
++        "/nui.nvim/lua"
++    ],
++    "workspace.checkThirdParty": false
++}
+    ]], "\n", { plain = true, trimempty = true })
+
+    local reversed = diff.reverse_hunk(hunk, hunk_lines)
+
+    assert.array(reversed).has.no.holes()
+    assert.equals(#hunk_lines, #reversed)
+    assert.equals("@@ -1,10 +0,0 @@", reversed[1])
+
   end)
 end)

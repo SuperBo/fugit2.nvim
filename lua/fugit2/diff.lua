@@ -112,7 +112,7 @@ function M.reverse_hunk(hunk, hunk_lines)
   local reverse_header = string.format(
     "@@ -%d,%d +%d,%d @@%s",
     hunk.new_start, hunk.new_lines,
-    hunk.old_start, hunk.old_lines,
+    hunk.old_start > 0 and hunk.new_start or 0, hunk.old_lines,
     extract_hunk_header(hunk.header)
   )
 

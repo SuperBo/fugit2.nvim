@@ -759,54 +759,88 @@ function GitStatus:_init_patch_popups()
   patch_unstaged:map("n", "=", turn_off_patch_fn, opts)
   patch_staged:map("n", "=", turn_off_patch_fn, opts)
 
+  local diff_apply_fn = function(diff_str)
+    local diff, err = git2.Diff.from_buffer(diff_str)
+    if not diff then
+      vim.notify("[Fugit2] Failed to construct git2 diff, code " .. err, vim.log.levels.ERROR)
+      return -1
+    end
+
+    err = self.repo:apply_index(diff)
+    if err ~= 0 then
+      vim.notify("[Fugit2] Failed to apply partial diff, code " .. err, vim.log.levels.ERROR)
+      return err
+    end
+    return 0
+  end
+
+  local diff_update_fn = function(node)
+    -- update node status in file tree
+    local wstatus, istatus = node.wstatus, node.istatus
+    self._tree:update_single_node(self.repo, node)
+    if wstatus ~= node.wstatus or istatus ~= node.istatus then
+      self._tree:render()
+    end
+
+    -- invalidate cache
+    self._git.unstaged_diff[node.id] = nil
+    self._git.staged_diff[node.id] = nil
+    -- local unstaged_shown, staged_shown = states.patch_unstaged_shown, states.patch_staged_shown
+    states.patch_unstaged_shown, states.patch_staged_shown = self:update_patch(node)
+    if states.patch_unstaged_shown or states.patch_staged_shown then
+      self:show_patch_view(states.patch_unstaged_shown, states.patch_staged_shown)
+    end
+    if not states.patch_unstaged_shown and not states.patch_staged_shown then
+      -- no more diff in both
+      self:focus_file()
+    elseif not states.patch_unstaged_shown and states.patch_staged_shown then
+      -- no more diff in unstaged
+      self._patch_staged:focus()
+    elseif states.patch_unstaged_shown and not states.patch_staged_shown then
+      -- no more diff in staged
+      self._patch_unstaged:focus()
+    end
+  end
+
   -- [-]/[s]: Stage handling
-  patch_unstaged.popup:map("n", { "-", "s" }, function()
+  patch_unstaged:map("n", { "-", "s" }, function()
     local diff_str = self._patch_unstaged:get_partial_diff_hunk()
     if not diff_str then
       vim.notify("[Fugit2] Failed to get hunk", vim.log.levels.ERROR)
       return
     end
 
-    local diff, err = git2.Diff.from_buffer(diff_str)
-    if not diff then
-      vim.notify("[Fugit2] Failed to construct git2 diff, code " .. err, vim.log.levels.ERROR)
-      return
-    end
-
-    err = self.repo:apply_index(diff)
-    if err ~= 0 then
-      vim.notify("[Fugit2] Failed to apply diff, code " .. err, vim.log.levels.ERROR)
-      return
-    end
-
-    -- update node status in file tree
-    local node, _ = self._tree:get_child_node_linenr()
-    if node then
-      local wstatus, istatus = node.wstatus, node.istatus
-      self._tree:update_single_node(self.repo, node)
-      if wstatus ~= node.wstatus or istatus ~= node.istatus then
-        self._tree:render()
-      end
-    end
-
-    -- invalidate cache
-    if node then
-      self._git.unstaged_diff[node.id] = nil
-      self._git.staged_diff[node.id] = nil
-      -- local unstaged_shown, staged_shown = states.patch_unstaged_shown, states.patch_staged_shown
-      states.patch_unstaged_shown, states.patch_staged_shown = self:update_patch(node)
-      if states.patch_unstaged_shown or states.patch_staged_shown then
-        self:show_patch_view(states.patch_unstaged_shown, states.patch_staged_shown)
-      end
-      if not states.patch_unstaged_shown and states.patch_staged_shown then
-        -- no more diff in unstaged
-        self._patch_staged:focus()
-      elseif not states.patch_staged_shown and not states.patch_staged_shown then
-        -- no more diff in both
-        vim.api.nvim_set_current_win(self.file_popup.winid)
+    if diff_apply_fn(diff_str) == 0 then
+      local node, _ = self._tree:get_child_node_linenr()
+      if node then
+        diff_update_fn(node)
       end
     end
   end, opts)
+
+  -- [-]/[u]: Unstage handling
+  patch_staged:map("n", { "-", "u" }, function()
+    local node, _ = self._tree:get_child_node_linenr()
+    if not node then
+      return
+    end
+
+    local err = 0
+    if node.istatus == "A" then
+      err = self.repo:reset_default({ node.id })
+    else
+      local diff_str = self._patch_staged:get_partial_diff_hunk_reverse()
+      if not diff_str then
+        vim.notify("[Fugit2] Failed to get revere hunk", vim.log.levels.ERROR)
+        return
+      end
+      err = diff_apply_fn(diff_str)
+    end
+
+    if err == 0 then
+      diff_update_fn(node)
+    end
+  end)
 end
 
 
