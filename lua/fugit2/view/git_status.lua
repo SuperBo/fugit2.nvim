@@ -913,10 +913,10 @@ function GitStatus:update()
     if ahead_behind == 0 then
       head_line:append(
         string.format(branch_format, head_icon, git_status.head.name),
-        "Fugit2SymbolicRef"
+        "Fugit2BranchHead"
       )
     else
-      head_line:append(head_icon .. git_status.head.name, "Fugit2SymbolicRef")
+      head_line:append(head_icon .. git_status.head.name, "Fugit2BranchHead")
       local padding = (
         branch_width
         - git_status.head.name:len()
@@ -950,7 +950,7 @@ function GitStatus:update()
 
       local upstream_name = string.format(branch_format, remote_icon, git_status.upstream.name)
       if git_status.upstream.ahead > 0 or git_status.upstream.behind > 0 then
-        upstream_line:append(upstream_name, "Fugit2SymbolicRef")
+        upstream_line:append(upstream_name, "Fugit2Heading")
       else
         upstream_line:append(upstream_name, "Fugit2Staged")
       end
