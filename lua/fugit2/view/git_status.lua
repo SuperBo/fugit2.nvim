@@ -806,7 +806,7 @@ function GitStatus:_init_patch_popups()
 
   -- [-]/[s]: Stage handling
   patch_unstaged:map("n", { "-", "s" }, function()
-    local diff_str = self._patch_unstaged:get_partial_diff_hunk()
+    local diff_str = patch_unstaged:get_diff_hunk()
     if not diff_str then
       vim.notify("[Fugit2] Failed to get hunk", vim.log.levels.ERROR)
       return
@@ -831,7 +831,7 @@ function GitStatus:_init_patch_popups()
     if node.istatus == "A" then
       err = self.repo:reset_default({ node.id })
     else
-      local diff_str = self._patch_staged:get_partial_diff_hunk_reverse()
+      local diff_str = patch_staged:get_diff_hunk_reversed()
       if not diff_str then
         vim.notify("[Fugit2] Failed to get revere hunk", vim.log.levels.ERROR)
         return
@@ -849,7 +849,29 @@ function GitStatus:_init_patch_popups()
     local cursor_start = vim.fn.getpos("v")[2]
     local cursor_end = vim.fn.getpos(".")[2]
 
-    local diff_str = self._patch_unstaged:get_partial_diff_hunk_range(cursor_start, cursor_end)
+    local diff_str = patch_unstaged:get_diff_hunk_range(cursor_start, cursor_end)
+    if not diff_str then
+      -- do nothing
+      return
+    end
+
+    local keys = vim.api.nvim_replace_termcodes("<esc>", true, false, true)
+    vim.api.nvim_feedkeys(keys, "n", false)
+
+    if diff_apply_fn(diff_str) == 0 then
+      local node, _ = tree:get_child_node_linenr()
+      if node then
+        diff_update_fn(node)
+      end
+    end
+  end, opts)
+
+  -- [-]/[u]: Visual selected unstage
+  patch_staged:map("v", { "-", "u" }, function()
+    local cursor_start = vim.fn.getpos("v")[2]
+    local cursor_end = vim.fn.getpos(".")[2]
+
+    local diff_str = patch_staged:get_diff_hunk_range_reversed(cursor_start, cursor_end)
     if not diff_str then
       -- do nothing
       return

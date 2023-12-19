@@ -262,7 +262,7 @@ describe("partial_hunk", function()
     }
     local hunk_lines = test_hunk_2
 
-    local _, selected = diff.partial_hunk_selected(hunk, hunk_lines, 1, 2)
+    local _, selected = diff.partial_hunk_selected(hunk, hunk_lines, 1, 2, false)
 
     assert.array(selected).has.no.holes()
     assert.equals("@@ -1,3 +1,4 @@", selected[1])
@@ -277,7 +277,7 @@ describe("partial_hunk", function()
     }
     local hunk_lines = test_hunk_2
 
-    local _, selected = diff.partial_hunk_selected(hunk, hunk_lines, 1, 3)
+    local _, selected = diff.partial_hunk_selected(hunk, hunk_lines, 1, 3, false)
 
     assert.array(selected).has.no.holes()
     assert.equals("@@ -1,3 +1,5 @@", selected[1])
@@ -293,7 +293,7 @@ describe("partial_hunk", function()
     }
     local hunk_lines = test_hunk_3
 
-    local _, selected = diff.partial_hunk_selected(hunk, hunk_lines, 1, 6)
+    local _, selected = diff.partial_hunk_selected(hunk, hunk_lines, 1, 6, false)
 
     assert.array(selected).has.no.holes()
     assert.equals(9, #selected)
@@ -309,13 +309,32 @@ describe("partial_hunk", function()
     }
     local hunk_lines = test_hunk_3
 
-    local _, selected = diff.partial_hunk_selected(hunk, hunk_lines, 7, 10)
+    local _, selected = diff.partial_hunk_selected(hunk, hunk_lines, 7, 10, false)
 
     assert.is_not_nil(selected)
     assert.array(selected).has.no.holes()
     assert.equals(11, #selected)
     assert.equals("@@ -277,7 +277,10 @@ function BitArray:set_k_unset_indices(k)", selected[1])
     assert.equals("+---@generic T", selected[6])
+  end)
+
+  it("extracts selected partial hunk for reverse 1", function()
+    local hunk = {
+      old_start = 219,
+      old_lines = 7,
+      new_start = 232,
+      new_lines = 7,
+      header = "@@ -219,7 +232,7 @@ function PatchView:prev_hunk_handler()\n"
+    }
+    local hunk_lines = test_hunk_1
+
+    local _, partial = diff.partial_hunk_selected(hunk, hunk_lines, 3, 5, true)
+
+    assert.array(partial).has.no.holes()
+    assert.equals(8, #partial)
+    assert.equals("@@ -219,7 +219,6 @@ function PatchView:prev_hunk_handler()", partial[1])
+    assert.equals("-        new_row = self._hunks[hunk_idx-1]", partial[5])
+    assert.equals("         new_row = self._hunk_offsets[hunk_idx-1]", partial[6])
   end)
 
   it("returns nil for context only selection", function()
@@ -326,7 +345,7 @@ describe("partial_hunk", function()
     }
     local hunk_lines = test_hunk_3
 
-    local _, selected = diff.partial_hunk_selected(hunk, hunk_lines, 1, 3)
+    local _, selected = diff.partial_hunk_selected(hunk, hunk_lines, 1, 3, false)
 
     assert.is_nil(selected)
   end)

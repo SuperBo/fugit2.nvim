@@ -159,10 +159,11 @@ end
 ---@param hunk GitDiffHunk
 ---@param hunk_lines string[]
 ---@param start_hunk_line integer start hunk line(inclusive)
+---@param line_add_as_context boolean Treat non-selected add line as context. Useful while reverse.
 ---@param end_hunk_line integer end hunk line (inclusive)
 ---@return GitDiffHunk? new_hunk
 ---@return string[]?
-function M.partial_hunk_selected(hunk, hunk_lines, start_hunk_line, end_hunk_line)
+function M.partial_hunk_selected(hunk, hunk_lines, start_hunk_line, end_hunk_line, line_add_as_context)
   if start_hunk_line > end_hunk_line
     or start_hunk_line > #hunk_lines
     or end_hunk_line < 1
@@ -176,10 +177,16 @@ function M.partial_hunk_selected(hunk, hunk_lines, start_hunk_line, end_hunk_lin
   for i = 2,start_hunk_line-1 do
     local line = hunk_lines[i]
     local char = line:sub(1, 1)
-    if char == " " then
+    if char == " "
+      or (line_add_as_context and char == "+")
+    then
       old_lines = old_lines + 1
       new_lines = new_lines + 1
-      lines[#lines+1] = line
+      if char == " " then
+        lines[#lines+1] = line
+      else
+        lines[#lines+1] = " " .. line:sub(2)
+      end
     end
   end
 
@@ -212,11 +219,18 @@ function M.partial_hunk_selected(hunk, hunk_lines, start_hunk_line, end_hunk_lin
   for i = end_hunk_line+1,#hunk_lines do
     local line = hunk_lines[i]
     local char = line:sub(1, 1)
-    if char == " " then
+    if char == " "
+      or (line_add_as_context and char == "+")
+    then
       num_context = num_context + 1
       old_lines = old_lines + 1
       new_lines = new_lines + 1
-      lines[#lines+1] = line
+
+      if char == " " then
+        lines[#lines+1] = line
+      else
+        lines[#lines+1] = " " .. line:sub(2)
+      end
 
       if num_context == 3 then
         break

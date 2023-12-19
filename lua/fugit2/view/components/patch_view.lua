@@ -208,6 +208,7 @@ local function get_hunk(offsets, cursor_row)
   return 0, 1
 end
 
+
 ---Gets current hunk based current cursor position
 ---@return integer hunk_index
 ---@return integer hunk_offset
@@ -220,6 +221,7 @@ function PatchView:get_current_hunk()
   return index, offset, cursor[1], cursor[2]
 end
 
+
 ---@return fun()
 function PatchView:next_hunk_handler()
   return function()
@@ -231,6 +233,7 @@ function PatchView:next_hunk_handler()
     vim.api.nvim_win_set_cursor(self.popup.winid, { new_row, col })
   end
 end
+
 
 ---@return fun()
 function PatchView:prev_hunk_handler()
@@ -248,8 +251,9 @@ function PatchView:prev_hunk_handler()
   end
 end
 
+
 ---@return string?
-function PatchView:get_partial_diff_hunk()
+function PatchView:get_diff_hunk()
   local hunk_idx, _, _, _ = self:get_current_hunk()
   if hunk_idx > 0 and hunk_idx < #self._hunk_offsets then
     local hunk_lines = vim.api.nvim_buf_get_lines(
@@ -267,8 +271,9 @@ function PatchView:get_partial_diff_hunk()
   end
 end
 
+
 ---@return string?
-function PatchView:get_partial_diff_hunk_reverse()
+function PatchView:get_diff_hunk_reversed()
   local hunk_idx, _, _, _ = self:get_current_hunk()
   if hunk_idx > 0 and hunk_idx < #self._hunk_offsets then
     local hunk_lines = vim.api.nvim_buf_get_lines(
@@ -284,10 +289,13 @@ function PatchView:get_partial_diff_hunk_reverse()
   end
 end
 
+
 ---@param start_row integer
 ---@param end_row integer
----@return string?
-function PatchView:get_partial_diff_hunk_range(start_row, end_row)
+---@param for_reverse boolean whether hunk range will be used for reverse later.
+---@return GitDiffHunk[] hunk_diffs
+---@return string[][] hunk_segments
+function PatchView:_get_hunks_range(start_row, end_row, for_reverse)
   if start_row > end_row then
     start_row, end_row = end_row, start_row
   end
@@ -306,7 +314,8 @@ function PatchView:get_partial_diff_hunk_range(start_row, end_row)
   local end_range = math.min(next_offset - 1, end_row) - hunk_offset + 1
   hunk_diffs[1], hunk_segments[1] = diff_utils.partial_hunk_selected(
     self._hunk_diffs[hunk_idx], hunk_lines,
-    start_range, end_range
+    start_range, end_range,
+    for_reverse
   )
 
   local i = #hunk_segments
@@ -328,20 +337,59 @@ function PatchView:get_partial_diff_hunk_range(start_row, end_row)
       end_range = end_row - hunk_offset + 1
       hunk_diffs[i], hunk_segments[i] = diff_utils.partial_hunk_selected(
         self._hunk_diffs[hunk_idx], hunk_lines,
-       start_range, end_range
+        start_range, end_range,
+        for_reverse
       )
     end
   end
 
+  return hunk_diffs, hunk_segments
+end
+
+
+---@param start_row integer
+---@param end_row integer
+---@param reverse boolean whether to get reverse diff
+---@return string?
+function PatchView:_get_diff_hunk_range(start_row, end_row, reverse)
+  local hunk_diffs, hunk_segments = self:_get_hunks_range(start_row, end_row, reverse)
   if #hunk_segments == 0 or #hunk_diffs == 0 then
     return nil
   end
 
+  if reverse then
+    -- reverse hunks
+    local reversed_hunk_diffs, reversed_hunk_segments = {}, {}
+    for i = 1,#hunk_segments do
+      local hunk, hunk_lines = diff_utils.reverse_hunk(hunk_diffs[i], hunk_segments[i])
+      reversed_hunk_diffs[i] = hunk
+      reversed_hunk_segments[i] = hunk_lines
+    end
+    hunk_diffs = reversed_hunk_diffs
+    hunk_segments = reversed_hunk_segments
+  end
+
+  -- merge hunks
   local lines = diff_utils.merge_hunks(hunk_diffs, hunk_segments)
   for j, l in ipairs(self._header) do
     table.insert(lines, j, l)
   end
   return table.concat(lines, "\n") .. "\n"
+end
+
+
+---@param start_row integer
+---@param end_row integer
+---@return string?
+function PatchView:get_diff_hunk_range(start_row, end_row)
+  return self:_get_diff_hunk_range(start_row, end_row, false)
+end
+
+---@param start_row integer
+---@param end_row integer
+---@return string?
+function PatchView:get_diff_hunk_range_reversed(start_row, end_row)
+  return self:_get_diff_hunk_range(start_row, end_row, true)
 end
 
 
