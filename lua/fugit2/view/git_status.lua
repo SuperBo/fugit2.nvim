@@ -1403,7 +1403,7 @@ end
 
 function GitStatus:hide_patch_view()
   self._layout:update(self._layout_opts.main, self._boxes.main)
-  self._main_row = NuiLayout.Box(self.file_popup, { grow = 1 })
+  self._boxes.main_row = NuiLayout.Box(self.file_popup, { grow = 1 })
   self._states.side_panel = SidePanel.NONE
 end
 
