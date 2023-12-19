@@ -147,3 +147,31 @@ describe("bitarray", function()
     assert.same({}, b2:get_set_indices())
   end)
 end)
+
+
+describe("list_utils", function()
+  it("reverse list", function()
+    local list = {1, 2, 4, 5}
+    utils.list_reverse(list)
+
+    assert.same({5, 4, 2, 1}, list)
+  end)
+
+  it("reverse list with odd length", function()
+    local list = {4, 5, 6, 7, 8, 9, 10}
+    utils.list_reverse(list)
+
+    assert.same({ 10, 9, 8, 7, 6, 5 , 4 }, list)
+  end)
+
+  it("insert a sorted list", function()
+    local list = { 3, 5 }
+
+    utils.list_sorted_insert(list, 1)
+    utils.list_sorted_insert(list, 4)
+    utils.list_sorted_insert(list, 6)
+    utils.list_sorted_insert(list, 2)
+
+    assert.same({ 1, 2, 3, 4, 5, 6 }, list)
+  end)
+end)

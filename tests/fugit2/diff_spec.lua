@@ -150,15 +150,7 @@ index fd118ca..0167db3 100644
 end)
 
 describe("partial_hunk", function()
-  it("extracts partial_hunk", function()
-    local hunk = {
-      old_start = 219,
-      old_lines = 7,
-      new_start = 232,
-      new_lines = 7,
-      header = "@@ -219,7 +232,7 @@ function PatchView:prev_hunk_handler()\n"
-    }
-    local hunk_lines = vim.split([[
+  local test_hunk_1 = vim.split([[
 @@ -219,7 +232,7 @@ function PatchView:prev_hunk_handler()
        if hunk_idx <= 1 then
          new_row = 1
@@ -168,10 +160,63 @@ describe("partial_hunk", function()
        end
      end
      vim.api.nvim_win_set_cursor(self.popup.winid, { new_row, col })]],
-      "\n", { plain = true, trimempty = true }
-    )
+    "\n", { plain = true, trimempty = true }
+  )
 
-    local partial = diff.partial_hunk(hunk, hunk_lines)
+  local test_hunk_2 = vim.split([[
+@@ -1,3 +1,5 @@
++local utils = require "fugit2.utils"
++
+ ---Diff helper module
+ ---@module 'Fugit2DiffHelper'
+ local M = {}
+    ]],
+    "\n", { plain = true, trimempty = true }
+  )
+
+  local test_hunk_3 = vim.split([[
+@@ -277,9 +277,11 @@ function BitArray:set_k_unset_indices(k)
+ end
+ 
+ 
+--- Inserts new element into a sorted list, return a sorted list.
+----@param lst table
++---Inserts new element into a sorted list, return a sorted list.
++---@generic T
++---@param lst T[]
+ ---@param ele number
++---@return T[]
+ function M.list_sorted_insert(lst, ele)
+   local i = 1
+   while i < #lst + 1 and ele > lst[i] do]],
+    "\n", { plain = true, trimempty = true }
+  )
+
+  local test_hunk_4 = vim.split([[
+@@ -320,7 +320,7 @@ function PatchView:prev_hunk_handler()
+       if hunk_idx <= 1 then
+         new_row = 1
+       else
+-        new_row = self._hunks[hunk_idx-1]
++        new_row = self._hunk_offsets[hunk_idx-1]
+       end
+     end
+     vim.api.nvim_win_set_cursor(self.popup.winid, { new_row, col })
+  ]],
+    "\n", { plain = true, trimempty = true }
+  )
+
+  it("extracts partial_hunk", function()
+    local hunk = {
+      old_start = 219,
+      old_lines = 7,
+      new_start = 232,
+      new_lines = 7,
+      header = "@@ -219,7 +232,7 @@ function PatchView:prev_hunk_handler()\n"
+    }
+    local hunk_lines = test_hunk_1
+
+    local _, partial = diff.partial_hunk(hunk, hunk_lines)
 
     assert.array(partial).has.no.holes()
     assert.equals(#hunk_lines, #partial)
@@ -201,11 +246,149 @@ describe("partial_hunk", function()
 +}
     ]], "\n", { plain = true, trimempty = true })
 
-    local partial = diff.partial_hunk(hunk, hunk_lines)
+    local _, partial = diff.partial_hunk(hunk, hunk_lines)
 
     assert.array(partial).has.no.holes()
     assert.equals(#hunk_lines, #partial)
     assert.equals("@@ -0,0 +1,10 @@", partial[1])
+  end)
+
+
+  it("extracts selected partial hunk 1", function()
+    local hunk = {
+      old_start = 1, old_lines = 3,
+      new_start = 1, new_lines = 5,
+      header = "@@ -1,3 +1,5 @@\n"
+    }
+    local hunk_lines = test_hunk_2
+
+    local _, selected = diff.partial_hunk_selected(hunk, hunk_lines, 1, 2)
+
+    assert.array(selected).has.no.holes()
+    assert.equals("@@ -1,3 +1,4 @@", selected[1])
+    assert.equals(" ---Diff helper module", selected[3])
+  end)
+
+  it("extracts selected partial hunk 2", function()
+    local hunk = {
+      old_start = 1, old_lines = 3,
+      new_start = 1, new_lines = 5,
+      header = "@@ -1,3 +1,5 @@\n"
+    }
+    local hunk_lines = test_hunk_2
+
+    local _, selected = diff.partial_hunk_selected(hunk, hunk_lines, 1, 3)
+
+    assert.array(selected).has.no.holes()
+    assert.equals("@@ -1,3 +1,5 @@", selected[1])
+    assert.equals("+", selected[3])
+  end)
+
+
+  it("extracts selected partial hunk 3", function()
+    local hunk = {
+      old_start = 277, old_lines = 9,
+      new_start = 277, new_lines = 11,
+      header = "@@ -277,9 +277,11 @@ function BitArray:set_k_unset_indices(k)\n"
+    }
+    local hunk_lines = test_hunk_3
+
+    local _, selected = diff.partial_hunk_selected(hunk, hunk_lines, 1, 6)
+
+    assert.array(selected).has.no.holes()
+    assert.equals(9, #selected)
+    assert.equals("@@ -277,8 +277,6 @@ function BitArray:set_k_unset_indices(k)", selected[1])
+    assert.equals("   local i = 1", selected[9])
+  end)
+
+  it("extracts selected partial hunk 4", function()
+    local hunk = {
+      old_start = 277, old_lines = 9,
+      new_start = 277, new_lines = 11,
+      header = "@@ -277,9 +277,11 @@ function BitArray:set_k_unset_indices(k)\n"
+    }
+    local hunk_lines = test_hunk_3
+
+    local _, selected = diff.partial_hunk_selected(hunk, hunk_lines, 7, 10)
+
+    assert.is_not_nil(selected)
+    assert.array(selected).has.no.holes()
+    assert.equals(11, #selected)
+    assert.equals("@@ -277,7 +277,10 @@ function BitArray:set_k_unset_indices(k)", selected[1])
+    assert.equals("+---@generic T", selected[6])
+  end)
+
+  it("returns nil for context only selection", function()
+    local hunk = {
+      old_start = 277, old_lines = 9,
+      new_start = 277, new_lines = 11,
+      header = "@@ -277,9 +277,11 @@ function BitArray:set_k_unset_indices(k)\n"
+    }
+    local hunk_lines = test_hunk_3
+
+    local _, selected = diff.partial_hunk_selected(hunk, hunk_lines, 1, 3)
+
+    assert.is_nil(selected)
+  end)
+
+  it("merges 2 partial hunks into one", function()
+    local hunk1 = {
+      old_start = 1, old_lines = 3,
+      new_start = 1, new_lines = 5,
+      header = "@@ -1,3 +1,5 @@\n"
+    }
+    local hunk_lines1 = test_hunk_2
+    local hunk2 = {
+      old_start = 277, old_lines = 9,
+      new_start = 277, new_lines = 11,
+      header = "@@ -277,9 +277,11 @@ function BitArray:set_k_unset_indices(k)\n"
+    }
+    local hunk_lines2 = test_hunk_3
+    local hunks = { hunk1, hunk2 }
+    local hunk_segments = { hunk_lines1, hunk_lines2 }
+
+    local merged = diff.merge_hunks(hunks, hunk_segments)
+
+    assert.is_not_nil(merged)
+    assert.array(merged).has.no.holes()
+    assert.equals(#hunk_lines1 + #hunk_lines2, #merged)
+    assert.equals("@@ -1,3 +1,5 @@", merged[1])
+    assert.equals("@@ -277,9 +279,11 @@ function BitArray:set_k_unset_indices(k)", merged[#hunk_lines1+1])
+  end)
+
+  it("merges 3 partial hunks into one", function()
+    local hunk1 = {
+      old_start = 1, old_lines = 3,
+      new_start = 1, new_lines = 5,
+      header = "@@ -1,3 +1,5 @@\n"
+    }
+    local hunk_lines1 = test_hunk_2
+    local hunk2 = {
+      old_start = 277, old_lines = 9,
+      new_start = 277, new_lines = 11,
+      header = "@@ -277,9 +277,11 @@ function BitArray:set_k_unset_indices(k)\n"
+    }
+    local hunk_lines2 = test_hunk_3
+    local hunk3 = {
+      old_start = 320, old_lines = 7,
+      new_start = 320, new_lines = 7,
+      header = "@@ -320,7 +320,7 @@ function PatchView:prev_hunk_handler()\n"
+    }
+    local hunk_lines3 = test_hunk_4
+    local hunks = { hunk1, hunk2, hunk3 }
+    local hunk_segments = { hunk_lines1, hunk_lines2, hunk_lines3 }
+
+    local merged = diff.merge_hunks(hunks, hunk_segments)
+
+    assert.is_not_nil(merged)
+    assert.array(merged).has.no.holes()
+    assert.equals(#hunk_lines1 + #hunk_lines2 + #hunk_lines3, #merged)
+    assert.equals("@@ -1,3 +1,5 @@", merged[1])
+    assert.equals("@@ -277,9 +279,11 @@ function BitArray:set_k_unset_indices(k)", merged[#hunk_lines1+1])
+    assert.equals(
+      "@@ -320,7 +324,7 @@ function PatchView:prev_hunk_handler()",
+      merged[#hunk_lines1+#hunk_lines2+1]
+    )
   end)
 end)
 
@@ -229,7 +412,7 @@ describe("reverse_hunk", function()
       "\n", { plain = true, trimempty = true }
     )
 
-    local reversed = diff.reverse_hunk(hunk, hunk_lines)
+    local _, reversed = diff.reverse_hunk(hunk, hunk_lines)
 
     assert.array(reversed).has.no.holes()
     assert.equals("@@ -2,5 +2,5 @@ test_header", reversed[1])
@@ -260,7 +443,7 @@ describe("reverse_hunk", function()
 +}
     ]], "\n", { plain = true, trimempty = true })
 
-    local reversed = diff.reverse_hunk(hunk, hunk_lines)
+    local _, reversed = diff.reverse_hunk(hunk, hunk_lines)
 
     assert.array(reversed).has.no.holes()
     assert.equals(#hunk_lines, #reversed)

@@ -594,6 +594,7 @@ function GitStatus:init(ns_id, repo, last_window)
   }
   self._layout_opts = {
     main = {
+      relative = "editor",
       position = "50%",
       size = { width = 100, height = "60%" }
     },
@@ -706,6 +707,7 @@ function GitStatus:_init_patch_popups()
   local patch_staged = PatchView(self.ns_id, "Staged", "Fugit2Staged")
   local opts = { noremap = true, nowait= true }
   local states = self._states
+  local tree = self._tree
   self._patch_unstaged = patch_unstaged
   self._patch_staged = patch_staged
 
@@ -811,7 +813,7 @@ function GitStatus:_init_patch_popups()
     end
 
     if diff_apply_fn(diff_str) == 0 then
-      local node, _ = self._tree:get_child_node_linenr()
+      local node, _ = tree:get_child_node_linenr()
       if node then
         diff_update_fn(node)
       end
@@ -820,7 +822,7 @@ function GitStatus:_init_patch_popups()
 
   -- [-]/[u]: Unstage handling
   patch_staged:map("n", { "-", "u" }, function()
-    local node, _ = self._tree:get_child_node_linenr()
+    local node, _ = tree:get_child_node_linenr()
     if not node then
       return
     end
@@ -840,7 +842,29 @@ function GitStatus:_init_patch_popups()
     if err == 0 then
       diff_update_fn(node)
     end
-  end)
+  end, opts)
+
+  -- [-]/[s]: Visual selected staging
+  patch_unstaged:map("v", { "-", "s" }, function()
+    local cursor_start = vim.fn.getpos("v")[2]
+    local cursor_end = vim.fn.getpos(".")[2]
+
+    local diff_str = self._patch_unstaged:get_partial_diff_hunk_range(cursor_start, cursor_end)
+    if not diff_str then
+      -- do nothing
+      return
+    end
+
+    local keys = vim.api.nvim_replace_termcodes("<esc>", true, false, true)
+    vim.api.nvim_feedkeys(keys, "n", false)
+
+    if diff_apply_fn(diff_str) == 0 then
+      local node, _ = tree:get_child_node_linenr()
+      if node then
+        diff_update_fn(node)
+      end
+    end
+  end, opts)
 end
 
 

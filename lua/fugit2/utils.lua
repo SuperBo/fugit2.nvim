@@ -277,9 +277,11 @@ function BitArray:set_k_unset_indices(k)
 end
 
 
--- Inserts new element into a sorted list, return a sorted list.
----@param lst table
+---Inserts new element into a sorted list, return a sorted list.
+---@generic T
+---@param lst T[]
 ---@param ele number
+---@return T[]
 function M.list_sorted_insert(lst, ele)
   local i = 1
   while i < #lst + 1 and ele > lst[i] do
@@ -323,6 +325,18 @@ end
 function M.update_table(tbl, key, val)
   tbl[key] = val
   return val
+end
+
+---Reverse list like table, mutate list.
+---@generic T
+---@param lst T[]
+---@return T[]
+function M.list_reverse(lst)
+  local mid = math.floor(#lst / 2)
+  for i = 1,mid do
+    lst[i], lst[#lst-i+1] = lst[#lst-i+1], lst[i]
+  end
+  return lst
 end
 
 
