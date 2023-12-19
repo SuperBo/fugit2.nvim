@@ -194,33 +194,6 @@ function GitStatusTree:init(bufnr, namespace)
 end
 
 
---TODO: remove after having diff
----@return integer files_change
----@return integer files_remove
-function GitStatusTree:index_count()
-  local files_change, files_remove = 0, 0
-
-  ---@type (string | boolean)[]
-  local queue = { false }
-
-  while #queue > 0 do
-    local parent = table.remove(queue, 1) or nil
-    for _, node in ipairs(self.tree:get_nodes(parent)) do
-      if node:has_children() then
-        table.insert(queue, node:get_id())
-      elseif node.istatus then
-        if node.istatus == "D" then
-          files_remove = files_remove + 1
-        elseif node.istatus ~= "-" and node.istatus ~= "?" then
-          files_change = files_change + 1
-        end
-      end
-    end
-  end
-
-  return files_change, files_remove
-end
-
 ---@return NuiTree.Node?
 ---@return integer? linenr
 function GitStatusTree:get_child_node_linenr()
@@ -356,6 +329,7 @@ function GitStatusTree:index_add_reset(repo, index, add, reset, node)
 
   return updated, not inplace
 end
+
 
 ---Updates file node status info, usually called after stage/unstage
 ---@param repo GitRepository
@@ -1223,19 +1197,28 @@ end
 ---@param include_changes boolean
 ---@param notify_empty boolean
 function GitStatus:_set_input_popup_commit_title(init_str, include_changes, notify_empty)
-  local change, remove = 0, 0
+  local file_changed, insertions, deletions = 0, 0, 0
   if include_changes then
-    change, remove = self._tree:index_count()
-    if notify_empty and change + remove < 1 then
-      vim.notify("Empty commit!", vim.log.levels.WARN)
+    local diff, _ = self.repo:diff_head_to_index(self.index, nil, false)
+    if diff then
+      local stats, _ = diff:stats()
+      if stats then
+        file_changed = stats.changed
+        insertions = stats.insertions
+        deletions = stats.deletions
+      end
+    end
+    if notify_empty and file_changed + insertions + deletions < 1 then
+      vim.notify("[Fugit2] Empty commit!", vim.log.levels.WARN)
     end
   end
 
   local title = string.format(
-    " %s - %s%s%s",
+    " %s - %s %s%s%s",
     init_str, tostring(self.sign),
-    change > 0  and "+" .. change or "",
-    remove > 0 and "-" .. remove or ""
+    file_changed > 0 and string.format("%d 󰈙", file_changed) or "",
+    insertions > 0 and string.format(" +%d", insertions) or "",
+    deletions > 0 and string.format(" -%d", deletions) or ""
   )
   self.input_popup.border:set_text(
     "top",
