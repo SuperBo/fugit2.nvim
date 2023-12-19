@@ -392,6 +392,7 @@ local CommitMode = {
 local Menu = {
   COMMIT = 1,
   DIFF   = 2,
+  BRANCH = 3,
 }
 
 -- ===================
@@ -457,7 +458,7 @@ function GitStatus:init(ns_id, repo, last_window)
         right = 2,
       },
       text = {
-        top = " Status ",
+        top = NuiText(" Status ", "Fugit2FloatTitle"),
         top_align = "left",
       },
     },
@@ -485,9 +486,9 @@ function GitStatus:init(ns_id, repo, last_window)
         right = 1,
       },
       text = {
-        top = " 󰙅 Files ",
+        top = NuiText(" 󰙅 Files ", "Fugit2FloatTitle"),
         top_align = "left",
-        bottom = NuiText("[c]ommits [d]iff", "FloatFooter"),
+        bottom = NuiText("[b]ranches [c]ommits [d]iff", "FloatFooter"),
         bottom_align = "right",
       },
     },
@@ -620,7 +621,10 @@ end
 ---@param menu_type Fugit2GitStatusMenu menu to init
 ---@return Fugit2UIMenu
 function GitStatus:_init_menus(menu_type)
-  local menu_items
+  local menu_items, menu_title
+  local title_hl = "Fugit2FloatTitle"
+  local head_hl = "Fugit2MenuHead"
+  local key_hl = "Fugit2MenuKey"
   local menu_item_align = { text_align = "center" }
   local popup_opts = {
     ns_id = self.ns_id,
@@ -629,7 +633,7 @@ function GitStatus:_init_menus(menu_type)
     relative = "editor",
     size = {
       width = 36,
-      height = 8,
+      -- height = 8,
     },
     zindex = 52,
     border = {
@@ -645,33 +649,43 @@ function GitStatus:_init_menus(menu_type)
   }
 
   if menu_type == Menu.COMMIT then
-    popup_opts.border.text.top = "Committing"
+    menu_title = NuiText(" Committing ", title_hl)
     menu_items = {
+      NuiMenu.separator(NuiText("Create", head_hl), menu_item_align),
+      NuiMenu.item(NuiLine({NuiText("c ", key_hl), NuiText("Commit")}), { id = "c" }),
       NuiMenu.separator(
-        NuiText("Create", "Fugit2MenuHead"),
+        NuiLine { NuiText("Edit ", head_hl), NuiText("HEAD", "Fugit2Staged") },
         menu_item_align
       ),
-      NuiMenu.item(NuiLine({NuiText("c ", "Fugit2MenuKey"), NuiText("Commit")}), { id = "c" }),
-      NuiMenu.separator(
-        NuiLine { NuiText("Edit ", "Fugit2MenuHead"), NuiText("HEAD", "Fugit2Staged") },
-        menu_item_align
-      ),
-      NuiMenu.item(NuiLine { NuiText("e ", "Fugit2MenuKey"), NuiText("Extend") }, { id = "e" }),
-      NuiMenu.item(NuiLine { NuiText("w ", "Fugit2MenuKey"), NuiText("Reword") }, { id = "w" }),
-      NuiMenu.item(NuiLine { NuiText("a ", "Fugit2MenuKey"), NuiText("Amend") }, { id = "a" }),
-      NuiMenu.separator(
-        NuiText("View/Edit", "Fugit2MenuHead"),
-        menu_item_align
-      ),
-      NuiMenu.item(NuiLine { NuiText("g ", "Fugit2MenuKey"), NuiText("Graph") }, { id = "g" }),
+      NuiMenu.item(NuiLine { NuiText("e ", key_hl), NuiText("Extend") }, { id = "e" }),
+      NuiMenu.item(NuiLine { NuiText("w ", key_hl), NuiText("Reword") }, { id = "w" }),
+      NuiMenu.item(NuiLine { NuiText("a ", key_hl), NuiText("Amend") }, { id = "a" }),
+      NuiMenu.separator(NuiText("View/Edit", head_hl), menu_item_align),
+      NuiMenu.item(NuiLine { NuiText("g ", key_hl), NuiText("Graph") }, { id = "g" }),
     }
   elseif menu_type == Menu.DIFF then
-    popup_opts.border.text.top = "Diff"
+    menu_title = NuiText(" Diffing ", title_hl)
     menu_items = {
-      NuiMenu.item(NuiLine({NuiText("d ", "Fugit2MenuKey"), NuiText("Diffview")}), { id = "d" }),
+      NuiMenu.item(NuiLine({NuiText("d ", key_hl), NuiText("Diffview")}), { id = "d" }),
+    }
+  elseif menu_type == Menu.BRANCH then
+    menu_title = NuiText(" Branching ", title_hl)
+    menu_items = {
+      NuiMenu.separator(NuiText("Checkout", head_hl), menu_item_align),
+      NuiMenu.item(NuiLine { NuiText("b ", key_hl), NuiText("Branch/revision") }, { id = "b" }),
+      NuiMenu.item(NuiLine { NuiText("c ", key_hl), NuiText("New branch") }, { id = "c" }),
+      NuiMenu.item(NuiLine { NuiText("s ", key_hl), NuiText("New spin-out") }, { id = "s" }),
+      NuiMenu.separator(NuiText("Create", head_hl), menu_item_align),
+      NuiMenu.item(NuiLine { NuiText("n ", key_hl), NuiText("New branch") }, { id = "n" }),
+      NuiMenu.item(NuiLine { NuiText("S ", key_hl), NuiText("New spin-out") }, { id = "S" }),
+      NuiMenu.separator(NuiText("Do", head_hl), menu_item_align),
+      NuiMenu.item(NuiLine { NuiText("m ", key_hl), NuiText("Rename") }, { id = "m" }),
+      NuiMenu.item(NuiLine { NuiText("x ", key_hl), NuiText("Reset") }, { id = "x" }),
+      NuiMenu.item(NuiLine { NuiText("d ", key_hl), NuiText("Delete") }, { id = "d" }),
     }
   end
 
+  popup_opts.border.text.top = menu_title or ""
   return UI.Menu(popup_opts, menu_items)
 end
 
@@ -682,6 +696,7 @@ function GitStatus:_init_patch_popups()
   local opts = { noremap = true, nowait= true }
   local states = self._states
   local tree = self._tree
+  local menus = self._menus
   self._patch_unstaged = patch_unstaged
   self._patch_staged = patch_staged
 
@@ -692,20 +707,32 @@ function GitStatus:_init_patch_popups()
   patch_unstaged:map("n", { "q", "<esc" }, exit_fn, opts)
   patch_staged:map("n", { "q", "<esc>" }, exit_fn, opts)
 
+  -- commit menu
   local commit_menu_fn = function()
-    self._menus.commit:mount()
+    menus.commit:mount()
   end
   patch_unstaged:map("n", "c", commit_menu_fn, opts)
   patch_staged:map("n", "c", commit_menu_fn, opts)
 
+  -- diff menu
   local diff_menu_fn = function()
-    if not self._menus.diff then
-      self._menus.diff = self:_init_diff_menu()
+    if not menus.diff then
+      menus.diff = self:_init_diff_menu()
     end
-    self._menus.diff:mount()
+    menus.diff:mount()
   end
   patch_unstaged:map("n", "d", diff_menu_fn, opts)
   patch_staged:map("n", "d", diff_menu_fn, opts)
+
+  -- branch menu
+  local branch_menu_fn = function()
+    if not menus.branch then
+      menus.branch = self:_init_branch_menu()
+    end
+    menus.branch:mount()
+  end
+  patch_unstaged:map("n", "b", branch_menu_fn, opts)
+  patch_staged:map("n", "b", branch_menu_fn, opts)
 
   -- [h]: move left
   patch_unstaged:map("n", "h", function()
@@ -994,6 +1021,24 @@ end
 
 function GitStatus:mount()
   self._layout:mount()
+end
+
+---Exit function
+function GitStatus:unmount()
+  self:write_index()
+  if self._patch_unstaged then
+    self._patch_unstaged:unmount()
+    self._patch_unstaged = nil
+  end
+  if self._patch_staged then
+    self._patch_staged:unmount()
+    self._patch_staged = nil
+  end
+  self._menus.amend_confirm:unmount()
+  self._menus.commit:unmount()
+  self._layout:unmount()
+
+  vim.api.nvim_set_current_win(self._states.last_window)
 end
 
 
@@ -1412,7 +1457,7 @@ function GitStatus:hide_patch_view()
   self._states.side_panel = SidePanel.NONE
 end
 
--- GitStatus Diff Menu
+---GitStatus Diff Menu
 ---@return Fugit2UIMenu
 function GitStatus:_init_diff_menu()
   local m = self:_init_menus(Menu.DIFF)
@@ -1420,11 +1465,25 @@ function GitStatus:_init_diff_menu()
     if item_id == "d" then
       local node, _ = self._tree:get_child_node_linenr()
       if node and vim.fn.exists(":DiffviewOpen") > 0 then
-        self:focus_file()
-        vim.api.nvim_feedkeys("q", "m", true)
-        vim.defer_fn(function()
-          vim.cmd({ cmd = "DiffviewOpen", args = { "--selected-file=" .. vim.fn.fnameescape(node.id) } })
-        end, 100)
+        self:unmount()
+        vim.cmd({ cmd = "DiffviewOpen", args = { "--selected-file=" .. vim.fn.fnameescape(node.id) } })
+      end
+    end
+  end)
+  return m
+end
+
+---GitStatus Branch Menu
+---@return Fugit2UIMenu
+function GitStatus:_init_branch_menu()
+  local m = self:_init_menus(Menu.BRANCH)
+  m:on_submit(function(item_id)
+    if item_id == "b" then
+      if vim.fn.exists(":Telescope") then
+        self:unmount()
+        vim.cmd({ cmd = "Telescope", args = { "git_branches"} })
+      else
+        vim.notify("[Fugit2] No telescope")
       end
     end
   end)
@@ -1439,20 +1498,7 @@ function GitStatus:setup_handlers()
   local states = self._states
 
   local exit_fn = function()
-    self:write_index()
-    if self._patch_unstaged then
-      self._patch_unstaged:unmount()
-      self._patch_unstaged = nil
-    end
-    if self._patch_staged then
-      self._patch_staged:unmount()
-      self._patch_staged = nil
-    end
-    self._menus.amend_confirm:unmount()
-    self._menus.commit:unmount()
-    self._layout:unmount()
-
-    vim.api.nvim_set_current_win(states.last_window)
+    self:unmount()
   end
 
   -- exit
@@ -1668,6 +1714,14 @@ function GitStatus:setup_handlers()
       menus.diff = self:_init_diff_menu()
     end
     menus.diff:mount()
+  end, map_options)
+
+  -- Branch Menu
+  self.file_popup:map("n", "b", function()
+    if not menus.branch then
+      menus.branch = self:_init_branch_menu()
+    end
+    menus.branch:mount()
   end, map_options)
 end
 

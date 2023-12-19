@@ -28,6 +28,7 @@ M.link_colors = {
   Fugit2MenuHead          = "Function",
   Fugit2MenuKey           = "Keyword",
   Fugit2BranchHead        = "Type",
+  Fugit2FloatTitle        = "@parameter",
 }
 
 M.colors = {
