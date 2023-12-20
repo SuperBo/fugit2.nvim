@@ -27,6 +27,8 @@ M.link_colors = {
   Fugit2WindowHelp        = "Comment",
   Fugit2MenuHead          = "Function",
   Fugit2MenuKey           = "Keyword",
+  Fugit2MenuArgOff        = "Comment",
+  Fugit2MenuArgOn         = "Number",
   Fugit2BranchHead        = "Type",
   Fugit2FloatTitle        = "@parameter",
 }

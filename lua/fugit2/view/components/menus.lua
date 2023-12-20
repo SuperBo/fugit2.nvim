@@ -4,6 +4,7 @@ local NuiText = require "nui.text"
 local NuiLine = require "nui.line"
 local NuiMenu = require "nui.menu"
 local NuiPopup = require "nui.popup"
+local NuiLayout = require "nui.layout"
 local event = require("nui.utils.autocmd").event
 
 --=================
@@ -136,21 +137,61 @@ function Confirm:show()
 end
 
 
---==============
---| Menu Popup |
---==============
+--========================
+--| Transient Menu Popup |
+--=======================
 
 
----@class Fugit2UIMenu
+---@class Fugit2UITransientMenu
 ---@field _menu NuiMenu
-local Menu = Object("Fugit2UIMenu")
+---@field ns_id integer
+local Menu = Object("Fugit2UITransientMenu")
 
+---@alias Fugit2UITransientArg { key: string, text: NuiText, arg: string }
+---@alias Fugit2UITransientItem { key: string?, texts: NuiText[] }
 
----@param popup_opts nui_popup_options
----@param lines NuiTree.Node[]
-function Menu:init(popup_opts, lines)
+---@param ns_id integer namespace id
+---@param title NuiText Menu title
+---@param menu_items Fugit2UITransientItem[]
+---@param arg_items Fugit2UITransientArg[]?
+function Menu:init(ns_id, title, menu_items, arg_items)
+  self.ns_id = ns_id
+  local title_hl = "Fugit2FloatTitle"
+  local head_hl = "Fugit2MenuHead"
+  local key_hl = "Fugit2MenuKey"
+  local menu_item_align = { text_align = "center" }
+  local popup_opts = {
+    ns_id = ns_id,
+    enter = true,
+    position = "50%",
+    relative = "editor",
+    size = {
+      width = 40,
+    },
+    zindex = 52,
+    border = {
+      style = "single",
+      text = {
+        top = title,
+        top_align = "left",
+      },
+    },
+    win_options = {
+      winhighlight = "Normal:Normal,FloatBorder:Normal",
+    }
+  }
+
+  local menu_lines = vim.tbl_map(function(item)
+    if not item.key then
+      return NuiMenu.separator(NuiLine(item.texts), menu_item_align)
+    end
+    local texts = { NuiText(item.key .. " ", key_hl) }
+    vim.list_extend(texts, item.texts)
+    return NuiMenu.item(NuiLine(texts), { id = item.key })
+  end, menu_items)
+
   self._menu = NuiMenu(popup_opts, {
-    lines = lines,
+    lines = menu_lines,
     keymap = {
       focus_next = { "j", "<down>", "<tab>", "<c-n>" },
       focus_prev = { "k", "<up>", "<s-tab>", "<c-p>" },
@@ -159,24 +200,84 @@ function Menu:init(popup_opts, lines)
     },
   })
 
+  ---@type { [string]: boolean }
+  self._args = {}
+  self._arg_lines = {}
+  self._arg_indices = {}
+  if arg_items then
+    local arg_popup_opts = {
+      ns_id = ns_id,
+      enter = false,
+      relative = "win",
+      position = {
+        row = #menu_items + 2,
+        col = 0
+      },
+      size = {
+        width = popup_opts.size.width,
+        height = #arg_items,
+      },
+      focusable = false,
+      border = {
+        style = "single",
+        text = { top = NuiText(" Arguments ", key_hl), top_align = "left" }
+      },
+      zindex = popup_opts.zindex,
+      win_options = popup_opts.win_options
+    }
+    self._args_popup = NuiPopup(arg_popup_opts)
+
+    self._arg_items = arg_items
+    for i, item in ipairs(arg_items) do
+      self._args[item.key] = false
+      self._arg_indices[item.key] = i
+    end
+  end
+
   -- setup hotkey
   local ids = vim.tbl_filter(
-    function (n) return n.id ~= nil end, lines
+    function (n) return n.key ~= nil end, menu_items
   )
   self._hotkeys = vim.tbl_map(
-    function (n) return n.id end, ids
+    function(n) return n.key end, ids
   )
+
+end
+
+---@param item Fugit2UITransientArg
+---@param enabled boolean
+---@return NuiLine
+local function arg_item_to_line(item, enabled)
+  local line = NuiLine { NuiText(item.key .. " ", "Fugit2MenuKey") }
+  if enabled then
+    line:append("󰱒 ", "Fugit2MenuArgOn")
+  else
+    line:append("󰄱 ", "Fugit2MenuArgOff")
+  end
+  line:append(item.text)
+  -- line:append(" (")
+  line:append(" " .. item.arg, enabled and "Fugit2MenuArgOn" or "Fugit2MenuArgOff")
+  -- line:append(")")
+  return line
+end
+
+---Render args selection
+function Menu:render()
+  for i, item in ipairs(self._arg_items) do
+    local line = arg_item_to_line(item, false)
+    line:render(self._args_popup.bufnr, self.ns_id, i)
+  end
 end
 
 
 ---Set call back func
----@param callback fun(string)
+---@param callback fun(item_id: string, args: { [string]: boolean })
 function Menu:on_submit(callback)
   self._submit_fn = callback
   self._menu.menu_props.on_submit = function()
     local item_id = self._menu.tree:get_node().id or ""
     self._menu:unmount()
-    self._submit_fn(item_id)
+    self._submit_fn(item_id, self._args)
   end
 end
 
@@ -186,8 +287,35 @@ function Menu:mount()
   for _, key in ipairs(self._hotkeys) do
     self._menu:map("n", key, function()
       self._menu:unmount()
-      self._submit_fn(key)
+      self._submit_fn(key, self._args)
     end, { noremap = true, nowait = true })
+  end
+
+  if self._args_popup then
+    self._menu:on(event.BufHidden, function()
+      self._args_popup:unmount()
+    end)
+
+    self._args_popup:update_layout({
+      relative = {
+        type = "win",
+        winid = self._menu.winid,
+      },
+    })
+    self._args_popup:mount()
+    self:render()
+
+    for arg, _ in pairs(self._args) do
+      self._args[arg] = false
+      self._menu:map("n", arg, function()
+        local enabled = not self._args[arg]
+        self._args[arg] = enabled
+        local i = self._arg_indices[arg]
+
+        local line = arg_item_to_line(self._arg_items[i], enabled)
+        line:render(self._args_popup.bufnr, self.ns_id, i)
+      end, { noremap = true, nowait = true })
+    end
   end
 end
 
