@@ -159,7 +159,7 @@ end
 ---@param hunk GitDiffHunk
 ---@param hunk_lines string[]
 ---@param start_hunk_line integer start hunk line(inclusive)
----@param line_add_as_context boolean Treat non-selected add line as context. Useful while reverse.
+---@param line_add_as_context boolean Treat non-selected add line as context. If false, minus line is treated as context..
 ---@param end_hunk_line integer end hunk line (inclusive)
 ---@return GitDiffHunk? new_hunk
 ---@return string[]?
@@ -178,7 +178,7 @@ function M.partial_hunk_selected(hunk, hunk_lines, start_hunk_line, end_hunk_lin
     local line = hunk_lines[i]
     local char = line:sub(1, 1)
     if char == " "
-      or (line_add_as_context and char == "+")
+      or (line_add_as_context and char == "+" or char == "-")
     then
       old_lines = old_lines + 1
       new_lines = new_lines + 1
@@ -220,7 +220,7 @@ function M.partial_hunk_selected(hunk, hunk_lines, start_hunk_line, end_hunk_lin
     local line = hunk_lines[i]
     local char = line:sub(1, 1)
     if char == " "
-      or (line_add_as_context and char == "+")
+      or (line_add_as_context and char == "+" or char == "-")
     then
       num_context = num_context + 1
       old_lines = old_lines + 1

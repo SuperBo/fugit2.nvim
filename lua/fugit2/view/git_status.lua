@@ -1485,7 +1485,7 @@ function GitStatus:_init_push_menu()
   local m = self:_init_menus(Menu.PUSH)
   m:on_submit(function(item_id, args)
     if item_id == "p" then
-      print("P p")
+      print("P p", args["-f"])
     end
   end)
   return m

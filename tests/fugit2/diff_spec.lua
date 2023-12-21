@@ -313,9 +313,29 @@ describe("partial_hunk", function()
 
     assert.is_not_nil(selected)
     assert.array(selected).has.no.holes()
-    assert.equals(11, #selected)
-    assert.equals("@@ -277,7 +277,10 @@ function BitArray:set_k_unset_indices(k)", selected[1])
-    assert.equals("+---@generic T", selected[6])
+    assert.equals(13, #selected)
+    assert.equals("@@ -277,9 +277,12 @@ function BitArray:set_k_unset_indices(k)", selected[1])
+    assert.equals(" ---@param lst table", selected[6])
+    assert.equals("+---@generic T", selected[8])
+    assert.equals(" function M.list_sorted_insert(lst, ele)", selected[11])
+  end)
+
+  it("extracts selected partial hunk with minus line non-selected", function()
+    local hunk = {
+      old_start = 219, old_lines = 7,
+      newproxy = 232, new_lines = 7,
+      header = "@@ -219,7 +232,7 @@ function PatchView:prev_hunk_handler()\n"
+    }
+    local hunk_lines = test_hunk_1
+
+    local _, selected = diff.partial_hunk_selected(hunk, hunk_lines, 6, 7, false)
+
+    assert.is_not_nil(selected)
+    assert.array(selected).has.no.holes()
+    assert.equals(#hunk_lines, #selected)
+    assert.equals("@@ -219,7 +219,8 @@ function PatchView:prev_hunk_handler()", selected[1])
+    assert.equals("         new_row = self._hunks[hunk_idx-1]", selected[5])
+    assert.equals("+        new_row = self._hunk_offsets[hunk_idx-1]", selected[6])
   end)
 
   it("extracts selected partial hunk for reverse 1", function()
