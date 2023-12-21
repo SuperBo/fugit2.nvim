@@ -5,7 +5,6 @@ local NuiLine = require "nui.line"
 local NuiText = require "nui.text"
 local NuiTree = require "nui.tree"
 local NuiPopup = require "nui.popup"
-local NuiMenu = require "nui.menu"
 local Object = require "nui.object"
 local event = require "nui.utils.autocmd".event
 local WebDevIcons = require "nvim-web-devicons"
@@ -671,8 +670,16 @@ function GitStatus:_init_menus(menu_type)
       { texts = { NuiText("Upstream") }, key = "u" },
     }
     arg_items = {
-      { text = NuiText("Force with lease"), key = "-f", arg = "--force-with-lease" },
-      { text = NuiText("Force"),            key = "-F", arg = "--force" },
+      {
+        text = NuiText("Force with lease"),
+        key = "-f", arg = "--force-with-lease",
+        type = UI.INPUT_TYPE.RADIO, model = "force"
+      },
+      {
+        text = NuiText("Force"),
+        key = "-F", arg = "--force",
+        type = UI.INPUT_TYPE.RADIO, model = "force"
+      },
     }
   end
 

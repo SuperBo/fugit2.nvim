@@ -4,8 +4,7 @@ local NuiText = require "nui.text"
 local NuiLine = require "nui.line"
 local NuiMenu = require "nui.menu"
 local NuiPopup = require "nui.popup"
-local NuiLayout = require "nui.layout"
-local event = require("nui.utils.autocmd").event
+local event = require "nui.utils.autocmd".event
 
 --=================
 --| Confirm Popup |
@@ -141,14 +140,20 @@ end
 --| Transient Menu Popup |
 --=======================
 
+---@enum Fugit2UITransientInputType
+local INPUT_TYPE = {
+  CHECKBOX = 1,
+  RADIO = 2
+}
 
 ---@class Fugit2UITransientMenu
 ---@field _menu NuiMenu
 ---@field ns_id integer
 local Menu = Object("Fugit2UITransientMenu")
 
----@alias Fugit2UITransientArg { key: string, text: NuiText, arg: string }
+---@alias Fugit2UITransientArg { key: string, text: NuiText, arg: string, type: Fugit2UITransientInputType, model: string }
 ---@alias Fugit2UITransientItem { key: string?, texts: NuiText[] }
+---@alias Fugit2UITransientArgModel { [string]: string[] }
 
 ---@param ns_id integer namespace id
 ---@param title NuiText Menu title
@@ -156,8 +161,6 @@ local Menu = Object("Fugit2UITransientMenu")
 ---@param arg_items Fugit2UITransientArg[]?
 function Menu:init(ns_id, title, menu_items, arg_items)
   self.ns_id = ns_id
-  local title_hl = "Fugit2FloatTitle"
-  local head_hl = "Fugit2MenuHead"
   local key_hl = "Fugit2MenuKey"
   local menu_item_align = { text_align = "center" }
   local popup_opts = {
@@ -200,10 +203,9 @@ function Menu:init(ns_id, title, menu_items, arg_items)
     },
   })
 
-  ---@type { [string]: boolean }
-  self._args = {}
-  self._arg_lines = {}
-  self._arg_indices = {}
+  self._args = {} --[[@as { [string]: boolean }]]
+  self._arg_indices = {} --[[@as { [string]: integer } ]]
+  self._arg_models = {} --[[@as { [string]: { type: Fugit2UITransientInputType, keys: string[] } } ]]
   if arg_items then
     local arg_popup_opts = {
       ns_id = ns_id,
@@ -231,6 +233,11 @@ function Menu:init(ns_id, title, menu_items, arg_items)
     for i, item in ipairs(arg_items) do
       self._args[item.key] = false
       self._arg_indices[item.key] = i
+
+      if not self._arg_models[item.model] then
+        self._arg_models[item.model] = { type = item.type, keys = {} }
+      end
+      table.insert(self._arg_models[item.model].keys, item.key)
     end
   end
 
@@ -249,15 +256,17 @@ end
 ---@return NuiLine
 local function arg_item_to_line(item, enabled)
   local line = NuiLine { NuiText(item.key .. " ", "Fugit2MenuKey") }
-  if enabled then
+  if enabled and item.type == INPUT_TYPE.CHECKBOX then
     line:append("󰱒 ", "Fugit2MenuArgOn")
-  else
+  elseif enabled and item.type == INPUT_TYPE.RADIO then
+    line:append("󰗡 ", "Fugit2MenuArgOn")
+  elseif item.type == INPUT_TYPE.CHECKBOX then
     line:append("󰄱 ", "Fugit2MenuArgOff")
+  elseif item.type == INPUT_TYPE.RADIO then
+    line:append("󰝦 ", "Fugit2MenuArgOff")
   end
   line:append(item.text)
-  -- line:append(" (")
   line:append(" " .. item.arg, enabled and "Fugit2MenuArgOn" or "Fugit2MenuArgOff")
-  -- line:append(")")
   return line
 end
 
@@ -269,15 +278,39 @@ function Menu:render()
   end
 end
 
+---@param args { [string]: boolean }
+---@param arg_models { [string]: { type: Fugit2UITransientInputType, keys: string[] } }
+---@return Fugit2UITransientArgModel
+local function collect_args(args, arg_models)
+  return vim.tbl_map(function(m)
+    local values = {}
+    if m.type == INPUT_TYPE.CHECKBOX then
+      for _, k in ipairs(m.keys) do
+        if args[k] then
+          values[#values+1] = k
+        end
+      end
+    elseif m.type == INPUT_TYPE.RADIO then
+      for _, k in ipairs(m.keys) do
+        if args[k] then
+          values[1] = k
+          break
+        end
+      end
+    end
+    return values
+  end, arg_models)
+end
 
 ---Set call back func
----@param callback fun(item_id: string, args: { [string]: boolean })
+---@param callback fun(item_id: string, args: Fugit2UITransientArgModel)
 function Menu:on_submit(callback)
   self._submit_fn = callback
   self._menu.menu_props.on_submit = function()
     local item_id = self._menu.tree:get_node().id or ""
     self._menu:unmount()
-    self._submit_fn(item_id, self._args)
+    local args = collect_args(self._args, self._arg_models)
+    self._submit_fn(item_id, args)
   end
 end
 
@@ -287,7 +320,8 @@ function Menu:mount()
   for _, key in ipairs(self._hotkeys) do
     self._menu:map("n", key, function()
       self._menu:unmount()
-      self._submit_fn(key, self._args)
+      local args = collect_args(self._args, self._arg_models)
+      self._submit_fn(key, args)
     end, { noremap = true, nowait = true })
   end
 
@@ -314,6 +348,21 @@ function Menu:mount()
 
         local line = arg_item_to_line(self._arg_items[i], enabled)
         line:render(self._args_popup.bufnr, self.ns_id, i)
+
+        if self._arg_items[i].type == INPUT_TYPE.RADIO then
+          -- turnoff other flags
+          local model = self._arg_models[self._arg_items[i].model]
+          if model then
+            for _, a in ipairs(model.keys) do
+              if a ~= arg and self._args[a] then
+                self._args[a] = false
+                local j = self._arg_indices[a]
+                local linej = arg_item_to_line(self._arg_items[j], false)
+                linej:render(self._args_popup.bufnr, self.ns_id, j)
+              end
+            end
+          end
+        end
       end, { noremap = true, nowait = true })
     end
   end
@@ -328,7 +377,8 @@ end
 ---@module 'Fugit2UIComponents'
 local M = {
   Confirm = Confirm,
-  Menu = Menu
+  Menu = Menu,
+  INPUT_TYPE = INPUT_TYPE,
 }
 
 return M
