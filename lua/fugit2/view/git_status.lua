@@ -1085,11 +1085,15 @@ end
 
 -- Renders git status
 function GitStatus:render()
+  vim.api.nvim_buf_set_option(self.info_popup.bufnr, "modifiable", true)
+
   for i, line in ipairs(self._status_lines) do
     line:render(self.info_popup.bufnr, self.ns_id, i)
   end
 
   self._tree:render()
+
+  vim.api.nvim_buf_set_option(self.info_popup.bufnr, "modifiable", false)
 end
 
 
@@ -1147,6 +1151,7 @@ function GitStatus:index_add_reset_handler(add, reset)
 
     if refresh then
       self:update()
+      self:render()
     end
     tree:render()
 
@@ -1683,8 +1688,6 @@ function GitStatus:run_command(cmd, args, refresh)
     vim.api.nvim_buf_set_lines(bufnr, 0, 1, true, { cmd_line })
   end
 
-  vim.api.nvim_buf_set_option(bufnr, "modifiable", false)
-
   local timer, tick = uv.new_timer(), 0
   self._states.timer = timer
 
@@ -1696,6 +1699,10 @@ function GitStatus:run_command(cmd, args, refresh)
       if timer and timer:is_active() then
         timer:close()
       end
+
+      vim.api.nvim_buf_set_option(bufnr, "modifiable", false)
+      vim.api.nvim_buf_set_option(bufnr, "readonly", true)
+
       if ret == 0 then
         vim.notify("[Fugit2] Command " .. cmd .. " success", vim.log.levels.INFO)
         self:quit_command()
@@ -1714,9 +1721,8 @@ function GitStatus:run_command(cmd, args, refresh)
       if data then
         local i = linenr
         vim.schedule(function()
-          vim.api.nvim_buf_set_option(bufnr, "modifiable", true)
+          -- vim.api.nvim_buf_set_option(bufnr, "modifiable", true)
           vim.api.nvim_buf_set_lines(bufnr, i, -1, true, { data })
-          vim.api.nvim_buf_set_option(bufnr, "modifiable", false)
           if vim.api.nvim_win_is_valid(winid) then
             vim.api.nvim_win_set_cursor(winid, { i + 1, 0 })
           end
@@ -1728,9 +1734,8 @@ function GitStatus:run_command(cmd, args, refresh)
       if data then
         local i = linenr
         vim.schedule(function()
-          vim.api.nvim_buf_set_option(bufnr, "modifiable", true)
+          -- vim.api.nvim_buf_set_option(bufnr, "modifiable", true)
           vim.api.nvim_buf_set_lines(bufnr, i, -1, true, { data })
-          vim.api.nvim_buf_set_option(bufnr, "modifiable", false)
           if vim.api.nvim_win_is_valid(winid) then
             vim.api.nvim_win_set_cursor(winid, { i + 1, 0 })
           end
@@ -1751,9 +1756,7 @@ function GitStatus:run_command(cmd, args, refresh)
       local char = LOADING_CHARS[idx]
 
       vim.schedule(function()
-        vim.api.nvim_buf_set_option(bufnr, "modifiable", true)
         vim.api.nvim_buf_set_lines(bufnr, linenr, -1, true, { char })
-        vim.api.nvim_buf_set_option(bufnr, "modifiable", false)
       end)
 
       tick = tick + 1
@@ -1769,6 +1772,7 @@ function GitStatus:run_command(cmd, args, refresh)
     if not result then
       job:shutdown(-5, 15)
     end
+
   end, wait_time)
 end
 
