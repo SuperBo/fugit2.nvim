@@ -101,6 +101,7 @@ Index.__index = Index
 ---@field remote ffi.cdata* libgit2 struct git_remote*[1]
 ---@field name string
 ---@field url string
+---@field push_url string?
 local Remote = {}
 Remote.__index = Remote
 
@@ -567,7 +568,7 @@ function Reference:branch_upstream()
 end
 
 
--- Retrieves the upstream remote name of a local branch / upstream.
+-- Retrieves the upstream remote name of a remote_reference.
 ---@return string?
 function Reference:remote_name()
   if self.namespace == GIT_REFERENCE_NAMESPACE.REMOTE then
@@ -695,6 +696,10 @@ function Remote.new(git_remote)
 
   remote.name = ffi.string(libgit2.C.git_remote_name(remote.remote))
   remote.url = ffi.string(libgit2.C.git_remote_url(remote.remote))
+  local push_url = libgit2.C.git_remote_pushurl(remote.remote)
+  if push_url ~= nil then
+    remote.push_url = ffi.string(push_url)
+  end
 
   ffi.gc(remote.remote, libgit2.C.git_remote_free)
 
@@ -1082,12 +1087,17 @@ end
 ---@field author string
 ---@field is_detached boolean
 ---@field namespace GIT_REFERENCE_NAMESPACE
+---@field refname string
+
+---@alias GitStatusRemote { name: string, url: string, push_url: string? }
+---@alias GitStatusPushTarget { name:string, oid: string, ahead: integer, behind: integer }
 
 ---@class GitStatusResult
 ---@field head GitStatusHead
+---@field remote GitStatusRemote?
 ---@field upstream GitStatusUpstream?
+---@field push GitStatusPushTarget?
 ---@field status GitStatusItem[]
-
 
 ---@class GitBranch
 ---@field name string
@@ -1305,6 +1315,21 @@ function Repository:ahead_behind(local_commit, upstream_commit)
 end
 
 
+---Lookup a reference by name and resolve immediately to OID.
+---@param refname string Long name for the reference (e.g. HEAD, refs/heads/master, refs/tags/v0.1.0).
+---@return GitObjectId?
+---@return GIT_ERROR
+function Repository:reference_name_to_id(refname)
+  local oid = libgit2.git_oid()
+  local err = libgit2.C.git_reference_name_to_id(oid, self.repo, refname)
+  if err ~= 0 then
+    return nil, err
+  end
+
+  return ObjectId.borrow(oid), 0
+end
+
+
 -- Gets commit from a reference.
 ---@param oid GitObjectId
 ---@return GitCommit?
@@ -1385,7 +1410,7 @@ function Repository:branch_remote_name(ref)
 end
 
 
--- Retrieves the upstream remote of a local branch.
+---Retrieves the upstream remote of a local branch.
 ---@param ref string Ref name
 ---@return string? remote Git remote name
 ---@return GIT_ERROR
@@ -1418,6 +1443,27 @@ function Repository:remote_lookup(remote)
   end
 
   return Remote.new(c_remote[0]), 0
+end
+
+---Gets a list of the configured remotes for a repo
+---@return string[]?
+---@return GIT_ERROR
+function Repository:remote_list()
+  local strarr = libgit2.git_strarray()
+
+  local err = libgit2.C.git_remote_list(strarr, self.repo)
+  if err ~= 0 then
+    return nil, err
+  end
+
+  local remotes = {} --[[@as string[] ]]
+  local num_remotes = tonumber(strarr[0].count) or 0
+  for i = 0,num_remotes-1 do
+    remotes[i+1] = ffi.string(strarr[0].strings[i])
+  end
+  libgit2.C.git_strarray_dispose(strarr)
+
+  return remotes, 0
 end
 
 
@@ -1513,10 +1559,32 @@ function Repository:status()
       author      = repo_head_commit and repo_head_commit:author() or "",
       message     = repo_head_commit and repo_head_commit:message() or "",
       is_detached = self:is_head_detached(),
-      namespace   = repo_head.namespace
+      namespace   = repo_head.namespace,
+      refname     = repo_head.name,
     },
     status = {}
   }
+
+  -- Get default remote information
+  local default_remote, remote, remotes, push_target
+  remote, err = self:remote_lookup("origin")
+  if err ~= 0 then
+    remotes, _ = self:remote_list()
+    if remotes and #remotes > 0 then
+      -- get other remote as default if origin is not found
+      remote, err = self:remote_lookup(remotes[1])
+    else
+      remote = nil
+    end
+  end
+  if remote then
+    default_remote = remote
+    result.remote = {
+      name = remote.name,
+      url   = remote.url,
+      push_url = remote.push_url
+    }
+  end
 
   -- Get upstream information
   local repo_upstream
@@ -1537,7 +1605,6 @@ function Repository:status()
     end
 
     local remote_name = repo_upstream:remote_name()
-    local remote
     if remote_name then
       remote, _ = self:remote_lookup(remote_name)
     end
@@ -1552,7 +1619,39 @@ function Repository:status()
       remote     = remote and remote.name or "",
       remote_url = remote and remote.url or "",
     }
+
+    if default_remote and remote_name == default_remote.name
+      and result.upstream.name == (default_remote.name .. "/" .. result.head.name)
+    then
+      push_target = {
+        name   = repo_upstream:shorthand(),
+        oid    = result.upstream.oid,
+        ahead  = result.upstream.ahead,
+        behind = result.upstream.behind
+      }
+    end
   end
+
+  -- Get default push target information if upstream not match
+  if not push_target and default_remote then
+    local push_name = default_remote.name .. "/" .. result.head.name
+    local push_ref = "refs/remotes/" .. push_name
+    local push_target_id, _ = self:reference_name_to_id(push_ref)
+    if push_target_id then
+      local ahead, behind
+      if repo_head_oid then
+        ahead, behind = self:ahead_behind(repo_head_oid, push_target_id)
+      end
+
+      push_target = {
+        name   = push_name,
+        oid    = tostring(push_target_id),
+        ahead  = ahead or 0,
+        behind = behind or 0
+      }
+    end
+  end
+  result.push = push_target
 
   local n_entry = tonumber(libgit2.C.git_status_list_entrycount(status[0]))
 

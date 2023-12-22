@@ -1,4 +1,4 @@
--- NUI Git helper module
+-- Fugit2 Git Status module
 
 local NuiLayout = require "nui.layout"
 local NuiLine = require "nui.line"
@@ -8,6 +8,7 @@ local NuiPopup = require "nui.popup"
 local Object = require "nui.object"
 local event = require "nui.utils.autocmd".event
 local WebDevIcons = require "nvim-web-devicons"
+local job = require "plenary.job"
 
 local UI = require "fugit2.view.components.menus"
 local PatchView = require "fugit2.view.components.patch_view"
@@ -585,12 +586,15 @@ function GitStatus:init(ns_id, repo, last_window)
 
   ---@class Fugit2GitStatusGitStates
   ---@field head GitStatusHead?
+  ---@field upstream GitStatusUpstream?
   ---@field ahead integer
   ---@field behind integer
   ---@field index_updated boolean Whether git status is updated
   ---@field head_tree GitTree
   ---@field unstaged_diff { [string]: GitPatch }
   ---@field staged_diff { [string]: GitPatch }
+  ---@field remote GitStatusRemote?
+  ---@field push_target GitStatusPushTarget?
   self._git = {
     head = nil, ahead = 0, behind = 0,
     index_updated = false,
@@ -604,6 +608,8 @@ function GitStatus:init(ns_id, repo, last_window)
   ---@field last_patch_line integer
   ---@field patch_staged_shown boolean
   ---@field patch_unstaged_shown boolean
+  ---@field current_text NuiText
+  ---@field upstream_text NuiText?
   self._states = {
     last_window = last_window,
     commit_mode = CommitMode.COMMIT,
@@ -624,8 +630,8 @@ function GitStatus:_init_menus(menu_type)
   local menu_items, menu_title, arg_items
   local title_hl = "Fugit2FloatTitle"
   local head_hl = "Fugit2MenuHead"
-  local key_hl = "Fugit2MenuKey"
-
+  local states = self._states
+  local git = self._git
 
   if menu_type == Menu.COMMIT then
     menu_title = NuiText(" Committing ", title_hl)
@@ -663,12 +669,44 @@ function GitStatus:_init_menus(menu_type)
     --   NuiMenu.item(NuiLine { NuiText("d ", key_hl), NuiText("Delete") }, { id = "d" }),
     -- }
   elseif menu_type == Menu.PUSH then
+    local push_target = { NuiText("@pushRemote") }
+    if git.remote and not git.push_target then
+      local text = utils.get_git_icon(git.remote.url) .. git.remote.name .. "/" .. git.head.name
+      push_target[1] = NuiText(text, "Fugit2Heading")
+    elseif git.remote and git.push_target then
+      local text = utils.get_git_icon(git.remote.url) .. git.push_target.name
+      if git.push_target.ahead + git.push_target.behind > 0 then
+        push_target = {
+          NuiText(text, "Fugit2Heading"),
+          NuiText(" "),
+          NuiText(utils.get_ahead_behind_text(git.push_target.ahead, git.push_target.behind), "Fugit2Count")
+        }
+      else
+        push_target = { NuiText(text, "Fugit2Staged") }
+      end
+    end
+
     menu_title = NuiText(" Pushing ", title_hl)
     menu_items = {
-      { texts = { NuiText("Push dev to", head_hl) } },
-      { texts = { NuiText("Push") },     key = "p" },
-      { texts = { NuiText("Upstream") }, key = "u" },
+      { texts = { NuiText("Push ", head_hl), states.current_text, NuiText(" to", head_hl) } },
+      { texts = push_target, key = "p" }
     }
+
+    if git.upstream then
+      local upstream_target
+      local text = utils.get_git_icon(git.upstream.remote_url) .. git.upstream.name
+      if git.upstream.ahead + git.upstream.behind > 0 then
+        upstream_target = {
+          NuiText(text, "Fugit2Heading"),
+          NuiText(" "),
+          NuiText(utils.get_ahead_behind_text(git.upstream.ahead, git.upstream.behind), "Fugit2Count")
+        }
+      else
+        upstream_target = { NuiText(text, "Fugit2Staged") }
+      end
+      table.insert(menu_items, 3, { texts = upstream_target, key = "u" })
+    end
+
     arg_items = {
       {
         text = NuiText("Force with lease"),
@@ -906,6 +944,7 @@ function GitStatus:update()
   else
     -- update status panel
     self._git.head = git_status.head
+    self._git.remote = git_status.remote
 
     local head_line = NuiLine { NuiText("HEAD", "Fugit2Header") }
     if git_status.head.is_detached then
@@ -918,6 +957,7 @@ function GitStatus:update()
     if git_status.upstream then
       ahead, behind = git_status.upstream.ahead, git_status.upstream.behind
       self._git.ahead, self._git.behind = ahead, behind
+      self._git.upstream = git_status.upstream
     end
     local ahead_behind = ahead + behind
 
@@ -934,6 +974,9 @@ function GitStatus:update()
     local author_format = " %-" .. author_width .. "s"
 
     local head_icon = utils.get_git_namespace_icon(git_status.head.namespace)
+
+    self._states.current_text = NuiText( head_icon .. git_status.head.name, "Fugit2BranchHead")
+
     if ahead_behind == 0 then
       head_line:append(
         string.format(branch_format, head_icon, git_status.head.name),
@@ -950,10 +993,8 @@ function GitStatus:update()
       if padding > 0 then
         head_line:append(string.rep(" ", padding))
       end
-      local ahead_behind_str = (
-        (ahead > 0 and "↑" .. ahead or "")
-        .. (behind > 0 and "↓" .. behind or "")
-      )
+      local ahead_behind_str = utils.get_ahead_behind_text(ahead, behind)
+
       head_line:append(ahead_behind_str, "Fugit2Count")
     end
 
@@ -973,11 +1014,14 @@ function GitStatus:update()
       local remote_icon = utils.get_git_icon(git_status.upstream.remote_url)
 
       local upstream_name = string.format(branch_format, remote_icon, git_status.upstream.name)
+      local upstream_text
       if git_status.upstream.ahead > 0 or git_status.upstream.behind > 0 then
-        upstream_line:append(upstream_name, "Fugit2Heading")
+        upstream_text = NuiText(upstream_name, "Fugit2Heading")
       else
-        upstream_line:append(upstream_name, "Fugit2Staged")
+        upstream_text = NuiText(upstream_name, "Fugit2Staged")
       end
+      upstream_line:append(upstream_text)
+      self._states.upstream_text = upstream_text
 
       upstream_line:append(string.format(author_format, git_status.upstream.author), "Fugit2Author")
       upstream_line:append(" " .. git_status.upstream.oid .. " ", "Fugit2ObjectId")
@@ -987,6 +1031,9 @@ function GitStatus:update()
       upstream_line:append("?", "Fugit2SymbolicRef")
     end
     table.insert(lines, upstream_line)
+
+    -- get info of default push
+    self._git.push_target = git_status.push
 
     -- update files tree
     self._tree:update(git_status.status)
@@ -1492,11 +1539,81 @@ function GitStatus:_init_push_menu()
   local m = self:_init_menus(Menu.PUSH)
   m:on_submit(function(item_id, args)
     if item_id == "p" then
-      print("P p", args["-f"])
+      self:push_current_to_pushremote(args["force"])
+    elseif item_id == "u" then
+      self:push_current_to_upstream(args["force"])
     end
   end)
   return m
 end
+
+---@param args string[]
+function GitStatus:push_current_to_pushremote(args)
+  ---@type string[]
+  local git_args = { "push" }
+  local git = self._git
+  local current = git.head
+  local remote = git.remote
+
+  if not git.upstream then
+    -- set upstream if there are no upstream
+    git_args[#git_args+1] = "-u"
+  end
+
+  if args[1] == "-F" then
+    git_args[#git_args+1] = "--force"
+  elseif args[1] == "-f" then
+    --force with lease
+    local lease = "--force-with-lease"
+    if current then
+      lease = lease .. "=" .. current.name
+
+      if git.push_target then
+        lease = lease .. ":" .. git.push_target.oid
+      end
+    end
+    git_args[#git_args+1] = lease
+  end
+
+  if remote then
+    git_args[#git_args+1] = remote.name
+  end
+  if current then
+    git_args[#git_args+1] = current.name .. ":" .. current.name
+  end
+end
+
+---@param args string[]
+function GitStatus:push_current_to_upstream(args)
+  ---@type string[]
+  local git_args = { "push" }
+  local git = self._git
+  local current = git.head
+  local upstream = git.upstream
+
+  if not current or not upstream then
+    error("[Fugit2] Upstream Not Found")
+    return
+  end
+
+  local upstream_names = vim.split(upstream.name, "/", { plain = true })
+  if #upstream_names < 2 then
+    error("[Fugit2] Invalid upstream name")
+    return
+  end
+
+  if args[1] == "-F" then
+    git_args[#git_args+1] = "--force"
+  elseif args[1] == "-f" then
+    -- force with lease
+    git_args[#git_args+1] = string.format("--force-with-lease=%s:%s", upstream_names[2], upstream.oid)
+  end
+
+  git_args[#git_args+1] = upstream.remote
+
+  git_args[#git_args+1] = current.name .. ":" .. upstream_names[2]
+end
+
 
 -- Setup keymap and event handlers
 function GitStatus:setup_handlers()

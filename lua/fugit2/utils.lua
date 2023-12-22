@@ -103,6 +103,21 @@ function M.get_git_namespace_icon(namespace)
 end
 
 
+---Return ahead behind string
+---@param ahead integer?
+---@param behind integer?
+---@return string
+function M.get_ahead_behind_text(ahead, behind)
+  local str = ""
+  if ahead and ahead > 0 then
+    str = "↑" .. ahead
+  end
+  if behind and behind > 0 then
+    str = str .. "↓" .. behind
+  end
+  return str
+end
+
 
 ---@class BitArray BitArray in big-endian representation
 ---@field n integer length of bitarray

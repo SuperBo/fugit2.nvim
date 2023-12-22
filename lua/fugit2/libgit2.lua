@@ -295,6 +295,7 @@ ffi.cdef[[
   int git_reference_type(const git_reference *ref);
   const git_oid * git_reference_target(const git_reference *ref);
   int git_reference_peel(git_object **out, const git_reference *ref, int type);
+  int git_reference_name_to_id(git_oid *out, git_repository *repo, const char *name);
 
   int git_revwalk_new(git_revwalk **walker, git_repository *repo);
   int git_revwalk_push(git_revwalk *walk, const git_oid *oid);
@@ -306,8 +307,10 @@ ffi.cdef[[
   int git_revwalk_reset(git_revwalk *walker);
 
   int git_remote_lookup(git_remote **out, git_repository *repo, const char *name);
+  int git_remote_list(git_strarray *out, git_repository *repo);
   const char * git_remote_name(const git_remote *remote);
   const char * git_remote_url(const git_remote *remote);
+  const char * git_remote_pushurl(const git_remote *remote);
   int git_remote_disconnect(git_remote *remote);
   void git_remote_free(git_remote *remote);
 
@@ -317,6 +320,7 @@ ffi.cdef[[
   int git_branch_upstream(git_reference **out, const git_reference *branch);
   int git_branch_remote_name(git_buf *out, git_repository *repo, const char *refname);
   int git_branch_upstream_remote(git_buf *buf, git_repository *repo, const char *refname);
+  int git_branch_lookup(git_reference **out, git_repository *repo, const char *branch_name, unsigned int branch_type);
 
   int git_repository_open_ext(git_repository **out, const char *path, unsigned int flags, const char *ceiling_dirs);
   void git_repository_free(git_repository *repo);
@@ -383,6 +387,8 @@ M.git_oid = ffi.typeof("git_oid[1]")
 
 ---@type ffi.ctype* git_strarray_readonly[1]
 M.git_strarray_readonly = ffi.typeof("git_strarray_readonly[1]")
+---@type ffi.ctype* git_strarray[1]
+M.git_strarray = ffi.typeof("git_strarray[1]")
 
 ---@type ffi.ctype* git_object **
 M.git_object_double_pointer = ffi.typeof("git_object*[1]")
