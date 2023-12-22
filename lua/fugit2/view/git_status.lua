@@ -1,5 +1,7 @@
 -- Fugit2 Git Status module
 
+local uv = vim.loop
+
 local NuiLayout = require "nui.layout"
 local NuiLine = require "nui.line"
 local NuiText = require "nui.text"
@@ -8,7 +10,7 @@ local NuiPopup = require "nui.popup"
 local Object = require "nui.object"
 local event = require "nui.utils.autocmd".event
 local WebDevIcons = require "nvim-web-devicons"
-local job = require "plenary.job"
+local PlenaryJob = require "plenary.job"
 
 local UI = require "fugit2.view.components.menus"
 local PatchView = require "fugit2.view.components.patch_view"
@@ -400,13 +402,22 @@ local Menu = {
 -- | Main git status |
 -- ===================
 
+local LOADING_CHARS = {
+  " ",
+  " ",
+  " ",
+  " ",
+  " ",
+  " "
+}
+
+
 ---@enum Fugit2GitStatusSidePanel
 local SidePanel = {
   NONE       = 0,
   PATCH_VIEW = 1,
   DIFF_VIEW  = 2
 }
-
 
 
 ---@class Fugit2GitStatusView
@@ -445,6 +456,14 @@ function GitStatus:init(ns_id, repo, last_window)
     error("Null repo")
   end
 
+  local win_hl = "Normal:Normal,FloatBorder:FloatBorder"
+  local buf_readonly_opts = {
+      modifiable = false,
+      readonly = true,
+      swapfile = false,
+      buftype  = "nofile",
+    }
+
   -- setup popups
   self.info_popup = NuiPopup {
     ns_id = ns_id,
@@ -464,14 +483,9 @@ function GitStatus:init(ns_id, repo, last_window)
       },
     },
     win_options = {
-      winhighlight = "Normal:Normal,FloatBorder:FloatBorder",
+      winhighlight = win_hl,
     },
-    buf_options = {
-      modifiable = true,
-      readonly = false,
-      swapfile = false,
-      buftype  = "nofile",
-    },
+    buf_options = buf_readonly_opts,
   }
   self.file_popup = NuiPopup {
     ns_id = ns_id,
@@ -494,16 +508,10 @@ function GitStatus:init(ns_id, repo, last_window)
       },
     },
     win_options = {
-      winblend = 0,
-      winhighlight = "Normal:Normal,FloatBorder:FloatBorder",
+      winhighlight = win_hl,
       cursorline = true,
     },
-    buf_options = {
-      modifiable = false,
-      readonly = true,
-      swapfile = false,
-      buftype  = "nofile",
-    },
+    buf_options = buf_readonly_opts,
   }
 
   self.input_popup = NuiPopup {
@@ -523,12 +531,32 @@ function GitStatus:init(ns_id, repo, last_window)
       }
     },
     win_options = {
-      winhighlight = "Normal:Normal,FloatBorder:FloatBorder",
+      winhighlight = win_hl,
     },
     buf_options = {
       modifiable = true,
       filetype = "gitcommit",
     }
+  }
+
+  self.command_popup = NuiPopup {
+    ns_id = ns_id,
+    enter = true,
+    focusable = true,
+    border = {
+      style = "rounded",
+      padding = { left = 1, right = 1 },
+      text = {
+        top = NuiText("  Command line ", "Fugit2FloatTitle"),
+        top_align = "left",
+        bottom = NuiText("[esc][q]uit", "FloatFooter"),
+        bottom_align = "right",
+      }
+    },
+    win_options = {
+      winhighlight = win_hl,
+    },
+    buf_options = buf_readonly_opts,
   }
 
   -- menus
@@ -610,6 +638,8 @@ function GitStatus:init(ns_id, repo, last_window)
   ---@field patch_unstaged_shown boolean
   ---@field current_text NuiText
   ---@field upstream_text NuiText?
+  ---@field timer uv_timer_t?
+  ---@field job Job?
   self._states = {
     last_window = last_window,
     commit_mode = CommitMode.COMMIT,
@@ -1080,6 +1110,8 @@ function GitStatus:unmount()
   end
   self._menus.amend_confirm:unmount()
   self._menus.commit:unmount()
+  self.command_popup:unmount()
+  self.input_popup:unmount()
   self._layout:unmount()
 
   vim.api.nvim_set_current_win(self._states.last_window)
@@ -1581,6 +1613,8 @@ function GitStatus:push_current_to_pushremote(args)
   if current then
     git_args[#git_args+1] = current.name .. ":" .. current.name
   end
+
+  self:run_command("git", git_args, true)
 end
 
 ---@param args string[]
@@ -1612,6 +1646,151 @@ function GitStatus:push_current_to_upstream(args)
   git_args[#git_args+1] = upstream.remote
 
   git_args[#git_args+1] = current.name .. ":" .. upstream_names[2]
+
+  self:run_command("git", git_args, true)
+end
+
+
+---Runs command and update git status
+---@param cmd string
+---@param args string[]
+---@param refresh boolean whether to refresh after command succes
+function GitStatus:run_command(cmd, args, refresh)
+  local bufnr = self.command_popup.bufnr
+
+  self._layout:update(NuiLayout.Box(
+    {
+      NuiLayout.Box(self.info_popup, { size = 6 }),
+      NuiLayout.Box(self.command_popup, { size = 6 }),
+      NuiLayout.Box(self._boxes.main_row, { dir = "row", grow = 1 })
+    },
+    { dir = "col" }
+  ))
+
+  local cmd_line = "❯ " .. cmd .. " " .. table.concat(args, " ")
+  local winid = self.command_popup.winid
+
+  vim.api.nvim_buf_set_option(bufnr, "modifiable", true)
+  vim.api.nvim_buf_set_option(bufnr, "readonly", false)
+
+  local lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, true)
+  local linenr = #lines
+  if lines[1] and lines[1] ~= "" then
+    vim.api.nvim_buf_set_lines(bufnr, #lines, -1, true, { cmd_line })
+    vim.api.nvim_win_set_cursor(winid, { #lines, 0 })
+    linenr = linenr + 1
+  else
+    vim.api.nvim_buf_set_lines(bufnr, 0, 1, true, { cmd_line })
+  end
+
+  vim.api.nvim_buf_set_option(bufnr, "modifiable", false)
+
+  local timer, tick = uv.new_timer(), 0
+  self._states.timer = timer
+
+  local job = PlenaryJob:new({
+    command = cmd,
+    args = args,
+    on_exit = vim.schedule_wrap(function(_, ret)
+      self._states.job = nil
+      if timer and timer:is_active() then
+        timer:close()
+      end
+      if ret == 0 then
+        vim.notify("[Fugit2] Command " .. cmd .. " success", vim.log.levels.INFO)
+        self:quit_command()
+        if refresh then
+          self:update()
+        end
+      elseif ret == -3 then
+        vim.notify("[Fugit2] Command " .. cmd .. " canceled!", vim.log.levels.ERROR)
+      elseif ret == -5 then
+        vim.notify("[Fugit2] Command " .. cmd .. " timeout!", vim.log.levels.ERROR)
+      else
+        vim.notify("[Fugit2] Command " .. cmd .. " failed!", vim.log.levels.ERROR)
+      end
+    end),
+    on_stdout = function(_, data)
+      if data then
+        local i = linenr
+        vim.schedule(function()
+          vim.api.nvim_buf_set_option(bufnr, "modifiable", true)
+          vim.api.nvim_buf_set_lines(bufnr, i, -1, true, { data })
+          vim.api.nvim_buf_set_option(bufnr, "modifiable", false)
+          if vim.api.nvim_win_is_valid(winid) then
+            vim.api.nvim_win_set_cursor(winid, { i + 1, 0 })
+          end
+        end)
+      linenr = linenr + 1
+      end
+    end,
+    on_stderr = function(_, data)
+      if data then
+        local i = linenr
+        vim.schedule(function()
+          vim.api.nvim_buf_set_option(bufnr, "modifiable", true)
+          vim.api.nvim_buf_set_lines(bufnr, i, -1, true, { data })
+          vim.api.nvim_buf_set_option(bufnr, "modifiable", false)
+          if vim.api.nvim_win_is_valid(winid) then
+            vim.api.nvim_win_set_cursor(winid, { i + 1, 0 })
+          end
+        end)
+        linenr = linenr + 1
+      end
+    end
+  })
+  job:start()
+
+  self._states.job = job
+
+  local wait_time = 12000 -- 12 seconds
+
+  if timer then
+    timer:start(0, 120, function()
+      local idx = 1 + (tick % #LOADING_CHARS)
+      local char = LOADING_CHARS[idx]
+
+      vim.schedule(function()
+        vim.api.nvim_buf_set_option(bufnr, "modifiable", true)
+        vim.api.nvim_buf_set_lines(bufnr, linenr, -1, true, { char })
+        vim.api.nvim_buf_set_option(bufnr, "modifiable", false)
+      end)
+
+      tick = tick + 1
+      -- extra protection
+      if tick * 120 > wait_time + 2000 then
+        timer:close()
+      end
+    end)
+  end
+
+  vim.defer_fn(function()
+    local result = pcall(function() job:co_wait(200) end)
+    if not result then
+      job:shutdown(-5, 15)
+    end
+  end, wait_time)
+end
+
+---Quit current running command
+function GitStatus:quit_command()
+  if self._states.job then
+    local bufnr = self.command_popup.bufnr
+    vim.api.nvim_buf_set_option(bufnr, "modifiable", true)
+    vim.api.nvim_buf_set_lines(bufnr, -1, -1, true, { "CANCEL" })
+    vim.api.nvim_buf_set_option(bufnr, "modifiable", false)
+    self._states.job:shutdown(-3, 15)
+    -- self._states.job:wait(500, 250)
+  end
+
+  self._layout:update(NuiLayout.Box(
+    {
+      NuiLayout.Box(self.info_popup, { size = 6 }),
+      NuiLayout.Box(self._boxes.main_row, { dir = "row", grow = 1 })
+    },
+    { dir = "col" }
+  ))
+  self:focus_file()
 end
 
 
@@ -1832,6 +2011,11 @@ function GitStatus:setup_handlers()
   end
   self.input_popup:map("n", "<cr>", input_enter_fn, map_options)
   self.input_popup:map("i", "<c-cr>", "<esc><cr>", { nowait = true })
+
+  -- Command popup
+  self.command_popup:map("n", { "q", "esc" }, function()
+    self:quit_command()
+  end, map_options)
 
   -- Diff Menu
   self.file_popup:map("n", "d", function ()
