@@ -5,6 +5,15 @@ local git2 = require "fugit2.git2"
 ---@class Fugit2Utils
 local M = {}
 
+---@enum LINUX_SIGNALS
+M.LINUX_SIGNALS = {
+  SIGHUP  = 1,
+  SIGQUIT = 3,
+  SIGINT  = 2,
+  SIGABRT = 6,
+  SIGKILL = 9,
+  SIGTERM = 15,
+}
 
 ---@param str string
 function M.lines_head(str)

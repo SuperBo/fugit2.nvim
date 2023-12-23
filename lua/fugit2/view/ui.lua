@@ -7,7 +7,7 @@ local GitGraph = require "fugit2.view.git_graph"
 ---@classs Fugit2UIModule
 local M = {}
 
--- Creates Fugit2 Main Floating Window
+---Creates Fugit2 Main Floating Window
 ---@param namespace integer Nvim namespace
 ---@param repo GitRepository
 ---@return Fugit2GitStatusView

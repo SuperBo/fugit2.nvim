@@ -203,9 +203,12 @@ function Menu:init(ns_id, title, menu_items, arg_items)
     },
   })
 
-  self._args = {} --[[@as { [string]: boolean }]]
-  self._arg_indices = {} --[[@as { [string]: integer } ]]
-  self._arg_models = {} --[[@as { [string]: { type: Fugit2UITransientInputType, keys: string[] } } ]]
+  ---@type { [string]: boolean }
+  self._args = {}
+  ---@type { [string]: integer }
+  self._arg_indices = {}
+  ---@type { [string]: { type: Fugit2UITransientInputType, keys: string[] } }
+  self._arg_models = {}
   if arg_items then
     local arg_popup_opts = {
       ns_id = ns_id,
@@ -257,9 +260,9 @@ end
 local function arg_item_to_line(item, enabled)
   local line = NuiLine { NuiText(item.key .. " ", "Fugit2MenuKey") }
   if enabled and item.type == INPUT_TYPE.CHECKBOX then
-    line:append("󰱒 ", "Fugit2MenuArgOn")
+    line:append("󰄵 ", "Fugit2MenuArgOn")
   elseif enabled and item.type == INPUT_TYPE.RADIO then
-    line:append("󰗡 ", "Fugit2MenuArgOn")
+    line:append("󰄴 ", "Fugit2MenuArgOn")
   elseif item.type == INPUT_TYPE.CHECKBOX then
     line:append("󰄱 ", "Fugit2MenuArgOff")
   elseif item.type == INPUT_TYPE.RADIO then
@@ -280,20 +283,22 @@ end
 
 ---@param args { [string]: boolean }
 ---@param arg_models { [string]: { type: Fugit2UITransientInputType, keys: string[] } }
+---@param arg_indices { [string]: integer }
+---@param arg_items { [string]: Fugit2UITransientArg[] }
 ---@return Fugit2UITransientArgModel
-local function collect_args(args, arg_models)
+local function collect_args(args, arg_models, arg_indices, arg_items)
   return vim.tbl_map(function(m)
     local values = {}
     if m.type == INPUT_TYPE.CHECKBOX then
       for _, k in ipairs(m.keys) do
         if args[k] then
-          values[#values+1] = k
+          values[#values+1] = arg_items[arg_indices[k]].arg
         end
       end
     elseif m.type == INPUT_TYPE.RADIO then
       for _, k in ipairs(m.keys) do
         if args[k] then
-          values[1] = k
+          values[1] = arg_items[arg_indices[k]].arg
           break
         end
       end
@@ -309,7 +314,7 @@ function Menu:on_submit(callback)
   self._menu.menu_props.on_submit = function()
     local item_id = self._menu.tree:get_node().id or ""
     self._menu:unmount()
-    local args = collect_args(self._args, self._arg_models)
+    local args = collect_args(self._args, self._arg_models, self._arg_indices, self._arg_items)
     self._submit_fn(item_id, args)
   end
 end
@@ -320,10 +325,13 @@ function Menu:mount()
   for _, key in ipairs(self._hotkeys) do
     self._menu:map("n", key, function()
       self._menu:unmount()
-      local args = collect_args(self._args, self._arg_models)
+      local args = collect_args(self._args, self._arg_models, self._arg_indices, self._arg_items)
       self._submit_fn(key, args)
     end, { noremap = true, nowait = true })
   end
+
+  -- prevent inconvenience with oil nvim
+  self._menu:map("n", "-", "", { noremap = true })
 
   if self._args_popup then
     self._menu:on(event.BufHidden, function()

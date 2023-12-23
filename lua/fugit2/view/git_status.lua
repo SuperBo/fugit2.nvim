@@ -18,6 +18,16 @@ local git2 = require "fugit2.git2"
 local utils = require "fugit2.utils"
 
 
+-- ===================
+-- | Libgit2 options |
+-- ===================
+
+local SERVER_CONNECT_TIMEOUT = 12000
+local SERVER_TIMEOUT = 15000
+
+git2.set_opts(git2.GIT_OPT.SET_SERVER_CONNECT_TIMEOUT, SERVER_CONNECT_TIMEOUT)
+git2.set_opts(git2.GIT_OPT.SET_SERVER_TIMEOUT, SERVER_TIMEOUT)
+
 -- =================
 -- |  Status tree  |
 -- =================
@@ -396,6 +406,8 @@ local Menu = {
   DIFF   = 2,
   BRANCH = 3,
   PUSH   = 4,
+  FETCH  = 5,
+  PULL   = 6,
 }
 
 -- ===================
@@ -404,11 +416,17 @@ local Menu = {
 
 local LOADING_CHARS = {
   " ",
-  " ",
-  " ",
-  " ",
-  " ",
-  " "
+  " ",
+  " ",
+  " ",
+  " ",
+  " ",
+  " ",
+  " ",
+  " ",
+  " ",
+  " ",
+  " ",
 }
 
 
@@ -547,7 +565,7 @@ function GitStatus:init(ns_id, repo, last_window)
       style = "rounded",
       padding = { left = 1, right = 1 },
       text = {
-        top = NuiText("  Command line ", "Fugit2FloatTitle"),
+        top = NuiText("  Console ", "Fugit2FloatTitle"),
         top_align = "left",
         bottom = NuiText("[esc][q]uit", "FloatFooter"),
         bottom_align = "right",
@@ -654,6 +672,48 @@ function GitStatus:init(ns_id, repo, last_window)
 end
 
 
+---@param git Fugit2GitStatusGitStates
+---@param menu_items Fugit2UITransientItem[]
+---@return Fugit2UITransientItem[]
+local function prepare_pull_push_items(git, menu_items)
+  if git.remote and not git.push_target then
+    local text = utils.get_git_icon(git.remote.url) .. git.remote.name .. "/" .. git.head.name
+    menu_items[2].texts[1] = NuiText(text, "Fugit2Heading")
+  elseif git.remote and git.push_target then
+    local push_target
+    local text = utils.get_git_icon(git.remote.url) .. git.push_target.name
+    if git.push_target.ahead + git.push_target.behind > 0 then
+      push_target = {
+        NuiText(text, "Fugit2Heading"),
+        NuiText(" "),
+        NuiText(utils.get_ahead_behind_text(git.push_target.ahead, git.push_target.behind), "Fugit2Count")
+      }
+    else
+      push_target = { NuiText(text, "Fugit2Staged") }
+    end
+    menu_items[2].texts = push_target
+  end
+
+  if git.upstream then
+    local upstream_target
+    local text = utils.get_git_icon(git.upstream.remote_url) .. git.upstream.name
+    if git.upstream.ahead + git.upstream.behind > 0 then
+      upstream_target = {
+        NuiText(text, "Fugit2Heading"),
+        NuiText(" "),
+        NuiText(utils.get_ahead_behind_text(git.upstream.ahead, git.upstream.behind), "Fugit2Count")
+      }
+    else
+      upstream_target = { NuiText(text, "Fugit2Staged") }
+    end
+    local item = { texts = upstream_target, key = "u" }
+    table.insert(menu_items, 3, item)
+  end
+
+  return menu_items
+end
+
+---Menu creation factory.
 ---@param menu_type Fugit2GitStatusMenu menu to init
 ---@return Fugit2UITransientMenu
 function GitStatus:_init_menus(menu_type)
@@ -699,44 +759,7 @@ function GitStatus:_init_menus(menu_type)
     --   NuiMenu.item(NuiLine { NuiText("d ", key_hl), NuiText("Delete") }, { id = "d" }),
     -- }
   elseif menu_type == Menu.PUSH then
-    local push_target = { NuiText("@pushRemote") }
-    if git.remote and not git.push_target then
-      local text = utils.get_git_icon(git.remote.url) .. git.remote.name .. "/" .. git.head.name
-      push_target[1] = NuiText(text, "Fugit2Heading")
-    elseif git.remote and git.push_target then
-      local text = utils.get_git_icon(git.remote.url) .. git.push_target.name
-      if git.push_target.ahead + git.push_target.behind > 0 then
-        push_target = {
-          NuiText(text, "Fugit2Heading"),
-          NuiText(" "),
-          NuiText(utils.get_ahead_behind_text(git.push_target.ahead, git.push_target.behind), "Fugit2Count")
-        }
-      else
-        push_target = { NuiText(text, "Fugit2Staged") }
-      end
-    end
-
     menu_title = NuiText(" Pushing ", title_hl)
-    menu_items = {
-      { texts = { NuiText("Push ", head_hl), states.current_text, NuiText(" to", head_hl) } },
-      { texts = push_target, key = "p" }
-    }
-
-    if git.upstream then
-      local upstream_target
-      local text = utils.get_git_icon(git.upstream.remote_url) .. git.upstream.name
-      if git.upstream.ahead + git.upstream.behind > 0 then
-        upstream_target = {
-          NuiText(text, "Fugit2Heading"),
-          NuiText(" "),
-          NuiText(utils.get_ahead_behind_text(git.upstream.ahead, git.upstream.behind), "Fugit2Count")
-        }
-      else
-        upstream_target = { NuiText(text, "Fugit2Staged") }
-      end
-      table.insert(menu_items, 3, { texts = upstream_target, key = "u" })
-    end
-
     arg_items = {
       {
         text = NuiText("Force with lease"),
@@ -749,6 +772,69 @@ function GitStatus:_init_menus(menu_type)
         type = UI.INPUT_TYPE.RADIO, model = "force"
       },
     }
+    menu_items = {
+      { texts = { NuiText("Push ", head_hl), states.current_text, NuiText(" to", head_hl) } },
+      { texts = { NuiText("@pushRemote") }, key = "p" }
+    }
+    menu_items = prepare_pull_push_items(git, menu_items)
+  elseif menu_type == Menu.FETCH then
+    menu_title = NuiText(" Fetching ", title_hl)
+    arg_items = {
+      {
+        text = NuiText("Prune deleted branches"),
+        key = "-p", arg = "--prune",
+        type = UI.INPUT_TYPE.CHECKBOX, model = "args"
+      },
+      {
+        text = NuiText("Fetch all tags"),
+        key = "-t", arg = "--tags",
+        type = UI.INPUT_TYPE.CHECKBOX, model = "args"
+      },
+    }
+    menu_items = {
+      { texts = { NuiText("Fetch from", head_hl) } },
+      { texts = { NuiText("@pushRemote") }, key = "p" },
+    }
+
+    if git.remote then
+      local text = utils.get_git_icon(git.remote.url) .. git.remote.name
+      menu_items[2].texts = { NuiText(text, "Fugit2Heading") }
+    end
+
+    if git.upstream then
+      local text = utils.get_git_icon(git.upstream.remote_url) .. git.upstream.remote
+      local item = { texts = { NuiText(text, "Fugit2Heading") }, key = "u" }
+      table.insert(menu_items, 3, item)
+    end
+  elseif menu_type == Menu.PULL then
+    menu_title = NuiText(" Pulling ", title_hl)
+    arg_items = {
+      {
+        text = NuiText("Fast-forward only"),
+        key = "-f", arg = "--ff-only",
+        type = UI.INPUT_TYPE.CHECKBOX, model = "args"
+      },
+      {
+        text = NuiText("Rebase local commits"),
+        key = "-r", arg = "--rebase",
+        type = UI.INPUT_TYPE.CHECKBOX, model = "args"
+      },
+      {
+        text = NuiText("Autostash"),
+        key = "-a", arg = "autostash",
+        type = UI.INPUT_TYPE.CHECKBOX, model = "args"
+      },
+      {
+        text = NuiText("Fetch all tags"),
+        key = "-t", arg = "--tags",
+        type = UI.INPUT_TYPE.CHECKBOX, model = "args"
+      }
+    }
+    menu_items = {
+      { texts = { NuiText("Pull into ", head_hl), states.current_text, NuiText(" from", head_hl) } },
+      { texts = { NuiText("@pushRemote") }, key = "p" },
+    }
+    menu_items = prepare_pull_push_items(git, menu_items)
   end
 
   return UI.Menu(self.ns_id, menu_title, menu_items, arg_items)
@@ -1572,6 +1658,7 @@ function GitStatus:_init_branch_menu()
 end
 
 ---GitStatus Pushing Menu
+---@return Fugit2UITransientMenu
 function GitStatus:_init_push_menu()
   local m = self:_init_menus(Menu.PUSH)
   m:on_submit(function(item_id, args)
@@ -1597,11 +1684,11 @@ function GitStatus:push_current_to_pushremote(args)
     git_args[#git_args+1] = "-u"
   end
 
-  if args[1] == "-F" then
-    git_args[#git_args+1] = "--force"
-  elseif args[1] == "-f" then
+  if args[1] == "--force" then
+    git_args[#git_args+1] = args[1]
+  elseif args[1] == "--force-with-lease" then
     --force with lease
-    local lease = "--force-with-lease"
+    local lease = args[1]
     if current then
       lease = lease .. "=" .. current.name
 
@@ -1641,9 +1728,9 @@ function GitStatus:push_current_to_upstream(args)
     return
   end
 
-  if args[1] == "-F" then
-    git_args[#git_args+1] = "--force"
-  elseif args[1] == "-f" then
+  if args[1] == "--force" then
+    git_args[#git_args+1] = args[1]
+  elseif args[1] == "--force-with-lease" then
     -- force with lease
     git_args[#git_args+1] = string.format("--force-with-lease=%s:%s", upstream_names[2], upstream.oid)
   end
@@ -1651,6 +1738,101 @@ function GitStatus:push_current_to_upstream(args)
   git_args[#git_args+1] = upstream.remote
 
   git_args[#git_args+1] = current.name .. ":" .. upstream_names[2]
+
+  self:run_command("git", git_args, true)
+end
+
+---GitStatus fetch menu
+---@return Fugit2UITransientMenu
+function GitStatus:_init_fetch_menu()
+  local m = self:_init_menus(Menu.FETCH)
+  m:on_submit(function(item_id, args)
+    if item_id == "p" then
+      self:fetch_from_pushremote(args["args"])
+    elseif item_id == "u" then
+      self:fetch_from_upstream(args["args"])
+    end
+  end)
+  return m
+end
+
+
+---@param args string[]
+function GitStatus:fetch_from_pushremote(args)
+  ---@type string[]
+  local git_args = { "fetch" }
+  local remote = self._git.remote
+
+  vim.list_extend(git_args, args)
+
+  if remote then
+    git_args[#git_args+1] = remote.name
+  end
+
+  self:run_command("git", git_args, true)
+end
+
+
+---@param args string[]
+function GitStatus:fetch_from_upstream(args)
+  ---@type string[]
+  local git_args = { "fetch" }
+  local upstream = self._git.upstream
+
+  vim.list_extend(git_args, args)
+
+  if not upstream then
+    error("[Fugit2] Upstream Not Found")
+    return
+  end
+
+  git_args[#git_args+1] = upstream.remote
+
+  self:run_command("git", git_args, true)
+end
+
+---GitStatus Pull menu
+function GitStatus:_init_pull_menu()
+  local m = self:_init_menus(Menu.PULL)
+  m:on_submit(function(item_id, args)
+    if item_id == "p" then
+      self:pull_from_pushremote(args["args"])
+    elseif item_id == "u" then
+      self:pull_from_upstream(args["args"])
+    end
+  end)
+  return m
+end
+
+---@param args string[] git pull arguments
+function GitStatus:pull_from_pushremote(args)
+  ---@type string[]
+  local git_args = { "pull" }
+  local remote = self._git.remote
+
+  vim.list_extend(git_args, args)
+
+  if remote then
+    git_args[#git_args+1] = remote.name
+  end
+
+  self:run_command("git", git_args, true)
+end
+
+---@param args string[] git pull arguments
+function GitStatus:pull_from_upstream(args)
+  ---@type string[]
+  local git_args = { "pull" }
+  local upstream = self._git.upstream
+
+  vim.list_extend(git_args, args)
+
+  if not upstream then
+    error("[Fugit2] Upstream Not Found")
+    return
+  end
+
+  git_args[#git_args+1] = upstream.remote
 
   self:run_command("git", git_args, true)
 end
@@ -1688,6 +1870,11 @@ function GitStatus:run_command(cmd, args, refresh)
     vim.api.nvim_buf_set_lines(bufnr, 0, 1, true, { cmd_line })
   end
 
+  if vim.api.nvim_win_is_valid(winid) then
+    vim.api.nvim_win_set_cursor(winid, { linenr, 0 })
+    vim.api.nvim_feedkeys("zt", "n", true)
+  end
+
   local timer, tick = uv.new_timer(), 0
   self._states.timer = timer
 
@@ -1700,8 +1887,10 @@ function GitStatus:run_command(cmd, args, refresh)
         timer:close()
       end
 
-      vim.api.nvim_buf_set_option(bufnr, "modifiable", false)
-      vim.api.nvim_buf_set_option(bufnr, "readonly", true)
+      vim.defer_fn(function()
+        vim.api.nvim_buf_set_option(bufnr, "modifiable", false)
+        vim.api.nvim_buf_set_option(bufnr, "readonly", true)
+      end, 1000)
 
       if ret == 0 then
         vim.notify("[Fugit2] Command " .. cmd .. " success", vim.log.levels.INFO)
@@ -1744,14 +1933,14 @@ function GitStatus:run_command(cmd, args, refresh)
       end
     end
   })
+  self._states.job = job
   job:start()
 
-  self._states.job = job
-
-  local wait_time = 12000 -- 12 seconds
+  local wait_time = SERVER_TIMEOUT -- 12 seconds
+  local tick_rate = 100
 
   if timer then
-    timer:start(0, 120, function()
+    timer:start(0, tick_rate, function()
       local idx = 1 + (tick % #LOADING_CHARS)
       local char = LOADING_CHARS[idx]
 
@@ -1761,16 +1950,17 @@ function GitStatus:run_command(cmd, args, refresh)
 
       tick = tick + 1
       -- extra protection
-      if tick * 120 > wait_time + 2000 then
+      if tick * tick_rate > wait_time + 1000 then
         timer:close()
       end
     end)
   end
 
+
   vim.defer_fn(function()
     local result = pcall(function() job:co_wait(200) end)
     if not result then
-      job:shutdown(-5, 15)
+      job:shutdown(-5, utils.LINUX_SIGNALS.SIGTERM)
     end
 
   end, wait_time)
@@ -1783,7 +1973,7 @@ function GitStatus:quit_command()
     vim.api.nvim_buf_set_option(bufnr, "modifiable", true)
     vim.api.nvim_buf_set_lines(bufnr, -1, -1, true, { "CANCEL" })
     vim.api.nvim_buf_set_option(bufnr, "modifiable", false)
-    self._states.job:shutdown(-3, 15)
+    self._states.job:shutdown(-3, utils.LINUX_SIGNALS.SIGTERM)
     -- self._states.job:wait(500, 250)
   end
 
@@ -2043,6 +2233,22 @@ function GitStatus:setup_handlers()
       menus.push = self:_init_push_menu()
     end
     menus.push:mount()
+  end, map_options)
+
+  -- Fetch menu
+  self.file_popup:map("n", "f", function()
+    if not menus.fetch then
+      menus.fetch = self:_init_fetch_menu()
+    end
+    menus.fetch:mount()
+  end, map_options)
+
+  -- Pull menu
+  self.file_popup:map("n", "p", function()
+    if not menus.pull then
+      menus.pull = self:_init_pull_menu()
+    end
+    menus.pull:mount()
   end, map_options)
 end
 

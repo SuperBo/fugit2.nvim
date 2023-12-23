@@ -2113,6 +2113,15 @@ end
 -- | Utils functions |
 -- ===================
 
+---Set a library global option
+---@param option GIT_OPT
+---@param value integer
+---@return integer success code
+local function libgit2_set_opts(option, value)
+  local ret = libgit2.C.git_libgit2_opts(option, value)
+  return ret
+end
+
 
 ---@param delta GIT_DELTA
 ---@return string char Git status char such as M, A, D.
@@ -2182,10 +2191,12 @@ M.GIT_DELTA = libgit2.GIT_DELTA
 M.GIT_REFERENCE = libgit2.GIT_REFERENCE
 M.GIT_REFERENCE_NAMESPACE = GIT_REFERENCE_NAMESPACE
 M.GIT_INDEX_STAGE = libgit2.GIT_INDEX_STAGE
+M.GIT_OPT = libgit2.GIT_OPT
 
 
 M.head = Repository.head
 M.status = Repository.status
+M.set_opts = libgit2_set_opts
 M.status_char = status_char
 M.status_char_dash = status_char_dash
 M.status_string = status_string

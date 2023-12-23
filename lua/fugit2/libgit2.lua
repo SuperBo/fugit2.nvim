@@ -206,6 +206,7 @@ ffi.cdef[[
 
   int git_libgit2_init();
   int git_libgit2_shutdown();
+  int git_libgit2_opts(int option, ...);
 
   void git_strarray_dispose(git_strarray *array);
 
@@ -410,9 +411,9 @@ M.git_tree_double_pointer = ffi.typeof("git_tree*[1]")
 ---@type ffi.ctype* git_tree *
 M.git_tree_pointer = ffi.typeof("git_tree*")
 
----@type ffi.ctype* git_tree_entry **
+---@type ffi.ctype* git_tree_entry*[1]
 M.git_tree_entry_double_pointer = ffi.typeof("git_tree_entry*[1]")
----@type ffi.ctype* git_tree_entry *
+---@type ffi.ctype* git_tree_entry*
 M.git_tree_entry_pointer = ffi.typeof("git_tree_entry*")
 
 ---@type ffi.ctype* git_apply_options[1]
@@ -490,13 +491,64 @@ M.git_branch_iterator_double_pointer = ffi.typeof("git_branch_iterator *[1]")
 -- ==========================
 
 M.GIT_APPLY_OPTIONS_VERSION = 1
-M.GIT_STATUS_OPTIONS_VERSION = 1
-M.GIT_DIFF_OPTIONS_VERSION = 1
 M.GIT_DIFF_FIND_OPTIONS_VERSION = 1
+M.GIT_DIFF_OPTIONS_VERSION = 1
+M.GIT_FETCH_OPTIONS_VERSION = 1
+M.GIT_PROXY_OPTIONS_VERSION = 1
+M.GIT_REMOTE_CALLBACKS_VERSION = 1
+M.GIT_STATUS_OPTIONS_VERSION = 1
 
 -- ================
 -- | libgit2 enum |
 -- ================
+
+
+---@enum GIT_OPT
+M.GIT_OPT = {
+	GET_MWINDOW_SIZE                    = 0,
+	SET_MWINDOW_SIZE                    = 1,
+	GET_MWINDOW_MAPPED_LIMIT            = 2,
+	SET_MWINDOW_MAPPED_LIMIT            = 3,
+	GET_SEARCH_PATH                     = 4,
+	SET_SEARCH_PATH                     = 5,
+	SET_CACHE_OBJECT_LIMIT              = 6,
+	SET_CACHE_MAX_SIZE                  = 7,
+	ENABLE_CACHING                      = 8,
+	GET_CACHED_MEMORY                   = 9,
+	GET_TEMPLATE_PATH                   = 10,
+	SET_TEMPLATE_PATH                   = 11,
+	SET_SSL_CERT_LOCATIONS              = 12,
+	SET_USER_AGENT                      = 13,
+	ENABLE_STRICT_OBJECT_CREATION       = 14,
+	ENABLE_STRICT_SYMBOLIC_REF_CREATION = 15,
+	SET_SSL_CIPHERS                     = 16,
+	GET_USER_AGENT                      = 17,
+	ENABLE_OFS_DELTA                    = 18,
+	ENABLE_FSYNC_GITDIR                 = 19,
+	GET_WINDOWS_SHAREMODE               = 20,
+	SET_WINDOWS_SHAREMODE               = 21,
+	ENABLE_STRICT_HASH_VERIFICATION     = 22,
+	SET_ALLOCATOR                       = 23,
+	ENABLE_UNSAVED_INDEX_SAFETY         = 24,
+	GET_PACK_MAX_OBJECTS                = 25,
+	SET_PACK_MAX_OBJECTS                = 26,
+	DISABLE_PACK_KEEP_FILE_CHECKS       = 27,
+	ENABLE_HTTP_EXPECT_CONTINUE         = 28,
+	GET_MWINDOW_FILE_LIMIT              = 29,
+	SET_MWINDOW_FILE_LIMIT              = 30,
+	SET_ODB_PACKED_PRIORITY             = 31,
+	SET_ODB_LOOSE_PRIORITY              = 32,
+	GET_EXTENSIONS                      = 33,
+	SET_EXTENSIONS                      = 34,
+	GET_OWNER_VALIDATION                = 35,
+	SET_OWNER_VALIDATION                = 36,
+	GET_HOMEDIR                         = 37,
+	SET_HOMEDIR                         = 38,
+	SET_SERVER_CONNECT_TIMEOUT          = 39,
+	GET_SERVER_CONNECT_TIMEOUT          = 40,
+	SET_SERVER_TIMEOUT                  = 41,
+	GET_SERVER_TIMEOUT                  = 42,
+}
 
 ---@enum GIT_APPLY_LOCATION
 M.GIT_APPLY_LOCATION = {
@@ -810,7 +862,6 @@ M.GIT_DIFF_LINE = {
 	HUNK_HDR      = 'H',
 	BINARY        = 'B'  -- For "Binary files x and y differ"
 }
-
 
 
 -- Inits helper
