@@ -24,9 +24,12 @@ local utils = require "fugit2.utils"
 
 local SERVER_CONNECT_TIMEOUT = 12000
 local SERVER_TIMEOUT = 15000
+local COMMAND_QUEUE_WAIT_TIME = SERVER_TIMEOUT * 4
+local COMMAND_QUEUE_MAX = 8
 
 git2.set_opts(git2.GIT_OPT.SET_SERVER_CONNECT_TIMEOUT, SERVER_CONNECT_TIMEOUT)
 git2.set_opts(git2.GIT_OPT.SET_SERVER_TIMEOUT, SERVER_TIMEOUT)
+
 
 -- =================
 -- |  Status tree  |
@@ -383,7 +386,9 @@ end
 
 
 function GitStatusTree:render()
+  vim.api.nvim_buf_set_option(self.bufnr, "readonly", false)
   self.tree:render()
+  vim.api.nvim_buf_set_option(self.bufnr, "readonly", true)
 end
 
 
@@ -496,7 +501,7 @@ function GitStatus:init(ns_id, repo, last_window)
         right = 2,
       },
       text = {
-        top = NuiText(" Status ", "Fugit2FloatTitle"),
+        top = NuiText(" 󱖫 Status ", "Fugit2FloatTitle"),
         top_align = "left",
       },
     },
@@ -658,10 +663,13 @@ function GitStatus:init(ns_id, repo, last_window)
   ---@field upstream_text NuiText?
   ---@field timer uv_timer_t?
   ---@field job Job?
+  ---@field command_queue integer[]
+  ---@field jobs Job[]
   self._states = {
     last_window = last_window,
     commit_mode = CommitMode.COMMIT,
-    side_panel  = SidePanel.NONE
+    side_panel  = SidePanel.NONE,
+    command_queue = {}
   }
 
   -- keymaps
@@ -759,7 +767,7 @@ function GitStatus:_init_menus(menu_type)
     --   NuiMenu.item(NuiLine { NuiText("d ", key_hl), NuiText("Delete") }, { id = "d" }),
     -- }
   elseif menu_type == Menu.PUSH then
-    menu_title = NuiText(" Pushing ", title_hl)
+    menu_title = NuiText("  Pushing ", title_hl)
     arg_items = {
       {
         text = NuiText("Force with lease"),
@@ -778,7 +786,7 @@ function GitStatus:_init_menus(menu_type)
     }
     menu_items = prepare_pull_push_items(git, menu_items)
   elseif menu_type == Menu.FETCH then
-    menu_title = NuiText(" Fetching ", title_hl)
+    menu_title = NuiText("  Fetching ", title_hl)
     arg_items = {
       {
         text = NuiText("Prune deleted branches"),
@@ -807,7 +815,7 @@ function GitStatus:_init_menus(menu_type)
       table.insert(menu_items, 3, item)
     end
   elseif menu_type == Menu.PULL then
-    menu_title = NuiText(" Pulling ", title_hl)
+    menu_title = NuiText("  Pulling ", title_hl)
     arg_items = {
       {
         text = NuiText("Fast-forward only"),
@@ -1172,6 +1180,7 @@ end
 -- Renders git status
 function GitStatus:render()
   vim.api.nvim_buf_set_option(self.info_popup.bufnr, "modifiable", true)
+  vim.api.nvim_buf_set_option(self.info_popup.bufnr, "readonly", false)
 
   for i, line in ipairs(self._status_lines) do
     line:render(self.info_popup.bufnr, self.ns_id, i)
@@ -1179,6 +1188,7 @@ function GitStatus:render()
 
   self._tree:render()
 
+  vim.api.nvim_buf_set_option(self.info_popup.bufnr, "readonly", true)
   vim.api.nvim_buf_set_option(self.info_popup.bufnr, "modifiable", false)
 end
 
@@ -1843,7 +1853,58 @@ end
 ---@param args string[]
 ---@param refresh boolean whether to refresh after command succes
 function GitStatus:run_command(cmd, args, refresh)
+  local queue = self._states.command_queue
+
+  if #queue > COMMAND_QUEUE_MAX then
+    vim.notify("[Fugit2] Command queue is full!", vim.log.levels.ERROR)
+    return
+  end
+
+  local command_id = utils.new_pid()
+  queue[#queue+1] = command_id
+
+  if queue[1] == command_id then
+    self:_run_single_command(cmd, args, refresh)
+    return
+  end
+
+  local timer = uv.new_timer()
+  if not timer then
+    error("[Fugit2] Can't create timer")
+  end
+
+  vim.notify(string.format("[Fugit2] Enqueued command %s %s", cmd, args[1] or ""))
+
+  local tick = 0
+  timer:start(0, 250, function()
+    if tick > COMMAND_QUEUE_WAIT_TIME then
+      timer:stop()
+      for i, id in ipairs(queue) do
+        if id == command_id then
+          table.remove(queue, i)
+          break
+        end
+      end
+      return
+    elseif queue[1] == command_id then
+      timer:stop()
+      vim.schedule(function()
+        self:_run_single_command(cmd, args, refresh)
+      end)
+    end
+
+    tick = tick + 250
+  end)
+end
+
+
+---Runs single command and update git status
+---@param cmd string
+---@param args string[]
+---@param refresh boolean whether to refresh after command succes
+function GitStatus:_run_single_command(cmd, args, refresh)
   local bufnr = self.command_popup.bufnr
+  local queue = self._states.command_queue
 
   self._layout:update(NuiLayout.Box(
     {
@@ -1876,35 +1937,54 @@ function GitStatus:run_command(cmd, args, refresh)
   end
 
   local timer, tick = uv.new_timer(), 0
-  self._states.timer = timer
+  if not timer then
+    error("[Fugit2] Can't create timer")
+    return
+  end
 
   local job = PlenaryJob:new({
     command = cmd,
     args = args,
     on_exit = vim.schedule_wrap(function(_, ret)
-      self._states.job = nil
+      table.remove(queue, 1)
+      self._states.job = nil -- TODO: change this line
       if timer and timer:is_active() then
         timer:close()
       end
 
-      vim.defer_fn(function()
-        vim.api.nvim_buf_set_option(bufnr, "modifiable", false)
-        vim.api.nvim_buf_set_option(bufnr, "readonly", true)
-      end, 1000)
-
       if ret == 0 then
-        vim.notify("[Fugit2] Command " .. cmd .. " success", vim.log.levels.INFO)
+        vim.notify(
+          string.format("[Fugit2] Command %s %s SUCCESS", cmd, args[1] or ""),
+          vim.log.levels.INFO
+        )
         self:quit_command()
         if refresh then
           self:update()
         end
       elseif ret == -3 then
-        vim.notify("[Fugit2] Command " .. cmd .. " canceled!", vim.log.levels.ERROR)
+        vim.api.nvim_buf_set_lines(bufnr, linenr, -1, true, { "CANCELLED" })
+        vim.notify(
+          string.format("[Fugit2] Command %s %s CANCELLED!", cmd, args[1] or ""),
+          vim.log.levels.ERROR
+        )
       elseif ret == -5 then
-        vim.notify("[Fugit2] Command " .. cmd .. " timeout!", vim.log.levels.ERROR)
+        vim.api.nvim_buf_set_lines(bufnr, linenr, -1, true, { "TIMEOUT" })
+        vim.notify(
+          string.format("[Fugit2] Command %s %s TIMEOUT!", cmd, args[1] or ""),
+          vim.log.levels.ERROR
+        )
       else
-        vim.notify("[Fugit2] Command " .. cmd .. " failed!", vim.log.levels.ERROR)
+        vim.api.nvim_buf_set_lines(bufnr, linenr, -1, true, { "FAILED " .. ret })
+        vim.notify(
+          string.format("[Fugit2] Command %s %s FAILED!", cmd, args[1] or ""),
+          vim.log.levels.ERROR
+        )
       end
+
+      -- vim.defer_fn(function()
+      --   vim.api.nvim_buf_set_option(bufnr, "modifiable", false)
+      --   vim.api.nvim_buf_set_option(bufnr, "readonly", true)
+      -- end, 100)
     end),
     on_stdout = function(_, data)
       if data then
@@ -1939,42 +2019,34 @@ function GitStatus:run_command(cmd, args, refresh)
   local wait_time = SERVER_TIMEOUT -- 12 seconds
   local tick_rate = 100
 
-  if timer then
-    timer:start(0, tick_rate, function()
-      local idx = 1 + (tick % #LOADING_CHARS)
-      local char = LOADING_CHARS[idx]
+  timer:start(0, tick_rate, function()
+    if tick * tick_rate > wait_time then
+      timer:close()
 
       vim.schedule(function()
-        vim.api.nvim_buf_set_lines(bufnr, linenr, -1, true, { char })
+        if not pcall(function() job:co_wait(200) end) then
+          job:shutdown(-5, utils.LINUX_SIGNALS.SIGTERM)
+        end
       end)
 
-      tick = tick + 1
-      -- extra protection
-      if tick * tick_rate > wait_time + 1000 then
-        timer:close()
-      end
-    end)
-  end
-
-
-  vim.defer_fn(function()
-    local result = pcall(function() job:co_wait(200) end)
-    if not result then
-      job:shutdown(-5, utils.LINUX_SIGNALS.SIGTERM)
+      return
     end
 
-  end, wait_time)
+    local idx = 1 + (tick % #LOADING_CHARS)
+    local char = LOADING_CHARS[idx]
+
+    vim.schedule(function()
+      vim.api.nvim_buf_set_lines(bufnr, linenr, -1, true, { char })
+    end)
+
+    tick = tick + 1
+  end)
 end
 
 ---Quit current running command
 function GitStatus:quit_command()
   if self._states.job then
-    local bufnr = self.command_popup.bufnr
-    vim.api.nvim_buf_set_option(bufnr, "modifiable", true)
-    vim.api.nvim_buf_set_lines(bufnr, -1, -1, true, { "CANCEL" })
-    vim.api.nvim_buf_set_option(bufnr, "modifiable", false)
     self._states.job:shutdown(-3, utils.LINUX_SIGNALS.SIGTERM)
-    -- self._states.job:wait(500, 250)
   end
 
   self._layout:update(NuiLayout.Box(
@@ -2207,7 +2279,7 @@ function GitStatus:setup_handlers()
   self.input_popup:map("i", "<c-cr>", "<esc><cr>", { nowait = true })
 
   -- Command popup
-  self.command_popup:map("n", { "q", "esc" }, function()
+  self.command_popup:map("n", { "q", "<esc>" }, function()
     self:quit_command()
   end, map_options)
 

@@ -128,6 +128,21 @@ function M.get_ahead_behind_text(ahead, behind)
 end
 
 
+-- Random utils
+local id_counter = 0ULL
+local id_random = math.random(0, 255)
+
+---@return integer id time-based unique id
+function M.new_pid()
+  local id = bit.bor(
+    bit.lshift(id_counter, 8),
+    id_random
+  )
+  id_counter = id_counter + 1
+  return id
+end
+
+
 ---@class BitArray BitArray in big-endian representation
 ---@field n integer length of bitarray
 ---@field buf integer bitarray buffer
