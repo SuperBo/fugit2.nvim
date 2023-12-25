@@ -808,6 +808,10 @@ function GitStatus:update()
         self._git.staged_diff[k] = nil
       end
     end
+
+    -- clean cached menus
+    self._menus[Menu.PUSH] = nil
+    self._menus[Menu.PULL] = nil
   end
 end
 
@@ -849,6 +853,7 @@ function GitStatus:unmount()
     self._patch_staged = nil
   end
   self._prompts.amend_confirm:unmount()
+  self._menus = {}
   self.command_popup:unmount()
   self.input_popup:unmount()
   self._layout:unmount()
@@ -887,8 +892,9 @@ function GitStatus:index_add_reset_handler(add, reset)
     if refresh then
       self:update()
       self:render()
+    else
+      tree:render()
     end
-    tree:render()
 
     git.index_updated = true
 
@@ -1612,6 +1618,7 @@ function GitStatus:_run_single_command(cmd, args, refresh)
         self:quit_command()
         if refresh then
           self:update()
+          self:render()
         end
       elseif ret == -3 then
         vim.api.nvim_buf_set_lines(bufnr, linenr, -1, true, { "CANCELLED" })
@@ -1759,7 +1766,7 @@ function GitStatus:setup_handlers()
   -- refresh
   self.file_popup:map("n", "g", function ()
     self:update()
-    tree:render()
+    self:render()
   end, map_options)
 
   -- collapse
