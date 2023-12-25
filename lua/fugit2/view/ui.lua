@@ -7,13 +7,21 @@ local GitGraph = require "fugit2.view.git_graph"
 ---@classs Fugit2UIModule
 local M = {}
 
+
+local last_status_window = nil
+
 ---Creates Fugit2 Main Floating Window
 ---@param namespace integer Nvim namespace
 ---@param repo GitRepository
 ---@return Fugit2GitStatusView
 function M.new_fugit2_status_window(namespace, repo)
+  if last_status_window and not last_status_window.closed then
+    return last_status_window
+  end
+
   local current_win = vim.api.nvim_get_current_win()
   local status = GitStatus(namespace, repo, current_win)
+  last_status_window = status
   status:render()
   return status
 end

@@ -448,6 +448,7 @@ local SidePanel = {
 ---@field file_popup NuiPopup
 ---@field input_popup NuiPopup
 ---@field repo GitRepository
+---@field closed boolean
 local GitStatus = Object("Fugit2GitStatusView")
 
 
@@ -460,6 +461,8 @@ function GitStatus:init(ns_id, repo, last_window)
   if ns_id then
     self.ns_id = ns_id
   end
+
+  self.closed = false
 
   if repo ~= nil then
     self.repo = repo
@@ -1200,6 +1203,11 @@ end
 ---Exit function
 function GitStatus:unmount()
   self:write_index()
+  self.closed = true
+
+  self._status_lines = nil
+  self._tree = nil
+
   if self._patch_unstaged then
     self._patch_unstaged:unmount()
     self._patch_unstaged = nil
