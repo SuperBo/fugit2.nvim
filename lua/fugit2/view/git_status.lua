@@ -398,7 +398,7 @@ end
 
 ---@enum Fugit2GitStatusCommitMode
 local CommitMode = {
-  COMMIT = 1,
+  CREATE = 1,
   REWORD = 2,
   EXTEND = 3,
   AMEND  = 4,
@@ -407,12 +407,12 @@ local CommitMode = {
 
 ---@enum Fugit2GitStatusMenu
 local Menu = {
-  COMMIT = 1,
-  DIFF   = 2,
-  BRANCH = 3,
-  PUSH   = 4,
-  FETCH  = 5,
-  PULL   = 6,
+  BRANCH = 1,
+  COMMIT = 2,
+  DIFF   = 3,
+  FETCH  = 4,
+  PULL   = 5,
+  PUSH   = 6,
 }
 
 -- ===================
@@ -590,9 +590,12 @@ function GitStatus:init(ns_id, repo, last_window)
     self.ns_id,
     NuiLine { NuiText("This commit has already been pushed to upstream, do you really want to modify it?") }
   )
-  self._menus = {
+  self._prompts = {
     amend_confirm = amend_confirm,
-    commit = self:_init_menus(Menu.COMMIT),
+  }
+  ---@type { [integer]: Fugit2UITransientMenu }
+  self._menus = {
+    -- commit = self:_init_menus(Menu.COMMIT),
   }
 
   -- setup others
@@ -670,7 +673,7 @@ function GitStatus:init(ns_id, repo, last_window)
   ---@field jobs Job[]
   self._states = {
     last_window = last_window,
-    commit_mode = CommitMode.COMMIT,
+    commit_mode = CommitMode.CREATE,
     side_panel  = SidePanel.NONE,
     command_queue = {}
   }
@@ -851,6 +854,7 @@ function GitStatus:_init_menus(menu_type)
   return UI.Menu(self.ns_id, menu_title, menu_items, arg_items)
 end
 
+
 ---Inits Patch View popup
 function GitStatus:_init_patch_popups()
   local patch_unstaged = PatchView(self.ns_id, "Unstaged", "Fugit2Unstaged")
@@ -869,32 +873,20 @@ function GitStatus:_init_patch_popups()
   patch_unstaged:map("n", { "q", "<esc" }, exit_fn, opts)
   patch_staged:map("n", { "q", "<esc>" }, exit_fn, opts)
 
-  -- commit menu
-  local commit_menu_fn = function()
-    menus.commit:mount()
-  end
-  patch_unstaged:map("n", "c", commit_menu_fn, opts)
-  patch_staged:map("n", "c", commit_menu_fn, opts)
+  -- Commit menu
+  local commit_menu_handler = self:_menu_handlers(Menu.COMMIT)
+  patch_unstaged:map("n", "c", commit_menu_handler, opts)
+  patch_staged:map("n", "c", commit_menu_handler, opts)
 
-  -- diff menu
-  local diff_menu_fn = function()
-    if not menus.diff then
-      menus.diff = self:_init_diff_menu()
-    end
-    menus.diff:mount()
-  end
-  patch_unstaged:map("n", "d", diff_menu_fn, opts)
-  patch_staged:map("n", "d", diff_menu_fn, opts)
+  -- Diff menu
+  local diff_menu_handler = self:_menu_handlers(Menu.DIFF)
+  patch_unstaged:map("n", "d", diff_menu_handler, opts)
+  patch_staged:map("n", "d", diff_menu_handler, opts)
 
-  -- branch menu
-  local branch_menu_fn = function()
-    if not menus.branch then
-      menus.branch = self:_init_branch_menu()
-    end
-    menus.branch:mount()
-  end
-  patch_unstaged:map("n", "b", branch_menu_fn, opts)
-  patch_staged:map("n", "b", branch_menu_fn, opts)
+  -- Branch menu
+  local branch_menu_handler = self:_menu_handlers(Menu.BRANCH)
+  patch_unstaged:map("n", "b", branch_menu_handler, opts)
+  patch_staged:map("n", "b", branch_menu_handler, opts)
 
   -- [h]: move left
   patch_unstaged:map("n", "h", function()
@@ -1132,7 +1124,7 @@ function GitStatus:update()
 
     local upstream_line = NuiLine { NuiText("Upstream ", "Fugit2Header") }
     if git_status.upstream then
-      self._menus.amend_confirm:set_text(NuiLine {
+      self._prompts.amend_confirm:set_text(NuiLine {
         NuiText("This commit has already been pushed to "),
         NuiText(git_status.upstream.name, "Fugit2SymbolicRef"),
         NuiText(", do you really want to modify it?")
@@ -1216,8 +1208,7 @@ function GitStatus:unmount()
     self._patch_staged:unmount()
     self._patch_staged = nil
   end
-  self._menus.amend_confirm:unmount()
-  self._menus.commit:unmount()
+  self._prompts.amend_confirm:unmount()
   self.command_popup:unmount()
   self.input_popup:unmount()
   self._layout:unmount()
@@ -1351,7 +1342,7 @@ end
 
 ---Creates a commit
 ---@param message string
-function GitStatus:commit(message)
+function GitStatus:_git_create_commit(message)
   local prettified = check_signature_message(self.sign, message)
 
   if self.sign and prettified then
@@ -1371,7 +1362,7 @@ end
 
 ---Extends HEAD commit
 ---add files in index to HEAD commit
-function GitStatus:commit_extend()
+function GitStatus:_git_extend_commit()
   self:write_index()
   local commit_id, err = self.repo:amend_extend(self.index)
   if commit_id then
@@ -1387,7 +1378,7 @@ end
 ---Reword HEAD commit
 ---change commit message of HEAD commit
 ---@param message string commit message
-function GitStatus:commit_reword(message)
+function GitStatus:_git_reword_commit(message)
   local prettified = check_signature_message(self.sign, message)
 
   if self.sign and prettified then
@@ -1406,7 +1397,7 @@ end
 ---Amend HEAD commit
 ---add files from index and also change message or HEAD commit
 ---@param message string
-function GitStatus:commit_amend(message)
+function GitStatus:_git_amend_commit(message)
   local prettified = check_signature_message(self.sign, message)
   if self.sign and prettified then
     self:write_index()
@@ -1458,61 +1449,52 @@ function GitStatus:_set_input_popup_commit_title(init_str, include_changes, noti
 end
 
 
----@return fun()
-function GitStatus:commit_commit_handler()
-  return function()
-    self._states.commit_mode = CommitMode.COMMIT
+function GitStatus:commit_create()
+  self._states.commit_mode = CommitMode.CREATE
 
-    self:_set_input_popup_commit_title("Create commit", true, true)
+  self:_set_input_popup_commit_title("Create commit", true, true)
 
-    self:focus_input()
-    vim.cmd.startinsert()
-  end
+  self:focus_input()
+  vim.cmd.startinsert()
 end
 
 
----@return fun()
-function GitStatus:commit_extend_handler()
-  return function()
-    self._states.commit_mode = CommitMode.EXTEND
+function GitStatus:commit_extend()
+  self._states.commit_mode = CommitMode.EXTEND
 
-    if self._git.ahead == 0 then
-      self._menus.amend_confirm:show()
-      return
-    end
-
-    self:commit_extend()
+  if self._git.ahead == 0 then
+    self._prompts.amend_confirm:show()
+    return
   end
+
+  self:_git_extend_commit()
 end
 
 
 ---@param is_reword boolean reword only mode
----@return fun()
-function GitStatus:commit_amend_handler(is_reword)
-  return function()
-    self._states.commit_mode = is_reword and CommitMode.REWORD or CommitMode.AMEND
+function GitStatus:commit_amend(is_reword)
+  self._states.commit_mode = is_reword and CommitMode.REWORD or CommitMode.AMEND
 
-    if self._git.ahead == 0 then
-      self._menus.amend_confirm:show()
-      return
-    end
-
-    if is_reword then
-      self:_set_input_popup_commit_title("Reword HEAD", false, false)
-    else
-      self:_set_input_popup_commit_title("Amend HEAD", true, false)
-    end
-
-    self:insert_head_message_to_input()
-    self:focus_input()
+  if self._git.ahead == 0 then
+    self._prompts.amend_confirm:show()
+    return
   end
+
+  if is_reword then
+    self:_set_input_popup_commit_title("Reword HEAD", false, false)
+  else
+    self:_set_input_popup_commit_title("Amend HEAD", true, false)
+  end
+
+  self:insert_head_message_to_input()
+  self:focus_input()
 end
 
 function GitStatus:amend_confirm_yes_handler()
   return function()
     local mode = self._states.commit_mode
     if mode == CommitMode.EXTEND then
-      self:commit_extend()
+      self:_git_extend_commit()
     elseif mode == CommitMode.REWORD or mode == CommitMode.AMEND then
       if mode == CommitMode.REWORD then
         self:_set_input_popup_commit_title("Reword HEAD", false, false)
@@ -1525,6 +1507,28 @@ function GitStatus:amend_confirm_yes_handler()
     end
   end
 end
+
+
+function GitStatus:_init_commit_menu()
+  local m = self:_init_menus(Menu.COMMIT)
+  m:on_submit(function(item_id, _)
+    if item_id == "c" then
+      self:commit_create()
+    elseif item_id == "e" then
+      self:commit_extend()
+    elseif item_id == "w" then
+      self:commit_amend(true)
+    elseif item_id == "a" then
+      self:commit_amend(false)
+    elseif item_id == "g" then
+      self._menus[Menu.COMMIT]:unmount()
+      self:unmount()
+      require("fugit2.view.ui").new_fugit2_graph_window(self.ns_id, self.repo):mount()
+    end
+  end)
+  return m
+end
+
 
 ---Updates patch info based on node
 ---@param node NuiTree.Node
@@ -2051,7 +2055,7 @@ function GitStatus:_run_single_command(cmd, args, refresh)
   end)
 end
 
----Quit current running command
+---Quit/cancel current running command
 function GitStatus:quit_command()
   if self._states.job then
     self._states.job:shutdown(-3, utils.LINUX_SIGNALS.SIGTERM)
@@ -2068,11 +2072,39 @@ function GitStatus:quit_command()
 end
 
 
+local MENU_INITS = {
+  [Menu.BRANCH] = GitStatus._init_branch_menu,
+  [Menu.COMMIT] = GitStatus._init_commit_menu,
+  [Menu.DIFF]   = GitStatus._init_diff_menu,
+  [Menu.FETCH]  = GitStatus._init_fetch_menu,
+  [Menu.PULL]   = GitStatus._init_pull_menu,
+  [Menu.PUSH]   = GitStatus._init_push_menu,
+}
+
+---Menu handlers factory
+---@param menu_type Fugit2GitStatusMenu menu to init
+---@return fun() closure handler
+function GitStatus:_menu_handlers(menu_type)
+  local menus = self._menus
+
+  return function()
+    local menu_constructor = MENU_INITS[menu_type]
+
+    local menu = menus[menu_type]
+    if not menu and menu_constructor then
+      menu = menu_constructor(self)
+      menus[menu_type] = menu
+    end
+    menu:mount()
+  end
+end
+
+
 -- Setup keymap and event handlers
 function GitStatus:setup_handlers()
   local map_options = { noremap = true, nowait = true }
   local tree = self._tree
-  local menus = self._menus
+  -- local menus = self._menus
   local states = self._states
 
   local exit_fn = function()
@@ -2230,37 +2262,10 @@ function GitStatus:setup_handlers()
   )
 
   -- Commit Menu
-  local commit_commit_fn = self:commit_commit_handler()
-  local commit_extend_fn = self:commit_extend_handler()
-  local commit_reword_fn = self:commit_amend_handler(true)
-  local commit_amend_fn = self:commit_amend_handler(false)
-
-  local commit_graph_fn = function()
-    self._menus.commit:unmount()
-    exit_fn()
-    require("fugit2.view.ui").new_fugit2_graph_window(self.ns_id, self.repo):mount()
-  end
-
-  self._menus.commit:on_submit(function(item_id, _)
-    if item_id == "c" then
-      commit_commit_fn()
-    elseif item_id == "e" then
-      commit_extend_fn()
-    elseif item_id == "w" then
-      commit_reword_fn()
-    elseif item_id == "a" then
-      commit_amend_fn()
-    elseif item_id == "g" then
-      commit_graph_fn()
-    end
-  end)
-
-  self.file_popup:map("n", "c", function ()
-    self._menus.commit:mount()
-  end, map_options)
+  self.file_popup:map("n", "c", self:_menu_handlers(Menu.COMMIT), map_options)
 
   -- Amend confirm
-  self._menus.amend_confirm:on_yes(self:amend_confirm_yes_handler())
+  self._prompts.amend_confirm:on_yes(self:amend_confirm_yes_handler())
 
   -- Message input
   self.input_popup:map("n", { "q", "<esc>" }, function()
@@ -2275,12 +2280,12 @@ function GitStatus:setup_handlers()
       vim.api.nvim_buf_get_lines(self.input_popup.bufnr, 0, -1, true),
       "\n"
     ))
-    if states.commit_mode == CommitMode.COMMIT then
-      self:commit(message)
+    if states.commit_mode == CommitMode.CREATE then
+      self:_git_create_commit(message)
     elseif states.commit_mode == CommitMode.REWORD then
-      self:commit_reword(message)
+      self:_git_reword_commit(message)
     elseif states.commit_mode == CommitMode.AMEND then
-      self:commit_amend(message)
+      self:_git_amend_commit(message)
     end
   end
   self.input_popup:map("n", "<cr>", input_enter_fn, map_options)
@@ -2292,44 +2297,19 @@ function GitStatus:setup_handlers()
   end, map_options)
 
   -- Diff Menu
-  self.file_popup:map("n", "d", function ()
-    if not menus.diff then
-      menus.diff = self:_init_diff_menu()
-    end
-    menus.diff:mount()
-  end, map_options)
+  self.file_popup:map("n", "d", self:_menu_handlers(Menu.DIFF), map_options)
 
   -- Branch Menu
-  self.file_popup:map("n", "b", function()
-    if not menus.branch then
-      menus.branch = self:_init_branch_menu()
-    end
-    menus.branch:mount()
-  end, map_options)
+  self.file_popup:map("n", "b", self:_menu_handlers(Menu.BRANCH), map_options)
 
   -- Push menu
-  self.file_popup:map("n", "P", function()
-    if not menus.push then
-      menus.push = self:_init_push_menu()
-    end
-    menus.push:mount()
-  end, map_options)
+  self.file_popup:map("n", "P", self:_menu_handlers(Menu.PUSH), map_options)
 
   -- Fetch menu
-  self.file_popup:map("n", "f", function()
-    if not menus.fetch then
-      menus.fetch = self:_init_fetch_menu()
-    end
-    menus.fetch:mount()
-  end, map_options)
+  self.file_popup:map("n", "f", self:_menu_handlers(Menu.FETCH), map_options)
 
   -- Pull menu
-  self.file_popup:map("n", "p", function()
-    if not menus.pull then
-      menus.pull = self:_init_pull_menu()
-    end
-    menus.pull:mount()
-  end, map_options)
+  self.file_popup:map("n", "p", self:_menu_handlers(Menu.PULL), map_options)
 end
 
 
