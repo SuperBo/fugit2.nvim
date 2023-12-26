@@ -12,6 +12,7 @@ local PlenaryJob = require "plenary.job"
 
 local UI = require "fugit2.view.components.menus"
 local GitStatusTree = require "fugit2.view.components.file_tree_view"
+local GitBranchTree = require "fugit2.view.components.branch_tree_view"
 local PatchView = require "fugit2.view.components.patch_view"
 local git2 = require "fugit2.git2"
 local utils = require "fugit2.utils"
@@ -130,7 +131,7 @@ function GitStatus:init(ns_id, repo, last_window)
       buftype  = "nofile",
     }
 
-  -- setup popups
+  -- create popups
   self.info_popup = NuiPopup {
     ns_id = ns_id,
     enter = false,
@@ -225,6 +226,35 @@ function GitStatus:init(ns_id, repo, last_window)
     buf_options = buf_readonly_opts,
   }
 
+  local default_padding = {
+    top = 0,
+    bottom = 0,
+    left = 1,
+    right = 1,
+  }
+
+  self._popups = {
+    branch = NuiPopup {
+      ns_id = ns_id,
+      enter = false,
+      border = {
+        style = "rounded",
+        padding = default_padding,
+        text = {
+          top = NuiText(" 󰊢 Branches ", "Fugit2FloatTitle"),
+          top_align = "left",
+          bottom = NuiText("[b]ranches", "FloatFooter"),
+          bottom_align = "right",
+        },
+      },
+      win_options = {
+        winhighlight = win_hl,
+        cursorline = true,
+      },
+      buf_options = buf_readonly_opts,
+    }
+  }
+
   -- menus
   local amend_confirm = UI.Confirm(
     self.ns_id,
@@ -254,13 +284,16 @@ function GitStatus:init(ns_id, repo, last_window)
   self._status_lines = {}
   ---@type Fugit2GitStatusTree
   self._tree = GitStatusTree(self.file_popup.bufnr, self.ns_id)
+  ---@type Fugit2GitBranchTree
+  self._branches = GitBranchTree(self._popups.branch.bufnr, self.ns_id)
 
   -- setup layout
   ---@type { [string]: NuiLayout.Box }
   self._boxes = {
     main = NuiLayout.Box({
         NuiLayout.Box(self.info_popup, { size = 6 }),
-        NuiLayout.Box(self.file_popup, { grow = 1 }),
+        NuiLayout.Box(self.file_popup, { size = "50%" }),
+        NuiLayout.Box(self._popups.branch, { size = "32%" }),
       }, { dir = "col" }
     ),
     main_row = NuiLayout.Box(self.file_popup, { grow = 1 })
@@ -502,7 +535,6 @@ function GitStatus:_init_patch_popups()
   local opts = { noremap = true, nowait= true }
   local states = self._states
   local tree = self._tree
-  local menus = self._menus
   self._patch_unstaged = patch_unstaged
   self._patch_staged = patch_staged
 
@@ -797,6 +829,14 @@ function GitStatus:update()
     -- update files tree
     self._tree:update(git_status.status)
 
+    -- update branches tree
+    local branches, err = self.repo:branches(true, false)
+    if not branches then
+      vim.notify("[Fugit2] Failed to get local branch list, error code: " .. err)
+    else
+      self._branches:update(branches, git_status.head.refname)
+    end
+
     -- clean cached diffs
     if self._git.unstaged_diff then
       for k, _ in pairs(self._git.unstaged_diff) do
@@ -826,14 +866,26 @@ function GitStatus:render()
   end
 
   self._tree:render()
+  self._branches:render()
 
   vim.api.nvim_buf_set_option(self.info_popup.bufnr, "readonly", true)
   vim.api.nvim_buf_set_option(self.info_popup.bufnr, "modifiable", false)
 end
 
 
+---Scrolls to active branch
+function GitStatus:scroll_to_active_branch()
+  local _, linenr = self._branches:get_active_branch()
+  local winid = self._popups.branch.winid
+  if linenr and vim.api.nvim_win_is_valid(winid) then
+    vim.api.nvim_win_set_cursor(winid, { linenr, 0 })
+  end
+end
+
+
 function GitStatus:mount()
   self._layout:mount()
+  self:scroll_to_active_branch()
 end
 
 ---Exit function
@@ -1753,6 +1805,7 @@ function GitStatus:setup_handlers()
   local tree = self._tree
   -- local menus = self._menus
   local states = self._states
+  local popups = self._popups
 
   local exit_fn = function()
     self:unmount()
@@ -1760,7 +1813,9 @@ function GitStatus:setup_handlers()
 
   -- exit
   self.file_popup:map("n", {"q", "<esc>"}, exit_fn, map_options)
-  self.file_popup:map("i", "q", exit_fn, map_options)
+  self.file_popup:map("i", "<c-c>", exit_fn, map_options)
+  popups.branch:map("n", { "q", "<esc>" }, exit_fn, map_options)
+  popups.branch:map("i", "<c-c>", exit_fn, map_options)
   -- popup:on(event.BufLeave, exit_fn)
 
   -- refresh
@@ -1814,6 +1869,22 @@ function GitStatus:setup_handlers()
     end
   end, map_options
   )
+
+  -- Move to branch popup
+  self.file_popup:map("n", { "J", "<tab>" }, function()
+    if states.side_panel == SidePanel.NONE then
+      vim.api.nvim_set_current_win(self._popups.branch.winid)
+    end
+  end, map_options)
+  self.file_popup:map("n", "K", "", map_options)
+
+  -- Move back to file popup
+  popups.branch:map("n", { "K", "<tab>" }, function()
+    if states.side_panel == SidePanel.NONE then
+      vim.api.nvim_set_current_win(self.file_popup.winid)
+    end
+  end, map_options)
+  popups.branch:map("n", "J", "", map_options)
 
   -- expand all
   self.file_popup:map("n", "L",

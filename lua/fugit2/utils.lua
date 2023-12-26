@@ -1,5 +1,6 @@
 local NuiLine = require "nui.line"
 local NuiText = require "nui.text"
+local NuiTree = require "nui.tree"
 local git2 = require "fugit2.git2"
 
 ---@class Fugit2Utils
@@ -125,6 +126,72 @@ function M.get_ahead_behind_text(ahead, behind)
     str = str .. "↓" .. behind
   end
   return str
+end
+
+
+---Build directory tree from a list of paths.
+---@generic T
+---@param path_fn fun(val: T): string function which returns path-like string from ele, e.g: a/b/c.txt
+---@param lst T[] list of data from that can get path
+---@alias Fugit2DirectoryNode { [string]: T | Fugit2DirectoryNode }
+---@return Fugit2DirectoryNode
+function M.build_dir_tree(path_fn, lst)
+  local dir_tree = {}
+
+  for _, ele in ipairs(lst) do
+    local path = path_fn(ele)
+    local dirname = vim.fs.dirname(path)
+
+    local dir = dir_tree
+    if dirname ~= "" and dirname ~= "." then
+      for s in vim.gsplit(dirname, "/", { plain = true }) do
+        if dir[s] then
+          dir = dir[s]
+        else
+          dir[s] = {}
+          dir = dir[s]
+        end
+      end
+    end
+
+    if dir["."] then
+      table.insert(dir["."], ele)
+    else
+      dir["."] = { ele }
+    end
+  end
+
+  return dir_tree
+end
+
+
+---@generic T
+---@param node_fn fun(val: T): NuiTree.Node function which returns node from T.
+---@param dir_tree Fugit2DirectoryNode dir tree built from build_dir_tree
+---@return NuiTree.Node[]
+function M.build_nui_tree_nodes(node_fn, dir_tree)
+  local function construct_tree_nodes(dir_sub_tree, prefix)
+    local files = {}
+    local dir_idx = 1 -- index to insert directory
+    for k, v in pairs(dir_sub_tree) do
+      if k == "." then
+        for _, f in ipairs(v) do
+          table.insert(files, node_fn(f))
+        end
+      else
+        local id = prefix .. "/" .. k
+        local children = construct_tree_nodes(v, id)
+        local node = NuiTree.Node({ text = k, id = id }, children)
+        node:expand()
+        table.insert(files, dir_idx, node)
+        dir_idx = dir_idx + 1
+      end
+    end
+
+    return files
+  end
+
+  return construct_tree_nodes(dir_tree, "")
 end
 
 
@@ -313,6 +380,27 @@ function BitArray:set_k_unset_indices(k)
   end
 
   return unset
+end
+
+
+-- ====================
+-- | Table/list utils |
+-- ====================
+
+
+---Builds a lookup table for a given list.
+---@generic T
+---@param lst T[]
+---@param key_fn fun(ele: T): string
+---@return { [string]: T }
+function M.list_build_lookup(key_fn, lst)
+  local lookup = {}
+
+  for _, v in ipairs(lst) do
+    lookup[key_fn(v)] = v
+  end
+
+  return lookup
 end
 
 

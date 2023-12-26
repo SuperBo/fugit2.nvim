@@ -17,7 +17,7 @@ local utils = require "fugit2.utils"
 local FILE_ENTRY_PADDING = 45
 
 
----@class NuiTreeNodeData
+---@class Fugit2StatusTreeNodeData
 ---@field id string
 ---@field text string
 ---@field icon string
@@ -97,7 +97,7 @@ end
 
 ---@param item GitStatusItem
 ---@param bufs table
----@return NuiTreeNodeData
+---@return Fugit2StatusTreeNodeData
 local function tree_node_data_from_item(item, bufs)
   local path = item.path
   local alt_path
@@ -148,10 +148,10 @@ local function tree_prepare_node(node)
   line:append(string.rep("  ", node:get_depth() - 1))
 
   if node:has_children() then
-    line:append(node:is_expanded() and "  " or "  ", "Fugit2SymbolicRef")
-    line:append(node.text)
+    line:append(node:is_expanded() and "  " or "  ", "Fugit2SymbolicRef")
+    line:append(node.text, "Fugit2SymbolicRef")
   else
-    local format_str = "%s %-" .. (FILE_ENTRY_PADDING - node:get_depth() * 2) ..  "s"
+    local format_str = "%s %-" .. (FILE_ENTRY_PADDING - node:get_depth() * 2) .. "s"
     line:append(string.format(format_str, node.icon, node.text), node.color)
 
     line:append(node.modified and "[+] " or "    ", node.color)

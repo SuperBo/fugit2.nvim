@@ -1,4 +1,5 @@
 local utils = require "fugit2.utils"
+local NuiTree = require "nui.tree"
 
 
 describe("make_relative_path", function()
@@ -30,6 +31,77 @@ describe("make_relative_path", function()
     assert.equals("c/f.txt", utils.make_relative_path("a/a", "a/a/c/f.txt"))
   end)
 
+end)
+
+
+describe("build_dir_tree/build_nui_tree_nodes", function()
+  it("builds directory 1", function()
+    local nodes = {
+      { path = "a/a.txt", id = 1 },
+      { path = "a/b.txt", id = 2 },
+      { path = "c.txt",   id = 3 },
+    }
+
+    local tree = utils.build_dir_tree(function(n) return n.path end, nodes)
+
+    assert(#vim.tbl_keys(tree), 2)
+    assert.is_not_nil(tree["."])
+    assert.is_not_nil(tree["a"])
+    assert.is_not_nil(tree["a"]["."])
+    assert.same({
+      { path = "c.txt", id = 3 }
+    }, tree["."])
+    assert.same({
+      { path = "a/a.txt", id = 1 },
+      { path = "a/b.txt", id = 2 },
+    }, tree["a"]["."])
+  end)
+
+  it("builds branch names", function()
+    local nodes = {
+      { name = "feature", id = 10, ar = "af" },
+      { name = "feature/add-1", id = 11 },
+      { name = "feature/project/add-project", id = 12 },
+      { name = "feature/remove-2", id = 13 },
+    }
+
+    local tree = utils.build_dir_tree(function(val) return val.name end, nodes)
+
+    assert(#vim.tbl_keys(tree), 2)
+    assert.is_not_nil(tree["."])
+    assert.is_not_nil(tree["feature"])
+    assert.is_not_nil(tree["feature"]["."])
+    assert.is_not_nil(tree["feature"]["project"])
+    assert.is_not_nil(tree["feature"]["project"]["."])
+    assert.same({ nodes[1] }, tree["."])
+    assert.same({ nodes[2], nodes[4] }, tree["feature"]["."])
+    assert.same({ nodes[3] }, tree["feature"]["project"]["."])
+  end)
+
+  it("builds NuiTree for branch names", function()
+    local nodes = {
+      { name = "feature", id = 10, ar = "af" },
+      { name = "feature/add-1", id = 11 },
+      { name = "feature/project/add-project", id = 12 },
+      { name = "feature/remove-2", id = 13 },
+    }
+    local path_fn = function(v)
+      return v.name
+    end
+    local node_fn = function(v)
+      return NuiTree.Node({ id = v.id, text = vim.fs.basename(v.name) })
+    end
+
+    local dir_tree = utils.build_dir_tree(path_fn, nodes)
+    local tree = utils.build_nui_tree_nodes(node_fn, dir_tree)
+
+    assert.is_not_nil(tree)
+    assert.equals(2, #tree)
+    assert.equals("feature", tree[1].text)
+    assert.equals("feature", tree[2].text)
+    assert.equals(true, tree[1]:has_children())
+    assert.equals(false, tree[2]:has_children())
+  end)
 end)
 
 
