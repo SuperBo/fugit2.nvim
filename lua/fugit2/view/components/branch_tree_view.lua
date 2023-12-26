@@ -1,8 +1,10 @@
----Fugit2 Git branches tree
+---Fugit2 Git branches tree view
 
-local Object = require "nui.object"
-local NuiTree = require "nui.tree"
 local NuiLine = require "nui.line"
+local NuiText = require "nui.text"
+local NuiPopup = require "nui.popup"
+local NuiTree = require "nui.tree"
+local Object = require "nui.object"
 
 local utils = require "fugit2.utils"
 
@@ -20,42 +22,83 @@ local BRANCH_ENTRY_PADDING = 49
 local GitBranchTree = Object("Fugit2GitBranchTree")
 
 
----@param node NuiTree.Node
-local function branch_tree_prepare_node(node)
-  local line = NuiLine()
-  line:append(string.rep("  ", node:get_depth() - 1))
+---@param ns_id integer
+---@param width integer?
+function GitBranchTree:init(ns_id, width)
+  self.ns_id = ns_id
+  self.width = width or BRANCH_ENTRY_PADDING
 
-  if node:has_children() then
-    local text = node:is_expanded() and "  " or "  "
-    text = text .. node.text
-    line:append(text, "Fugit2SymbolicRef")
-  elseif node.is_active then
-    local format_str = "%s %-" .. (BRANCH_ENTRY_PADDING - node:get_depth() * 2) .. "s%s"
-    line:append(string.format(format_str, "󱓏", node.text, "󱕦"), "Fugit2BranchHead")
-  else
-    line:append("󰘬 " .. node.text)
-  end
-
-  return line
-end
-
-
----@param bufnr integer
----@param namespace integer
-function GitBranchTree:init(bufnr, namespace)
-  self.bufnr = bufnr
-  self.namespace = namespace
+  self.popup = NuiPopup {
+    ns_id = ns_id,
+    enter = false,
+    border = {
+      style = "rounded",
+      padding = { top = 0, bottom = 0, left = 1, right = 1 },
+      text = {
+        top = NuiText(" 󰊢 Branches ", "Fugit2FloatTitle"),
+        top_align = "left",
+        bottom = NuiText("[b]ranches", "FloatFooter"),
+        bottom_align = "right",
+      },
+    },
+    win_options = {
+      winhighlight = "Normal:Normal,FloatBorder:FloatBorder",
+      cursorline = true,
+    },
+    buf_options = {
+      modifiable = false,
+      readonly = true,
+      swapfile = false,
+      buftype  = "nofile",
+    },
+  }
 
   self.tree = NuiTree {
-    bufnr = bufnr,
-    ns_id = namespace,
+    bufnr = self.popup.bufnr,
+    ns_id = ns_id,
     buf_options = {
       buftype = "nofile",
       swapfile = false,
     },
-    prepare_node = branch_tree_prepare_node,
+    prepare_node = self._prepare_node(self.width - 6),
     nodes = {}
   }
+end
+
+
+---@param padding integer
+---@return fun(node: NuiTree.Node): NuiLine
+function GitBranchTree._prepare_node(padding)
+  return function(node)
+    local line = NuiLine()
+    line:append(string.rep("  ", node:get_depth() - 1))
+
+    if node:has_children() then
+      local text = node:is_expanded() and "  " or "  "
+      text = text .. node.text
+      line:append(text, "Fugit2SymbolicRef")
+    elseif node.is_active then
+      local format_str = "%s %-" .. (padding - node:get_depth() * 2) .. "s%s"
+      line:append(string.format(format_str, "󱓏", node.text, "󱕦"), "Fugit2BranchHead")
+    else
+      line:append("󰘬 " .. node.text)
+    end
+
+    return line
+  end
+end
+
+
+function GitBranchTree:winid()
+  return self.popup.winid
+end
+
+---@param mode string
+---@param key string|string[]
+---@param fn fun()|string
+---@param opts table
+function GitBranchTree:map(mode, key, fn, opts)
+  return self.popup:map(mode, key, fn, opts)
 end
 
 
@@ -107,6 +150,16 @@ function GitBranchTree:get_active_branch()
 
   local node, linenr = self.tree:get_node("-" .. self._active_branch)
   return node, linenr
+end
+
+
+---Scrolls to active branch
+function GitBranchTree:scroll_to_active_branch()
+  local _, linenr = self:get_active_branch()
+  local winid = self.popup.winid
+  if linenr and vim.api.nvim_win_is_valid(winid) then
+    vim.api.nvim_win_set_cursor(winid, { linenr, 0 })
+  end
 end
 
 

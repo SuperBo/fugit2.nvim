@@ -1,6 +1,6 @@
 local context = require "plenary.context_manager"
 
-local Graph = require "fugit2.view.git_graph"
+local Graph = require "fugit2.view.components.commit_log_view"
 local CommitNode = Graph.CommitNode
 
 ---@param path string

@@ -89,7 +89,7 @@ function M.new_fugit2_graph_window(namespace, repo)
   }
 
   -- Status content
-  local graph = GitGraph(branch_popup, commit_popup, namespace, repo)
+  local graph = GitGraph(namespace, repo)
   graph:render()
 
   return graph

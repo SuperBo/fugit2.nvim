@@ -233,27 +233,8 @@ function GitStatus:init(ns_id, repo, last_window)
     right = 1,
   }
 
-  self._popups = {
-    branch = NuiPopup {
-      ns_id = ns_id,
-      enter = false,
-      border = {
-        style = "rounded",
-        padding = default_padding,
-        text = {
-          top = NuiText(" 󰊢 Branches ", "Fugit2FloatTitle"),
-          top_align = "left",
-          bottom = NuiText("[b]ranches", "FloatFooter"),
-          bottom_align = "right",
-        },
-      },
-      win_options = {
-        winhighlight = win_hl,
-        cursorline = true,
-      },
-      buf_options = buf_readonly_opts,
-    }
-  }
+  -- self._popups = {
+  -- }
 
   -- menus
   local amend_confirm = UI.Confirm(
@@ -285,7 +266,7 @@ function GitStatus:init(ns_id, repo, last_window)
   ---@type Fugit2GitStatusTree
   self._tree = GitStatusTree(self.file_popup.bufnr, self.ns_id)
   ---@type Fugit2GitBranchTree
-  self._branches = GitBranchTree(self._popups.branch.bufnr, self.ns_id)
+  self._branches_view = GitBranchTree(self.ns_id)
 
   -- setup layout
   ---@type { [string]: NuiLayout.Box }
@@ -293,7 +274,7 @@ function GitStatus:init(ns_id, repo, last_window)
     main = NuiLayout.Box({
         NuiLayout.Box(self.info_popup, { size = 6 }),
         NuiLayout.Box(self.file_popup, { size = "50%" }),
-        NuiLayout.Box(self._popups.branch, { size = "32%" }),
+        NuiLayout.Box(self._branches_view.popup, { size = "32%" }),
       }, { dir = "col" }
     ),
     main_row = NuiLayout.Box(self.file_popup, { grow = 1 })
@@ -834,7 +815,7 @@ function GitStatus:update()
     if not branches then
       vim.notify("[Fugit2] Failed to get local branch list, error code: " .. err)
     else
-      self._branches:update(branches, git_status.head.refname)
+      self._branches_view:update(branches, git_status.head.refname)
     end
 
     -- clean cached diffs
@@ -866,7 +847,7 @@ function GitStatus:render()
   end
 
   self._tree:render()
-  self._branches:render()
+  self._branches_view:render()
 
   vim.api.nvim_buf_set_option(self.info_popup.bufnr, "readonly", true)
   vim.api.nvim_buf_set_option(self.info_popup.bufnr, "modifiable", false)
@@ -875,8 +856,8 @@ end
 
 ---Scrolls to active branch
 function GitStatus:scroll_to_active_branch()
-  local _, linenr = self._branches:get_active_branch()
-  local winid = self._popups.branch.winid
+  local _, linenr = self._branches_view:get_active_branch()
+  local winid = self._branches_view:winid()
   if linenr and vim.api.nvim_win_is_valid(winid) then
     vim.api.nvim_win_set_cursor(winid, { linenr, 0 })
   end
@@ -1805,7 +1786,7 @@ function GitStatus:setup_handlers()
   local tree = self._tree
   -- local menus = self._menus
   local states = self._states
-  local popups = self._popups
+  -- local popups = self._popups
 
   local exit_fn = function()
     self:unmount()
@@ -1814,8 +1795,8 @@ function GitStatus:setup_handlers()
   -- exit
   self.file_popup:map("n", {"q", "<esc>"}, exit_fn, map_options)
   self.file_popup:map("i", "<c-c>", exit_fn, map_options)
-  popups.branch:map("n", { "q", "<esc>" }, exit_fn, map_options)
-  popups.branch:map("i", "<c-c>", exit_fn, map_options)
+  self._branches_view:map("n", { "q", "<esc>" }, exit_fn, map_options)
+  self._branches_view:map("i", "<c-c>", exit_fn, map_options)
   -- popup:on(event.BufLeave, exit_fn)
 
   -- refresh
@@ -1873,18 +1854,18 @@ function GitStatus:setup_handlers()
   -- Move to branch popup
   self.file_popup:map("n", { "J", "<tab>" }, function()
     if states.side_panel == SidePanel.NONE then
-      vim.api.nvim_set_current_win(self._popups.branch.winid)
+      vim.api.nvim_set_current_win(self._branches_view:winid())
     end
   end, map_options)
   self.file_popup:map("n", "K", "", map_options)
 
   -- Move back to file popup
-  popups.branch:map("n", { "K", "<tab>" }, function()
+  self._branches_view:map("n", { "K", "<tab>" }, function()
     if states.side_panel == SidePanel.NONE then
       vim.api.nvim_set_current_win(self.file_popup.winid)
     end
   end, map_options)
-  popups.branch:map("n", "J", "", map_options)
+  self._branches_view:map("n", "J", "", map_options)
 
   -- expand all
   self.file_popup:map("n", "L",
