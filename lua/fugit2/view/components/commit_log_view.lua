@@ -176,10 +176,10 @@ function CommitLogView.prepare_commit_node_visualisation(nodes)
   ---@type {[string]: Fugit2GitGraphActiveBranch}
   local active_branches = {} -- mapping from oid to {j, out_cols? }
   ---@type Fugit2GitGraphActiveBranch?
-  local branch
+  local branch -- track current active branch
   local col_arr = utils.BitArray.new() -- bitarray to save allocated columns
 
-  -- travel nodes sorted order
+  -- travel nodes in sorted order
   for _, commit in ipairs(nodes) do
     commit.vis = { j = 1 }
 
@@ -199,7 +199,7 @@ function CommitLogView.prepare_commit_node_visualisation(nodes)
     -- get other active branches position
     local col_arr_copy = col_arr:copy()
 
-    -- handle branch out
+    -- handle out branches
     if branch.out_cols then
       if branch.j > branch.out_cols[1] then
         -- swap branch.j with lowest out_cols
@@ -211,6 +211,7 @@ function CommitLogView.prepare_commit_node_visualisation(nodes)
 
       for _, col in ipairs(branch.out_cols) do
         col_arr:unset(col)
+        col_arr_copy:unset(col)
       end
 
       commit.vis.out_cols = branch.out_cols
@@ -276,7 +277,7 @@ function CommitLogView.prepare_commit_node_visualisation(nodes)
 end
 
 
----Draws graph line base on column of characters
+---Draws graph line based on column of characters
 ---@param cols string[]
 ---@param width integer padding width, if == 0, no padding-right
 ---@param commit_j integer? commit column
@@ -398,8 +399,13 @@ local function draw_graph_node_pre_line_bare(vis)
     max_pre_j = math.max(max_pre_j, vis.active_cols[#vis.active_cols])
   end
 
+  if vis.out_cols then
+    max_pre_j = math.max(max_pre_j, vis.out_cols[#vis.out_cols])
+  end
+
   local pre_cols = utils.list_init(SYMBOLS.COMMIT_EMPTY, max_pre_j)
   utils.list_fill(pre_cols, SYMBOLS.COMMIT_BRANCH, vis.active_cols)
+  utils.list_fill(pre_cols, SYMBOLS.COMMIT_BRANCH, vis.out_cols)
 
   if not vis.start then
     pre_cols[vis.j] = SYMBOLS.COMMIT_BRANCH
@@ -464,7 +470,7 @@ end
 
 ---@param vis Fugit2GitGraphCommitNodeVis
 ---@param width integer
----@param commit_line_symbol boolean?
+---@param commit_line_symbol boolean? use commit branch in preline
 ---@return NuiLine commit_line
 local function draw_graph_node_branch_out_line(vis, width, commit_line_symbol)
   local max_j = vis.j
@@ -486,7 +492,7 @@ local function draw_graph_node_branch_out_line(vis, width, commit_line_symbol)
     if min_out_j > vis.j then
       cols[vis.j] = SYMBOLS.BRANCH_COMMIT_RIGHT
     elseif max_out_j < vis.j then
-      cols[vis.j] = SYMBOLS.BRANCH_UP_LEFT
+      cols[vis.j] = SYMBOLS.BRANCH_COMMIT_LEFT
     else
       cols[vis.j] = SYMBOLS.BRANCH_COMMIT_LRIGHT
     end
@@ -510,7 +516,7 @@ function CommitLogView.draw_commit_nodes(nodes, width)
     if commit.vis then
       if commit.vis.out_cols and commit.vis.merge_cols then
         -- draw both merge and branch-out line
-        pre_line = draw_graph_node_branch_out_line(commit.vis, width, true)
+        pre_line = draw_graph_node_branch_out_line(commit.vis, 0, true)
         commit_line = draw_graph_node_merge_line(commit.vis, width)
       elseif commit.vis.out_cols then
         -- draw out_cols only

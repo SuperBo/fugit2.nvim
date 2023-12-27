@@ -74,7 +74,7 @@ describe("prepare_commit_node_visualisation", function()
   end)
 
   it("prepares simple merge graph 1", function()
-    local nodes, _ = read_graph_file("tests/resources/graph_merge_1.txt")
+    local nodes, _ = read_graph_file("tests/resources/graph_merge_1.txt", false)
 
     local out, length = Graph.prepare_commit_node_visualisation(nodes)
     local js = {1, 1, 2, 2, 1, 1, 1}
@@ -357,11 +357,42 @@ describe("draw_commit_nodes", function()
     assert.same(output, lines)
   end)
 
+  it("draws merge cross graph 2", function ()
+    local width
+    local nodes, output = read_graph_file("tests/resources/graph_merge_cross_2.txt", true)
+
+    nodes, width = Graph.prepare_commit_node_visualisation(nodes)
+    local lines = render_graph_lines(Graph.draw_commit_nodes(nodes, width))
+
+    assert.same(output, lines)
+  end)
+
   it("draws merge complex graph", function ()
     local width
     local nodes, output = read_graph_file("tests/resources/graph_merge_complex.txt", true)
 
     nodes, width = Graph.prepare_commit_node_visualisation(nodes)
+    local lines = render_graph_lines(Graph.draw_commit_nodes(nodes, width))
+
+    assert.equals(3, width)
+    assert.same(output, lines)
+  end)
+
+  it("draws graph with wider width", function()
+    local nodes, output = read_graph_file("tests/resources/graph_width_more_than_needed.txt", true)
+
+    nodes, _ = Graph.prepare_commit_node_visualisation(nodes)
+    local width = 3
+    local lines = render_graph_lines(Graph.draw_commit_nodes(nodes, width))
+
+    assert.same(output, lines)
+  end)
+
+  it("draws merge graph with wider width", function()
+    local nodes, output = read_graph_file("tests/resources/graph_merge_width_more_than_needed.txt", true)
+
+    nodes, _ = Graph.prepare_commit_node_visualisation(nodes)
+    local width = 3
     local lines = render_graph_lines(Graph.draw_commit_nodes(nodes, width))
 
     assert.same(output, lines)

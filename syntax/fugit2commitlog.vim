@@ -11,7 +11,7 @@ let b:current_syntax = "fugit2commitlog"
 syntax match branch1Line "^[│●󰍌 ├]"
 
 " Branch 2
-syntax match branch2Line "^.[ ─]\{3\}[│╮╯●]" contains=branch1Line
+syntax match branch2Line "^.[ ─]\{3\}[│╮╯┤┬┴┼●]" contains=branch1Line
 
 
 " Highlight color
