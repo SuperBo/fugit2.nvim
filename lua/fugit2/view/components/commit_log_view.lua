@@ -40,6 +40,8 @@ local SYMBOLS = {
   MISSING_PARENT        = "┆ ",
   MISSING_PARENT_BRANCH = "│ ",
   MISSING_PARENT_EMPTY  = "  ",
+  -- Commit content
+  MESSAGE_START         = "▌",
 }
 
 ---Helper enum for graph column
@@ -128,6 +130,7 @@ function CommitLogView:init(ns_id, title)
       readonly = true,
       buftype = "nofile",
       swapfile = false,
+      syntax = "fugit2commitlog",
     },
   }
 
@@ -286,7 +289,6 @@ function CommitLogView.draw_graph_line(cols, width, commit_j)
   local space_empty = NuiText("    ")
 
   local draw_dash = false
-  local color = ""
 
   local j = #cols
   if commit_j then
@@ -526,7 +528,7 @@ function CommitLogView.draw_commit_nodes(nodes, width)
 
     end
 
-    commit_line:append(" " .. utils.lines_head(commit.message))
+    commit_line:append("   " .. SYMBOLS.MESSAGE_START .. " " .. utils.lines_head(commit.message))
 
     -- add to lines
     if i ~= 1 then

@@ -241,11 +241,7 @@ end)
 ---@param lines NuiLine[]
 ---@return string[]
 local function render_graph_lines(lines)
-  local out = {}
-  for i, l in ipairs(lines) do
-    out[i] = l:content()
-  end
-  return out
+  return vim.tbl_map(function(line) return line:content() end,  lines)
 end
 
 

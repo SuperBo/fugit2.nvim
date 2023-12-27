@@ -34,6 +34,15 @@ M.link_colors = {
 }
 
 M.colors = {
+  Fugit2Branch1 = { ctermfg = "magenta", fg = "green1" },
+  Fugit2Branch2 = { ctermfg = "green",   fg = "yellow1" },
+  Fugit2Branch3 = { ctermfg = "yellow",  fg = "orange1" },
+  Fugit2Branch4 = { ctermfg = "cyan",    fg = "greenyellow" },
+  Fugit2Branch5 = { ctermfg = "red",     fg = "springgreen1" },
+  Fugit2Branch6 = { ctermfg = "yellow",  fg = "cyan1" },
+  Fugit2Branch7 = { ctermfg = "green",   fg = "slateblue1" },
+  Fugit2Branch8 = { ctermfg = "cyan",    fg = "magenta1" },
+  Fugit2Branch9 = { ctermfg = "magenta", fg = "purple1" },
 }
 
 
@@ -48,10 +57,7 @@ function M.set_hl(ns_id)
   end
 
   for hl_group, color in pairs(M.colors) do
-    vim.api.nvim_set_hl(ns_id, hl_group, {
-      fg = color,
-      default = true
-    })
+    vim.api.nvim_set_hl(ns_id, hl_group, color)
   end
 end
 
