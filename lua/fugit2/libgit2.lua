@@ -301,6 +301,7 @@ ffi.cdef[[
   int git_revwalk_new(git_revwalk **walker, git_repository *repo);
   int git_revwalk_push(git_revwalk *walk, const git_oid *oid);
   int git_revwalk_push_head(git_revwalk *walk);
+  int git_revwalk_push_ref(git_revwalk *walk, const char *refname);
   int git_revwalk_next(git_oid *oid, git_revwalk *walk);
   int git_revwalk_hide(git_revwalk *walk, const git_oid *oid);
   void git_revwalk_sorting(git_revwalk *walk, unsigned int sort_mode);

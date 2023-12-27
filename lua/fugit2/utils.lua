@@ -444,6 +444,17 @@ function M.list_fill(lst, val, cols)
 end
 
 
+---Clear/empty a list
+---@generic T
+---@param lst T[]
+function M.list_clear(lst)
+  for i = #lst,1,-1 do
+    lst[i] = nil
+  end
+  return lst
+end
+
+
 ---@generic T
 ---@param tbl table
 ---@param key string

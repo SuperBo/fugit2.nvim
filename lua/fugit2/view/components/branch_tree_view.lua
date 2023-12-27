@@ -102,6 +102,13 @@ function GitBranchTree:map(mode, key, fn, opts)
 end
 
 
+---@param event string | string[]
+---@param handler fun()
+function GitBranchTree:on(event, handler)
+  return self.popup:on(event, handler)
+end
+
+
 ---@param br GitBranch
 ---@return string
 local function branch_path(br)
@@ -154,13 +161,31 @@ end
 
 
 ---Scrolls to active branch
+---@return integer?
 function GitBranchTree:scroll_to_active_branch()
   local _, linenr = self:get_active_branch()
   local winid = self.popup.winid
   if linenr and vim.api.nvim_win_is_valid(winid) then
     vim.api.nvim_win_set_cursor(winid, { linenr, 0 })
   end
+  return linenr
 end
+
+
+---@return NuiTree.Node?
+---@return integer? linenr
+function GitBranchTree:get_child_node_linenr()
+  local node, linenr, _ = self.tree:get_node() -- get current node
+
+  -- depth first search to get first child
+  while node and node:has_children() do
+    local children = node:get_child_ids()
+    node, linenr, _ = self.tree:get_node(children[1])
+  end
+
+  return node, linenr
+end
+
 
 
 return GitBranchTree
