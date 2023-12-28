@@ -4,6 +4,7 @@ local Object = require "nui.object"
 local NuiPopup = require "nui.popup"
 local NuiText = require "nui.text"
 local NuiLine = require "nui.line"
+local string_utils = require "plenary.strings"
 
 local utils = require "fugit2.utils"
 
@@ -21,9 +22,9 @@ local SYMBOLS = {
   BRANCH_COMMIT_RIGHT   = "├",
   BRANCH_COMMIT_LRIGHT  = "┼",
 
-  MERGE_UP_LEFT_RIGHT   = '┴',
-  MERGE_UP_LEFT         = "╯",
-  MERGE_UP_RIGHT        = '╰',
+  -- MERGE_UP_LEFT_RIGHT   = '┴',
+  -- MERGE_UP_LEFT         = "╯",
+  -- MERGE_UP_RIGHT        = '╰',
   -- MERGE_UP              = " ",
   MERGE_UP_DOWN         = "┼",
   MERGE_UP_DOWN_LEFT    = "├",
@@ -41,7 +42,7 @@ local SYMBOLS = {
   MISSING_PARENT_BRANCH = "│ ",
   MISSING_PARENT_EMPTY  = "  ",
   -- Commit content
-  MESSAGE_START         = "▌",
+  MESSAGE_START         = "▊",
 }
 
 ---Helper enum for graph column
@@ -277,6 +278,15 @@ function CommitLogView.prepare_commit_node_visualisation(nodes)
 end
 
 
+---@param j integer
+---@return string?
+local function col_hl(j)
+  if j >= 1 and j <=8 then
+    return "Fugit2Branch" .. j
+  end
+end
+
+
 ---Draws graph line based on column of characters
 ---@param cols string[]
 ---@param width integer padding width, if == 0, no padding-right
@@ -288,6 +298,7 @@ function CommitLogView.draw_graph_line(cols, width, commit_j)
   local dash_pad, dash_2_pad = "───", "──"
   local dash_empty = "────"
   local space_empty = NuiText("    ")
+  local last_j
 
   local draw_dash = false
 
@@ -297,46 +308,47 @@ function CommitLogView.draw_graph_line(cols, width, commit_j)
   end
 
   -- left to j
+  last_j = 1
   for i = 1,j-1 do
     if cols[i] == "" then
       if draw_dash then
-        table.insert(graph_line, NuiText(dash_empty)) -- TODO: coloring
+        table.insert(graph_line, NuiText(dash_empty, col_hl(last_j)))
       else
         table.insert(graph_line, space_empty)
       end
-    else
-      if cols[i] == SYMBOLS.COMMIT_BRANCH or cols[i] == "|" then
-        if draw_dash then
-          table.insert(graph_line, NuiText(SYMBOLS.COMMIT_BRANCH_JUMP)) -- TODO: coloring
-          table.insert(graph_line, NuiText(dash_pad)) -- TODO:coloring
-        else
-          table.insert(graph_line, NuiText(cols[i] .. space_pad)) -- TODO coloring
-        end
+    elseif cols[i] == SYMBOLS.COMMIT_BRANCH or cols[i] == "|" then
+      if draw_dash then
+        table.insert(graph_line, NuiText(SYMBOLS.COMMIT_BRANCH_JUMP, col_hl(i)))
+        table.insert(graph_line, NuiText(dash_pad, col_hl(last_j)))
       else
-        local symbol = cols[i]
-        if not draw_dash then
-          if cols[i] == SYMBOLS.MERGE_DOWN then
-            symbol = SYMBOLS.MERGE_DOWN_LEFT
-          elseif cols[i] == SYMBOLS.MERGE_UP_DOWN then
-            symbol = SYMBOLS.MERGE_UP_DOWN_LEFT
-          elseif cols[i] == SYMBOLS.BRANCH_UP then
-            symbol = SYMBOLS.BRANCH_UP_LEFT
-          end
-        end
-
-        draw_dash = true
-        table.insert(graph_line, NuiText(symbol .. dash_pad)) -- TODO: coloring
+        table.insert(graph_line, NuiText(cols[i] .. space_pad, col_hl(i)))
       end
+    else
+      last_j = i
+      local symbol = cols[i]
+      if not draw_dash then
+        if cols[i] == SYMBOLS.MERGE_DOWN then
+          symbol = SYMBOLS.MERGE_DOWN_LEFT
+        elseif cols[i] == SYMBOLS.MERGE_UP_DOWN then
+          symbol = SYMBOLS.MERGE_UP_DOWN_LEFT
+        elseif cols[i] == SYMBOLS.BRANCH_UP then
+          symbol = SYMBOLS.BRANCH_UP_LEFT
+        end
+      end
+
+      draw_dash = true
+      table.insert(graph_line, NuiText(symbol .. dash_pad, col_hl(i)))
     end
   end
 
-  -- commit symbol
+  -- commit symbol at j
   local k = #graph_line + 1
-  graph_line[k] = NuiText(cols[j])
+  graph_line[k] = NuiText(cols[j], col_hl(j))
   k = k + 1
-  local is_wide_commit = cols[j]:len() > 4
+  local is_wide_commit = string_utils.strdisplaywidth(cols[j]) > 1
 
   -- right to j
+  last_j = #cols
   draw_dash = false
   for i = #cols,j+1,-1 do
     if is_wide_commit and i == j + 1 then
@@ -348,38 +360,37 @@ function CommitLogView.draw_graph_line(cols, width, commit_j)
 
     if cols[i] == "" then
       if draw_dash then
-        table.insert(graph_line, k, NuiText(dash_empty)) -- TODO: coloring
+        table.insert(graph_line, k, NuiText(dash_empty, col_hl(last_j)))
       else
         table.insert(graph_line, k, space_empty)
       end
-    else
-      if cols[i] == SYMBOLS.COMMIT_BRANCH or cols[i] == "|" then
-        if draw_dash then
-          table.insert(graph_line, k, NuiText(SYMBOLS.COMMIT_BRANCH_JUMP)) -- TODO: coloring
-          table.insert(graph_line, k, NuiText(dash_pad)) -- TODO:coloring
-        else
-          table.insert(graph_line, k, NuiText(space_pad .. cols[i])) -- TODO coloring
-        end
+    elseif cols[i] == SYMBOLS.COMMIT_BRANCH or cols[i] == "|" then
+      if draw_dash then
+        table.insert(graph_line, k, NuiText(SYMBOLS.COMMIT_BRANCH_JUMP, col_hl(i)))
+        table.insert(graph_line, k, NuiText(dash_pad, col_hl(last_j)))
       else
-        local symbol = cols[i]
-        if not draw_dash then
-          if cols[i] == SYMBOLS.MERGE_DOWN then
-            symbol = SYMBOLS.MERGE_DOWN_RIGHT
-          elseif cols[i] == SYMBOLS.MERGE_UP_DOWN then
-            symbol = SYMBOLS.MERGE_UP_DOWN_RIGHT
-          elseif cols[i] == SYMBOLS.BRANCH_UP then
-            symbol = SYMBOLS.BRANCH_UP_RIGHT
-          end
-        end
-        draw_dash = true
-        table.insert(graph_line, k, NuiText(dash_pad .. symbol))
+        table.insert(graph_line, k, NuiText(space_pad .. cols[i], col_hl(i)))
       end
+    else
+      last_j = i
+      local symbol = cols[i]
+      if not draw_dash then
+        if cols[i] == SYMBOLS.MERGE_DOWN then
+          symbol = SYMBOLS.MERGE_DOWN_RIGHT
+        elseif cols[i] == SYMBOLS.MERGE_UP_DOWN then
+          symbol = SYMBOLS.MERGE_UP_DOWN_RIGHT
+        elseif cols[i] == SYMBOLS.BRANCH_UP then
+          symbol = SYMBOLS.BRANCH_UP_RIGHT
+        end
+      end
+      draw_dash = true
+      table.insert(graph_line, k, NuiText(dash_pad .. symbol, col_hl(i)))
     end
   end
 
   -- padding right
   if width > #cols then
-    local padding_right = NuiText(string.rep("    ", width - #cols))
+    local padding_right = NuiText(string.rep(" ", (width - #cols) * 4 - 1))
     table.insert(graph_line, padding_right)
   end
 
@@ -506,11 +517,12 @@ end
 
 ---Draws commit graph similar to flog
 ---@param nodes Fugit2GitGraphCommitNode[]
----@param width integer
+---@param width integer graph part width
 ---@return NuiLine[] lines
 function CommitLogView.draw_commit_nodes(nodes, width)
   local lines = {} -- output lines
   local pre_line, commit_line  = {}, {}
+  width = width + 1
 
   for i, commit in ipairs(nodes) do
     if commit.vis then
@@ -532,15 +544,16 @@ function CommitLogView.draw_commit_nodes(nodes, width)
         commit_line = draw_graph_node_commit_line_bare(commit.vis, width)
       end
 
+      commit_line:append(SYMBOLS.MESSAGE_START .. " ", col_hl(commit.vis.j))
     end
 
-    commit_line:append("   " .. SYMBOLS.MESSAGE_START .. " " .. utils.lines_head(commit.message))
+    commit_line:append(utils.message_title_prettify(commit.message))
 
     -- add to lines
     if i ~= 1 then
-      table.insert(lines, pre_line)
+      lines[#lines+1] = pre_line
     end
-    table.insert(lines, commit_line)
+    lines[#lines+1] = commit_line
   end
 
   return lines
@@ -550,6 +563,7 @@ end
 ---Renders content for Fugit2GitGraph.
 function CommitLogView:render()
   local bufnr = self.popup.bufnr
+  local ns_id = self.ns_id
 
   vim.api.nvim_buf_set_option(bufnr, "modifiable", true)
   vim.api.nvim_buf_set_option(bufnr, "readonly", false)
@@ -559,6 +573,10 @@ function CommitLogView:render()
     self._commit_lines
   )
   vim.api.nvim_buf_set_lines(bufnr, 0, -1, true, commit_lines)
+
+  for i, l in ipairs(self._commit_lines) do
+    l:highlight(bufnr, ns_id, i)
+  end
 
   vim.api.nvim_buf_set_option(bufnr, "readonly", true)
   vim.api.nvim_buf_set_option(bufnr, "modifiable", false)

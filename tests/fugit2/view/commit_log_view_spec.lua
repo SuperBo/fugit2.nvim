@@ -185,7 +185,7 @@ describe("draw_graph_line", function ()
 
     local line = Graph.draw_graph_line(cols, 3, 1)
 
-    assert.equals("x   |    ", line:content())
+    assert.equals("x   |   ", line:content())
   end)
 
   it("draws branch out left", function ()
