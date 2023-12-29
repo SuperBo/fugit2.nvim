@@ -3,14 +3,17 @@
 local event = require "nui.utils.autocmd".event
 local NuiLayout = require "nui.layout"
 local Object = require "nui.object"
+local string_utils = require "plenary.strings"
 
 local BranchView = require "fugit2.view.components.branch_tree_view"
 local LogView = require "fugit2.view.components.commit_log_view"
 local utils = require "fugit2.utils"
+local git2 = require "fugit2.git2"
 
 
-local BRANCH_WINDOW_WIDTH = 40
+local BRANCH_WINDOW_WIDTH = 36
 local GIT_OID_LENGTH = 16
+local TAG_MAX_WIDTH = 30
 
 
 ---@class Fugit2GitGraphView
@@ -41,6 +44,11 @@ function GitGraph:init(ns_id, repo)
     walker = nil --[[@as GitRevisionWalker?]],
     commits = {} --[[@as Fugit2GitCommitLogCache]],
     refs = {} --[[@as { [string]: string }]],
+    default_branch = nil --[[@as string?]],
+    default_branch_oid = nil --[[@as string?]],
+    default_remote_branch = nil --[[@as string?]],
+    default_remote_branch_oid = nil --[[@as string?]],
+    remote_icon = "" --[[@as string]],
   }
 
   self._layout = NuiLayout(
@@ -71,11 +79,12 @@ function GitGraph:update()
   utils.list_clear(self._git.refs)
 
   local repo = self.repo
+  local git = self._git
 
   -- Gets all branches ,head and remote default branch
   local branches, default_branch, remote, head, err
 
-  head ,_ = repo:head()
+  head, _ = repo:head()
   if not head then
     vim.notify("[Fugit2] Failed to get repo head!", vim.log.levels.ERROR)
     return
@@ -89,9 +98,19 @@ function GitGraph:update()
   end
 
   remote, err = repo:remote_default()
-  if remote then
-    default_branch, err = remote:default_branch()
-    print(default_branch, err)
+  default_branch = remote and repo:remote_default_branch(remote.name) or nil
+  if remote and default_branch then
+    local splitted = vim.split(default_branch, "/", { plain = true })
+    git.default_branch = "refs/heads/" .. splitted[#splitted]
+    git.default_remote_branch = default_branch
+
+    local oid, _ = repo:reference_name_to_id(git.default_branch)
+    git.default_branch_oid = oid and oid:tostring(GIT_OID_LENGTH) or nil
+
+    oid, _ = repo:reference_name_to_id(default_branch)
+    git.default_remote_branch_oid = oid and oid:tostring(GIT_OID_LENGTH) or nil
+
+    git.remote_icon = utils.get_git_icon(remote.url)
   end
 
   if self._last_branch_linenr == -1 then
@@ -106,12 +125,36 @@ function GitGraph:update()
 end
 
 
+---@param tags string[]
+---@param id_str string commit id string
+---@param refname string refname
+---@param refid string ref oid string id
+function GitGraph:_add_tag(tags, id_str, refname, refid)
+  if id_str ~= refid then
+    return
+  end
+
+  local icon = ""
+  local namespace = git2.reference_name_namespace(refname)
+  if namespace == git2.GIT_REFERENCE_NAMESPACE.BRANCH
+    or namespace == git2.GIT_REFERENCE_NAMESPACE.TAG
+  then
+    icon = utils.get_git_namespace_icon(git2.GIT_REFERENCE_NAMESPACE.BRANCH)
+  elseif namespace == git2.GIT_REFERENCE_NAMESPACE.REMOTE then
+    icon = self._git.remote_icon
+  end
+
+  tags[#tags+1] = icon .. string_utils.truncate(git2.reference_name_shorthand(refname), TAG_MAX_WIDTH)
+end
+
+
 ---Updates log commits
 ---@param refname string
 function GitGraph:update_log(refname)
   local err
   local walker = self._git.walker
-  local tip, commit_list
+  local git = self._git
+  local tip, commit_list, upstream, upstream_id, oid
 
   -- Check cache
   tip = self._git.refs[refname]
@@ -120,7 +163,7 @@ function GitGraph:update_log(refname)
     self.views.log:update(commit_list)
     return
   elseif not tip then
-    local oid, _ = self.repo:reference_name_to_id(refname)
+    oid, _ = self.repo:reference_name_to_id(refname)
     if not oid then
       vim.notify("[Fugit2] Failed to resolve " .. refname, vim.log.levels.ERROR)
       return
@@ -149,8 +192,21 @@ function GitGraph:update_log(refname)
     return
   end
 
+  -- Get upstream if refname is not default and is branch
+  if refname == git.default_branch and git.default_remote_branch then
+    walker:push_ref(git.default_remote_branch)
+  elseif refname ~= git.default_branch
+    and git2.reference_name_namespace(refname) == git2.GIT_REFERENCE_NAMESPACE.BRANCH
+  then
+    upstream, _ = self.repo:branch_upstream_name(refname)
+    if upstream then
+      walker:push_ref(upstream)
+      oid, _ = self.repo:reference_name_to_id(upstream)
+      upstream_id = oid and oid:tostring(GIT_OID_LENGTH) or nil
+    end
+  end
+
   err = walker:push_ref(refname)
-  -- err = walker:push_head()
   if err ~= 0 then
     vim.notify(
       string.format("[Fugit2] Failed to get revision for %s!", refname),
@@ -167,9 +223,27 @@ function GitGraph:update_log(refname)
       commit:parent_oids()
     )
 
+    --Retrieve tag and branches
     local tags = {}
     local tag, _ = self.repo:tag_lookup(id)
-    tags[1] = tag
+    if tag then
+      tags[1] = utils.get_git_namespace_icon(git2.GIT_REFERENCE_NAMESPACE.TAG) .. tag
+    end
+
+    local id_str = id:tostring(GIT_OID_LENGTH)
+
+    if git.default_branch and git.default_branch_oid then
+      self:_add_tag(tags, id_str, git.default_branch, git.default_branch_oid)
+    end
+    if git.default_remote_branch and git.default_remote_branch_oid then
+      self:_add_tag(tags, id_str, git.default_remote_branch, git.default_remote_branch_oid)
+    end
+    if refname ~= git.default_branch then
+      self:_add_tag(tags, id_str, refname, tip)
+    end
+    if upstream and upstream_id then
+      self:_add_tag(tags, id_str, upstream, upstream_id)
+    end
 
     ---@type Fugit2GitGraphCommitNode
     local commit_node = LogView.CommitNode(

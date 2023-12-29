@@ -233,6 +233,7 @@ ffi.cdef[[
   void git_blob_free(git_blob *blob);
 
   char * git_oid_tostr(char *out, size_t n, const git_oid *id);
+  int git_oid_equal(const git_oid *a, const git_oid *b);
 
   char git_diff_status_char(unsigned int status);
   int git_message_prettify(git_buf *out, const char *message, int strip_comments, char comment_char);
@@ -353,6 +354,7 @@ ffi.cdef[[
   int git_branch_upstream(git_reference **out, const git_reference *branch);
   int git_branch_remote_name(git_buf *out, git_repository *repo, const char *refname);
   int git_branch_upstream_remote(git_buf *buf, git_repository *repo, const char *refname);
+  int git_branch_upstream_name(git_buf *out, git_repository *repo, const char *refname);
   int git_branch_lookup(git_reference **out, git_repository *repo, const char *branch_name, unsigned int branch_type);
 
   int git_repository_open_ext(git_repository **out, const char *path, unsigned int flags, const char *ceiling_dirs);

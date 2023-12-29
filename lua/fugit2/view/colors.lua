@@ -41,15 +41,6 @@ M.link_colors = {
 }
 
 M.colors = {
-  -- Fugit2Branch1 = { ctermfg = "magenta", fg = "green1" },
-  -- Fugit2Branch2 = { ctermfg = "green",   fg = "yellow1" },
-  -- Fugit2Branch3 = { ctermfg = "yellow",  fg = "orange1" },
-  -- Fugit2Branch4 = { ctermfg = "cyan",    fg = "greenyellow" },
-  -- Fugit2Branch5 = { ctermfg = "red",     fg = "springgreen1" },
-  -- Fugit2Branch6 = { ctermfg = "yellow",  fg = "cyan1" },
-  -- Fugit2Branch7 = { ctermfg = "green",   fg = "slateblue1" },
-  -- Fugit2Branch8 = { ctermfg = "cyan",    fg = "magenta1" },
-  -- Fugit2Branch9 = { ctermfg = "magenta", fg = "purple1" },
   Fugit2Branch8 = { ctermfg = "magenta", fg = "green1" },
   Fugit2Branch9 = { ctermfg = "green",   fg = "yellow1" },
 }
@@ -67,6 +58,21 @@ function M.set_hl(ns_id)
 
   for hl_group, color in pairs(M.colors) do
     vim.api.nvim_set_hl(ns_id, hl_group, color)
+  end
+
+  --reverse for tagging
+  for i = 1,9 do
+    local link = M.link_colors["Fugit2Branch" .. i]
+    local hl_group = link and vim.api.nvim_get_hl(0, { name = link })
+    or M.colors["Fugit2Branch" .. i]
+    vim.api.nvim_set_hl(ns_id, "Fugit2Tag" .. i, {
+      fg = hl_group.fg,
+      bg = hl_group.bg,
+      ctermfg = hl_group.ctermfg,
+      ctermbg = hl_group.ctermbg,
+      reverse = true,
+      default = true,
+    })
   end
 end
 

@@ -29,6 +29,13 @@ local GIT_REFERENCE_NAMESPACE = {
   NOTE   = 4, -- Reference is in Note namespace
 }
 
+local GIT_REFERENCE_PREFIX = {
+  [GIT_REFERENCE_NAMESPACE.BRANCH] = string.len("refs/heads/") + 1,
+  [GIT_REFERENCE_NAMESPACE.TAG]    = string.len("refs/tags/") + 1,
+  [GIT_REFERENCE_NAMESPACE.REMOTE] = string.len("refs/remotes/") + 1,
+  [GIT_REFERENCE_NAMESPACE.NOTE]   = string.len("refs/notes/") + 1,
+}
+
 local GIT_DELTA_STRING = {
   "UNMODIFIED",
   "ADDED",
@@ -599,6 +606,37 @@ end
 -- | Reference functions |
 -- =======================
 
+---@param refname string
+---@return GIT_REFERENCE_NAMESPACE
+local function reference_name_namespace(refname)
+  if vim.startswith(refname, "refs/") then
+    local namespace = string.sub(refname, string.len("refs/") + 1)
+    if vim.startswith(namespace, "heads/") then
+      return GIT_REFERENCE_NAMESPACE.BRANCH
+    elseif vim.startswith(namespace, "tags/") then
+      return GIT_REFERENCE_NAMESPACE.TAG
+    elseif vim.startswith(namespace, "remotes/") then
+      return GIT_REFERENCE_NAMESPACE.REMOTE
+    elseif vim.startswith(namespace, "notes/") then
+      return GIT_REFERENCE_NAMESPACE.NOTE
+    end
+  end
+
+  return GIT_REFERENCE_NAMESPACE.NONE
+end
+
+
+---@param refname string full refname
+---@return string
+local function reference_name_shorthand(refname)
+  local namespace = reference_name_namespace(refname)
+  if namespace ~= GIT_REFERENCE_NAMESPACE.NONE then
+    return refname:sub(GIT_REFERENCE_PREFIX[namespace])
+  end
+  return refname
+end
+
+
 ---Creates new Reference object
 ---@param git_reference ffi.cdata* libgit2.git_reference_pointer, own cdata
 ---@return GitReference
@@ -612,19 +650,7 @@ function Reference.new(git_reference)
   local c_name = libgit2.C.git_reference_name(ref.ref)
   ref.name = ffi.string(c_name)
 
-  if vim.startswith(ref.name, "refs/") then
-    local namespace = string.sub(ref.name, string.len("refs/") + 1)
-    if vim.startswith(namespace, "heads/") then
-      ref.namespace = GIT_REFERENCE_NAMESPACE.BRANCH
-    elseif vim.startswith(namespace, "tags/") then
-      ref.namespace = GIT_REFERENCE_NAMESPACE.TAG
-    elseif vim.startswith(namespace, "remotes/") then
-      ref.namespace = GIT_REFERENCE_NAMESPACE.REMOTE
-    elseif vim.startswith(namespace, "notes/") then
-      ref.namespace = GIT_REFERENCE_NAMESPACE.NOTE
-    end
-  end
-
+  ref.namespace = reference_name_namespace(ref.name)
   ref.type = libgit2.C.git_reference_type(ref.ref)
 
   -- ffi garbage collector
@@ -649,9 +675,9 @@ end
 
 -- Gets target for a GitReference
 ---@return GitObjectId?
----@return integer Git Error code
+---@return GIT_ERROR
 function Reference:target()
-  if bit.band(self.type, libgit2.GIT_REFERENCE.SYMBOLIC) ~= 0 then
+  if self.type == libgit2.GIT_REFERENCE.SYMBOLIC then
     local resolved = libgit2.git_reference_double_pointer()
 
     local err = libgit2.C.git_reference_resolve(resolved, self.ref)
@@ -1613,7 +1639,7 @@ function Repository:branch_remote_name(ref)
 end
 
 
----Retrieves the upstream remote of a local branch.
+---Retrieves the remote of upstream of a local branch.
 ---@param ref string Ref name
 ---@return string? remote Git remote name
 ---@return GIT_ERROR
@@ -1630,6 +1656,24 @@ function Repository:branch_upstream_remote_name(ref)
   libgit2.C.git_buf_dispose(c_buf)
 
   return remote, 0
+end
+
+
+---@param refname string refname
+---@return string?
+---@return GIT_ERROR
+function Repository:branch_upstream_name(refname)
+  local git_buf = libgit2.git_buf()
+  local err = libgit2.C.git_branch_upstream_name(git_buf, self.repo, refname)
+  if err ~= 0 then
+    libgit2.C.git_buf_dispose(git_buf)
+    return nil, err
+  end
+
+  local name = ffi.string(git_buf[0].ptr, git_buf[0].size)
+  libgit2.C.git_buf_dispose(git_buf)
+
+  return name, 0
 end
 
 
@@ -2319,9 +2363,47 @@ function Repository:tag_lookup(oid)
   return Tag.new(git_tag[0]), 0
 end
 
+
+---Lookup a branch by its name in a repository.
+---@param branch_name string branch name
+---@param branch_type GIT_BRANCH
+---@return GitReference?
+---@return GIT_ERROR
+function Repository:branch_lookup(branch_name, branch_type)
+  local ref = libgit2.git_reference_double_pointer()
+
+  local err = libgit2.C.git_branch_lookup(ref, self.repo, branch_name, branch_type)
+  if err ~= 0 then
+    return nil, err
+  end
+
+  return Reference.new(ref[0]), 0
+end
+
+
+---@param remote_name string remote name
+---@return string?
+---@return GIT_ERROR
+function Repository:remote_default_branch(remote_name)
+  local remote_head = string.format("refs/remotes/%s/HEAD", remote_name)
+  local ref, err = self:reference_lookup(remote_head)
+  if not ref then
+    return nil, err
+  end
+
+  local target = ref:symbolic_target()
+  if not target then
+    return nil, err
+  end
+
+  return target, 0
+end
+
+
 -- ===================
 -- | Utils functions |
 -- ===================
+
 
 ---Set a library global option
 ---@param option GIT_OPT
@@ -2413,6 +2495,8 @@ M.status_char = status_char
 M.status_char_dash = status_char_dash
 M.status_string = status_string
 M.message_prettify = message_prettify
+M.reference_name_namespace = reference_name_namespace
+M.reference_name_shorthand = reference_name_shorthand
 
 
 function M.destroy()

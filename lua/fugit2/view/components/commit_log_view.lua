@@ -9,6 +9,9 @@ local string_utils = require "plenary.strings"
 local utils = require "fugit2.utils"
 
 
+local TAG_PRE_WIDTH = 40
+
+
 local SYMBOLS = {
   CURRENT_COMMIT        = "●",
   COMMIT_BRANCH         = "│",
@@ -169,14 +172,14 @@ end
 function CommitLogView:update(commits)
   local width
   self._commits, width = self.prepare_commit_node_visualisation(commits)
-  self._commit_lines = self.draw_commit_nodes(self._commits, width)
+  self._commit_lines = self.draw_commit_nodes(self._commits, width, true)
 end
 
 
 -- Prepares node visulasation information for each commit
 ---@param nodes Fugit2GitGraphCommitNode[] Commit Node in topo order.
 ---@return Fugit2GitGraphCommitNode[] out_nodes
----@return integer graph_width
+---@return integer graph_widt
 function CommitLogView.prepare_commit_node_visualisation(nodes)
   ---@type {[string]: Fugit2GitGraphActiveBranch}
   local active_branches = {} -- mapping from oid to {j, out_cols? }
@@ -287,6 +290,15 @@ end
 local function col_hl(j)
   if j >= 1 and j <=8 then
     return "Fugit2Branch" .. j
+  end
+end
+
+
+---@param j integer
+---@return string?
+local function tag_hl(j)
+  if j >= 1 and j <=8 then
+    return "Fugit2Tag" .. j
   end
 end
 
@@ -402,8 +414,9 @@ function CommitLogView.draw_graph_line(cols, width, commit_j)
 end
 
 ---@param vis Fugit2GitGraphCommitNodeVis
+---@param width integer align width
 ---@return NuiLine pre_line
-local function draw_graph_node_pre_line_bare(vis)
+local function draw_graph_node_pre_line_bare(vis, width)
   local max_pre_j = vis.j
 
   if vis.start then
@@ -426,7 +439,7 @@ local function draw_graph_node_pre_line_bare(vis)
     pre_cols[vis.j] = SYMBOLS.COMMIT_BRANCH
   end
 
-  return CommitLogView.draw_graph_line(pre_cols, 0)
+  return CommitLogView.draw_graph_line(pre_cols, width)
 end
 
 
@@ -522,29 +535,32 @@ end
 ---Draws commit graph similar to flog
 ---@param nodes Fugit2GitGraphCommitNode[]
 ---@param width integer graph part width
+---@param draw_meta boolean? Whether to draw meta info (author, oid, ...)
 ---@return NuiLine[] lines
-function CommitLogView.draw_commit_nodes(nodes, width)
+function CommitLogView.draw_commit_nodes(nodes, width, draw_meta)
   local lines = {} -- output lines
   local pre_line, commit_line  = {}, {}
   width = width + 1
+  local pre_line_width = draw_meta and width or 0
+  local pre_line_meta = nil --[[@as NuiLine|NuiText|nil]]
 
   for i, commit in ipairs(nodes) do
     if commit.vis then
       if commit.vis.out_cols and commit.vis.merge_cols then
         -- draw both merge and branch-out line
-        pre_line = draw_graph_node_branch_out_line(commit.vis, 0, true)
+        pre_line = draw_graph_node_branch_out_line(commit.vis, pre_line_width, true)
         commit_line = draw_graph_node_merge_line(commit.vis, width)
       elseif commit.vis.out_cols then
         -- draw out_cols only
-        pre_line = draw_graph_node_pre_line_bare(commit.vis)
+        pre_line = draw_graph_node_pre_line_bare(commit.vis, pre_line_width)
         commit_line = draw_graph_node_branch_out_line(commit.vis, width, false)
       elseif commit.vis.merge_cols then
         -- draw merge_cols only
-        pre_line = draw_graph_node_pre_line_bare(commit.vis)
+        pre_line = draw_graph_node_pre_line_bare(commit.vis, pre_line_width)
         commit_line = draw_graph_node_merge_line(commit.vis, width)
       else
         -- draw commmit only
-        pre_line = draw_graph_node_pre_line_bare(commit.vis)
+        pre_line = draw_graph_node_pre_line_bare(commit.vis, pre_line_width)
         commit_line = draw_graph_node_commit_line_bare(commit.vis, width)
       end
 
@@ -553,11 +569,40 @@ function CommitLogView.draw_commit_nodes(nodes, width)
 
     commit_line:append(utils.message_title_prettify(commit.message))
 
+    if draw_meta then
+      if pre_line_meta then
+        pre_line:append(pre_line_meta)
+      end
+      local author_text = "  " .. commit.author .. " " .. commit.oid:sub(1, 8)
+      if #commit.tags < 1 then
+        pre_line_meta = NuiText(author_text, "Fugit2ObjectId")
+      else
+        pre_line_meta = NuiLine()
+        pre_line_meta:append(
+          string_utils.align_str(author_text, TAG_PRE_WIDTH), "Fugit2ObjectId"
+        )
+        local hl = commit.vis and tag_hl(commit.vis.j) or nil
+        for k, tag in ipairs(commit.tags) do
+          pre_line_meta:append(" " .. tag .. " ", hl)
+          if k ~= #commit.tags then
+            pre_line_meta:append(" ")
+          end
+        end
+      end
+    end
+
     -- add to lines
     if i ~= 1 then
       lines[#lines+1] = pre_line
     end
     lines[#lines+1] = commit_line
+  end
+
+  if draw_meta and pre_line_meta then
+    pre_line = NuiLine()
+    pre_line:append(string_utils.align_str("", (width - 1) * 4))
+    pre_line:append(pre_line_meta)
+    lines[#lines+1] = pre_line
   end
 
   return lines

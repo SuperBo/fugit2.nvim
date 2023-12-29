@@ -39,6 +39,14 @@ function M.message_title_prettify(str)
     }
   end
 
+  prefix = title:find("^Merge", 1, false)
+  if prefix then
+    return NuiLine {
+      NuiText(title:sub(1, 5), "bold"),
+      NuiText(title:sub(6, -1))
+    }
+  end
+
   return NuiLine { NuiText(title) }
 end
 
