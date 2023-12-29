@@ -70,20 +70,28 @@ function GitGraph:update()
   utils.list_clear(self._git.commits)
   utils.list_clear(self._git.refs)
 
-  -- Gets all branches and head
-  local branches, head, err
+  local repo = self.repo
 
-  head ,_ = self.repo:head()
+  -- Gets all branches ,head and remote default branch
+  local branches, default_branch, remote, head, err
+
+  head ,_ = repo:head()
   if not head then
     vim.notify("[Fugit2] Failed to get repo head!", vim.log.levels.ERROR)
     return
   end
 
-  branches, err = self.repo:branches(true, false)
+  branches, err = repo:branches(true, false)
   if branches then
     self.views.branch:update(branches, head.name)
   else
     vim.notify("[Fugit2] Failed to get branches list, error: " .. err, vim.log.levels.ERROR)
+  end
+
+  remote, err = repo:remote_default()
+  if remote then
+    default_branch, err = remote:default_branch()
+    print(default_branch, err)
   end
 
   if self._last_branch_linenr == -1 then
@@ -159,12 +167,18 @@ function GitGraph:update_log(refname)
       commit:parent_oids()
     )
 
+    local tags = {}
+    local tag, _ = self.repo:tag_lookup(id)
+    tags[1] = tag
+
     ---@type Fugit2GitGraphCommitNode
-    local commit_node = {
-      oid = id:tostring(GIT_OID_LENGTH),
-      message = commit:message(),
-      parents = parents,
-    }
+    local commit_node = LogView.CommitNode(
+      id:tostring(GIT_OID_LENGTH),
+      commit:message(),
+      commit:author(),
+      parents,
+      tags
+    )
 
     i = i + 1
     commit_list[i] = commit_node

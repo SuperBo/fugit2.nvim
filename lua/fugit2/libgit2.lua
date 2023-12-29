@@ -13,6 +13,8 @@ ffi.cdef[[
   typedef struct git_blob git_blob;
   typedef struct git_branch_iterator git_branch_iterator;
   typedef struct git_commit git_commit;
+  typedef struct git_config git_config;
+  typedef struct git_config_iterator git_config_iterator;
   typedef struct git_diff git_diff;
   typedef struct git_diff_stats git_diff_stats;
   typedef struct git_index git_index;
@@ -25,6 +27,7 @@ ffi.cdef[[
   typedef struct git_repository git_repository;
   typedef struct git_revwalk git_revwalk;
   typedef struct git_status_list git_status_list;
+  typedef struct git_tag git_tag;
   typedef struct git_tree git_tree;
   typedef struct git_tree_entry git_tree_entry;
 
@@ -59,6 +62,16 @@ ffi.cdef[[
     char *email;
     git_time when;
   } git_signature;
+
+  typedef struct git_config_entry {
+    const char *name;
+    const char *value;
+    const char *backend_type;
+    const char *origin_path;
+    unsigned int include_depth;
+    unsigned int level;
+    void (*free)(struct git_config_entry *entry);
+  } git_config_entry;
 
   typedef struct git_diff_hunk {
     int    old_start;
@@ -263,6 +276,21 @@ ffi.cdef[[
     const git_tree *tree
   );
 
+  int git_config_open_default(git_config **out);
+  int git_config_open_level(git_config **out, const git_config *parent, int level);
+  void git_config_free(git_config *cfg);
+  int git_config_get_entry(git_config_entry **out, const git_config *cfg, const char *name);
+  int git_config_get_int32(int32_t *out, const git_config *cfg, const char *name);
+  int git_config_get_int64(int64_t *out, const git_config *cfg, const char *name);
+  int git_config_get_bool(int *out, const git_config *cfg, const char *name);
+  int git_config_get_path(git_buf *out, const git_config *cfg, const char *name);
+  int git_config_get_string(const char **out, const git_config *cfg, const char *name);
+  int git_config_get_string_buf(git_buf *out, const git_config *cfg, const char *name);
+  void git_config_entry_free(git_config_entry *entry);
+  int git_config_iterator_new(git_config_iterator **out, const git_config *cfg);
+  int git_config_next(git_config_entry **entry, git_config_iterator *iter);
+  void git_config_iterator_free(git_config_iterator *iter);
+
   int git_diff_find_similar(git_diff *diff, const git_diff_find_options *options);
   int git_diff_index_to_workdir(git_diff **diff, git_repository *repo, git_index *index, const git_diff_options *opts);
   int git_diff_tree_to_index(git_diff **diff, git_repository *repo, git_tree *old_tree, git_index *index, const git_diff_options *opts);
@@ -297,6 +325,8 @@ ffi.cdef[[
   const git_oid * git_reference_target(const git_reference *ref);
   int git_reference_peel(git_object **out, const git_reference *ref, int type);
   int git_reference_name_to_id(git_oid *out, git_repository *repo, const char *name);
+  int git_reference_lookup(git_reference **out, git_repository *repo, const char *name);
+  const char * git_reference_symbolic_target(const git_reference *ref);
 
   int git_revwalk_new(git_revwalk **walker, git_repository *repo);
   int git_revwalk_push(git_revwalk *walk, const git_oid *oid);
@@ -313,6 +343,7 @@ ffi.cdef[[
   const char * git_remote_name(const git_remote *remote);
   const char * git_remote_url(const git_remote *remote);
   const char * git_remote_pushurl(const git_remote *remote);
+  int git_remote_default_branch(git_buf *out, git_remote *remote);
   int git_remote_disconnect(git_remote *remote);
   void git_remote_free(git_remote *remote);
 
@@ -332,6 +363,7 @@ ffi.cdef[[
   int git_repository_head_detached(git_repository *repo);
   int git_repository_head(git_reference **out, git_repository *repo);
   int git_repository_index(git_index **out, git_repository *repo);
+  int git_repository_config(git_config **out, git_repository *repo);
 
   void git_index_free(git_index *index);
   int git_index_read(git_index *index, int force);
@@ -366,6 +398,10 @@ ffi.cdef[[
 
   int git_signature_default(git_signature **out, git_repository *repo);
   void git_signature_free(git_signature *sig);
+
+  int git_tag_lookup(git_tag **out, git_repository *repo, const git_oid *id);
+  const char * git_tag_name(const git_tag *tag);
+  void git_tag_free(git_tag *tag);
 ]]
 
 
@@ -379,10 +415,23 @@ M.char_array = ffi.typeof("char[?]")
 M.const_char_pointer_array = ffi.typeof("const char *[?]")
 M.unsigned_int_array = ffi.typeof("unsigned int[?]")
 M.size_t_array = ffi.typeof("size_t[?]")
+M.int64_array = ffi.typeof("int64_t[?]")
+M.int_array = ffi.typeof("int[?]")
 
 
 ---@type ffi.ctype* git_buf[1]
 M.git_buf = ffi.typeof("git_buf[1]")
+
+---@type ffi.ctype* git_config*[1]
+M.git_config_double_pointer = ffi.typeof("git_config*[1]")
+---@type ffi.ctype* git_config* pointer
+M.git_config_pointer = ffi.typeof("git_config*")
+
+---@type ffi.ctype* git_config_entry*[1]
+M.git_config_entry_double_pointer = ffi.typeof("git_config_entry*[1]")
+
+---@type ffi.ctype* git_config_iterator*[1]
+M.git_config_iterator_double_pointer = ffi.typeof("git_config_iterator*[1]")
 
 ---@type ffi.ctype* git_oid[1]
 M.git_oid = ffi.typeof("git_oid[1]")
@@ -478,6 +527,11 @@ M.git_status_options = ffi.typeof("git_status_options[1]")
 ---@type ffi.ctype* struct git_status_list*[1]
 M.git_status_list_double_pointer = ffi.typeof("git_status_list*[1]")
 
+---@type ffi.ctype* git_tag*[1]
+M.git_tag_double_pointer = ffi.typeof("git_tag*[1]")
+---@type ffi.ctype* git_tag*
+M.git_tag_pointer = ffi.typeof("git_tag*")
+
 ---@type ffi.ctype* git_index**
 M.git_index_double_pointer = ffi.typeof("git_index*[1]")
 ---@type ffi.ctype* git_index*
@@ -565,6 +619,26 @@ M.GIT_BRANCH = {
   ALL    = 3, -- GIT_BRANCH_LOCAL|GIT_BRANCH_REMOTE,
 }
 
+---@enum GIT_CONFIG_LEVEL
+M.GIT_CONFIG_LEVEL = {
+  -- System-wide on Windows, for compatibility with portable git
+  PROGRAMDATA = 1,
+  -- System-wide configuration file; /etc/gitconfig on Linux systems */
+  SYSTEM = 2,
+  -- XDG compatible configuration file; typically ~/.config/git/config */
+  XDG = 3,
+  -- User-specific configuration file (also called Global configuration
+  -- file); typically ~/.gitconfig
+  GLOBAL = 4,
+  -- Repository specific configuration file; $WORK_DIR/.git/config on
+  -- non-bare repos
+  LOCAL = 5,
+  -- Application specific configuration file; freely defined by applications
+  APP = 6,
+  -- Represents the highest level available config file (i.e. the most
+  -- specific config file available that actually is loaded)
+  HIGHEST_LEVEL = -1
+}
 ---@enum GIT_ERROR
 M.GIT_ERROR = {
   GIT_OK              =  0, -- No error

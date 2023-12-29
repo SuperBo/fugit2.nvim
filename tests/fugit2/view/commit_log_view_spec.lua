@@ -19,7 +19,7 @@ local function read_graph_file(path, read_output)
       end
       local s = vim.split(content, " ", { plain = true })
       local id = s[1]
-      local node = CommitNode(id, s[2], {})
+      local node = CommitNode(id, s[2], "A", {}, {})
 
       if #s > 2 then
         node.parents = vim.list_slice(s, 3)

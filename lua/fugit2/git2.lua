@@ -47,15 +47,27 @@ local GIT_DELTA_STRING = {
 -- | Class definitions |
 -- =====================
 
+---@class GitConfig
+---@field config ffi.cdata* libgit2 struct git_config*
+local Config = {}
+Config.__index = Config
+
+
+---@class GitConfigEntry
+---@field name string
+---@field value string
+---@field include_depth integer
+---@field level GIT_CONFIG_LEVEL
+
+
 ---@class GitRepository
----@field repo ffi.cdata* libgit2 struct git_repository*[1]
+---@field repo ffi.cdata* libgit2 struct git_repository*
 ---@field path string git repository path
 local Repository = {}
 Repository.__index = Repository
 
-
 ---@class GitObject
----@field obj ffi.cdata* libgit2 struct git_object*[1]
+---@field obj ffi.cdata* libgit2 struct git_object*
 local Object = {}
 Object.__index = Object
 
@@ -80,9 +92,15 @@ local TreeEntry = {}
 TreeEntry.__index = TreeEntry
 
 ---@class GitCommit
----@field commit ffi.cdata* libgit2 git_commit struct
+---@field commit ffi.cdata* libgit2 git_commit pointer
 local Commit = {}
 Commit.__index = Commit
+
+---@class GitTag
+---@field tag ffi.cdata* libgit2 git_tag pointer
+---@field name string Git Tag name
+local Tag = {}
+Tag.__index = Tag
 
 ---@class GitReference
 ---@field ref ffi.cdata* libgit2 git_reference type
@@ -141,6 +159,135 @@ local DiffHunk = {}
 ---@field new_lineno integer
 ---@field num_lines integer
 ---@field content string
+
+
+-- ========================
+-- | Git config functions |
+-- ========================
+
+
+---Inits git config
+function Config.new(git_config)
+  local config = { config = libgit2.git_config_pointer(git_config) }
+  setmetatable(config, Config)
+
+  ffi.gc(config.config, libgit2.C.git_config_free)
+
+  return config
+end
+
+
+---Open the global, XDG and system configuration files
+---@return GitConfig?
+---@return GIT_ERROR
+function Config.open_default()
+  local git_config = libgit2.git_config_double_pointer()
+
+  local err = libgit2.C.git_config_open_default(git_config)
+  if err ~= 0 then
+    return nil, err
+  end
+
+  return Config.new(git_config[0]), 0
+end
+
+
+---Build a single-level focused config object from a multi-level one
+---@param level GIT_CONFIG_LEVEL
+---@return GitConfig?
+---@return GIT_ERROR
+function Config:open_level(level)
+  local git_config = libgit2.git_config_double_pointer()
+
+  local err = libgit2.C.git_config_open_level(git_config, self.config, level)
+  if err ~= 0 then
+    return nil, err
+  end
+
+  return Config.new(git_config[0]), 0
+end
+
+
+---Get the value of a long integer config variable.
+---@param name string config name
+---@return integer?
+---@return GIT_ERROR
+function Config:get_int(name)
+  local out = libgit2.int64_array(1)
+  local err = libgit2.C.git_config_get_int64(out, self.config, name)
+  if err ~= 0 then
+    return nil, 0
+  end
+
+  return tonumber(out[0]), 0
+end
+
+
+---Get the value of a boolean config variable.
+---@param name string config name
+---@return boolean?
+---@return GIT_ERROR
+function Config:get_bool(name)
+  local out = libgit2.int_array(1)
+  local err = libgit2.C.git_config_get_bool(out, self.config, name)
+  if err ~= 0 then
+    return nil, 0
+  end
+
+  return (out ~= 0), 0
+end
+
+
+---Get the value of a string config variable.
+---@param name string config name
+---@return string?
+---@return GIT_ERROR
+function Config:get_string(name)
+  local buf = libgit2.git_buf()
+
+  local err = libgit2.C.git_config_get_string_buf(buf, self.config, name)
+  if err ~= 0 then
+    libgit2.C.git_buf_dispose(buf)
+    return nil, err
+  end
+
+  local str = ffi.string(buf[0].ptr, buf[0].size)
+  libgit2.C.git_buf_dispose(buf)
+  return str, 0
+end
+
+
+---Get all entries
+---@return GitConfigEntry[]?
+---@return GIT_ERROR
+function Config:entries()
+  local iter = libgit2.git_config_iterator_double_pointer()
+  local err = libgit2.C.git_config_iterator_new(iter, self.config)
+  if err ~= 0 then
+    return nil, err
+  end
+
+  local git_config_entry = libgit2.git_config_entry_double_pointer()
+  local entries = {}
+
+  while libgit2.C.git_config_next(git_config_entry, iter[0]) == 0 do
+    ---@type GitConfigEntry
+    local entry = {
+      name = ffi.string(git_config_entry[0].name),
+      value = ffi.string(git_config_entry[0].value),
+      include_depth = tonumber(git_config_entry[0].include_depth) or -1,
+      level = tonumber(git_config_entry[0].level) or -1,
+    }
+    entries[#entries+1] = entry
+
+    -- libgit2.C.git_config_entry_free(git_config_entry[0])
+  end
+
+  libgit2.C.git_config_iterator_free(iter[0])
+
+  return entries, 0
+end
+
 
 -- ========================
 -- | Git Object functions |
@@ -247,6 +394,7 @@ function Blob:content()
   return ffi.string(content, len)
 end
 
+
 -- ============================
 -- | Git Tree Entry functions |
 -- ============================
@@ -340,6 +488,29 @@ function Tree:entry_byid(id)
     return nil
   end
   return TreeEntry.borrow(entry)
+end
+
+
+-- ==================
+-- | Git Tag object |
+-- ==================
+
+---@param git_tag ffi.cdata* libgit2.git_tag_pointer, own cdata
+---@return GitTag
+function Tag.new(git_tag)
+  local tag = { tag = libgit2.git_tag_pointer(git_tag) }
+  setmetatable(tag, Tag)
+
+  tag.name = ffi.string(libgit2.C.git_tag_name(git_tag))
+  ffi.gc(tag.tag, libgit2.C.git_tag_free)
+
+  return tag
+end
+
+
+---Get the name of a tag
+function Tag:__tostring()
+  return self.name
 end
 
 
@@ -480,7 +651,7 @@ end
 ---@return GitObjectId?
 ---@return integer Git Error code
 function Reference:target()
-  if self.type == libgit2.GIT_REFERENCE.SYMBOLIC then
+  if bit.band(self.type, libgit2.GIT_REFERENCE.SYMBOLIC) ~= 0 then
     local resolved = libgit2.git_reference_double_pointer()
 
     local err = libgit2.C.git_reference_resolve(resolved, self.ref)
@@ -528,13 +699,10 @@ function Reference:peel_commit()
     return nil, err
   end
 
-  -- local c_commit = libgit2.git_commit_double_pointer()
-  -- c_commit[0] = ffi.cast(libgit2.git_commit_pointer, c_object[0])
-
   return Commit.new(ffi.cast(libgit2.git_commit_pointer, c_object[0])), 0
 end
 
---TODO
+
 ---Recursively peel reference until tree object is found.
 ---@return GitTree?
 ---@return GIT_ERROR err libgit2 Error code
@@ -550,7 +718,7 @@ function Reference:peel_tree()
 end
 
 
--- Gets upstream for a branch.
+---Gets upstream for a branch.
 ---@return GitReference? Reference git upstream reference
 ---@return GIT_ERROR
 function Reference:branch_upstream()
@@ -568,13 +736,22 @@ function Reference:branch_upstream()
 end
 
 
--- Retrieves the upstream remote name of a remote_reference.
+---Retrieves the upstream remote name of a remote_reference.
 ---@return string?
 function Reference:remote_name()
   if self.namespace == GIT_REFERENCE_NAMESPACE.REMOTE then
     return self.name:match("remotes/([^/]+)/", 6)
   end
 end
+
+---Get full name to the reference pointed to by a symbolic reference.
+---@return string?
+function Reference:symbolic_target()
+  if bit.band(self.type, libgit2.GIT_REFERENCE.SYMBOLIC) ~= 0 then
+    return ffi.string(libgit2.C.git_reference_symbolic_target(self.ref))
+  end
+end
+
 
 -- ============================
 -- | RevisionWalker functions |
@@ -1072,7 +1249,7 @@ end
 
 ---@class GitStatusUpstream
 ---@field name string
----@field oid string
+---@field oid GitObjectId?
 ---@field message string
 ---@field author string
 ---@field ahead integer
@@ -1082,21 +1259,16 @@ end
 
 ---@class GitStatusHead
 ---@field name string
----@field oid string
+---@field oid GitObjectId?
 ---@field message string
 ---@field author string
 ---@field is_detached boolean
 ---@field namespace GIT_REFERENCE_NAMESPACE
 ---@field refname string
 
----@alias GitStatusRemote { name: string, url: string, push_url: string? }
----@alias GitStatusPushTarget { name:string, oid: string, ahead: integer, behind: integer }
-
 ---@class GitStatusResult
 ---@field head GitStatusHead
----@field remote GitStatusRemote?
 ---@field upstream GitStatusUpstream?
----@field push GitStatusPushTarget?
 ---@field status GitStatusItem[]
 
 ---@class GitBranch
@@ -1188,9 +1360,24 @@ function Repository:is_head_detached()
 end
 
 
--- Get the path of this repository
+---Get the path of this repository
 function Repository:repo_path()
   return ffi.string(libgit2.C.git_repository_path(self.repo))
+end
+
+
+---Get the configuration file for this repository
+---@return GitConfig?
+---@return GIT_ERROR
+function Repository:config()
+  local git_config = libgit2.git_config_double_pointer()
+
+  local err = libgit2.C.git_repository_config(git_config, self.repo)
+  if err ~= 0 then
+    return nil, err
+  end
+
+  return Config.new(git_config[0]), 0
 end
 
 
@@ -1312,6 +1499,22 @@ function Repository:ahead_behind(local_commit, upstream_commit)
   end
 
   return tonumber(c_ahead[0]), tonumber(c_ahead[1]), 0
+end
+
+
+---Lookup a reference by name in a repository
+---@param refname string Long name for the reference (e.g. HEAD, refs/heads/master, refs/tags/v0.1.0).
+---@return GitReference?
+---@return GIT_ERROR
+function Repository:reference_lookup(refname)
+  local ref = libgit2.git_reference_double_pointer()
+
+  local err = libgit2.C.git_reference_lookup(ref, self.repo, refname)
+  if err ~= 0 then
+    return nil, 0
+  end
+
+  return Reference.new(ref[0]), 0
 end
 
 
@@ -1555,7 +1758,7 @@ function Repository:status()
   local result = {
     head = {
       name        = repo_head:shorthand(),
-      oid         = repo_head_oid and tostring(repo_head_oid) or "",
+      oid         = repo_head_oid,
       author      = repo_head_commit and repo_head_commit:author() or "",
       message     = repo_head_commit and repo_head_commit:message() or "",
       is_detached = self:is_head_detached(),
@@ -1564,27 +1767,6 @@ function Repository:status()
     },
     status = {}
   }
-
-  -- Get default remote information
-  local default_remote, remote, remotes, push_target
-  remote, err = self:remote_lookup("origin")
-  if err ~= 0 then
-    remotes, _ = self:remote_list()
-    if remotes and #remotes > 0 then
-      -- get other remote as default if origin is not found
-      remote, err = self:remote_lookup(remotes[1])
-    else
-      remote = nil
-    end
-  end
-  if remote then
-    default_remote = remote
-    result.remote = {
-      name = remote.name,
-      url   = remote.url,
-      push_url = remote.push_url
-    }
-  end
 
   -- Get upstream information
   local repo_upstream
@@ -1604,6 +1786,7 @@ function Repository:status()
       end
     end
 
+    local remote
     local remote_name = repo_upstream:remote_name()
     if remote_name then
       remote, _ = self:remote_lookup(remote_name)
@@ -1611,7 +1794,7 @@ function Repository:status()
 
     result.upstream = {
       name       = repo_upstream:shorthand(),
-      oid        = commit_upstream_oid and tostring(commit_upstream_oid) or "",
+      oid        = commit_upstream_oid,
       message    = commit_upstream and commit_upstream:message() or "",
       author     = commit_upstream and commit_upstream:author() or "",
       ahead      = ahead,
@@ -1619,39 +1802,7 @@ function Repository:status()
       remote     = remote and remote.name or "",
       remote_url = remote and remote.url or "",
     }
-
-    if default_remote and remote_name == default_remote.name
-      and result.upstream.name == (default_remote.name .. "/" .. result.head.name)
-    then
-      push_target = {
-        name   = repo_upstream:shorthand(),
-        oid    = result.upstream.oid,
-        ahead  = result.upstream.ahead,
-        behind = result.upstream.behind
-      }
-    end
   end
-
-  -- Get default push target information if upstream not match
-  if not push_target and default_remote then
-    local push_name = default_remote.name .. "/" .. result.head.name
-    local push_ref = "refs/remotes/" .. push_name
-    local push_target_id, _ = self:reference_name_to_id(push_ref)
-    if push_target_id then
-      local ahead, behind
-      if repo_head_oid then
-        ahead, behind = self:ahead_behind(repo_head_oid, push_target_id)
-      end
-
-      push_target = {
-        name   = push_name,
-        oid    = tostring(push_target_id),
-        ahead  = ahead or 0,
-        behind = behind or 0
-      }
-    end
-  end
-  result.push = push_target
 
   local n_entry = tonumber(libgit2.C.git_status_list_entrycount(status[0]))
 
@@ -1714,7 +1865,51 @@ function Repository:status()
 end
 
 
----Create a new action signature with default user and now timestamp.
+---Get default remote
+---@return GitRemote?
+---@return GIT_ERROR
+function Repository:remote_default()
+  local remote, remotes, err
+
+  remote, err = self:remote_lookup("origin")
+  if err ~= 0 then
+    remotes, err = self:remote_list()
+    if err ~= 0 then
+      return nil, 0
+    end
+
+    if remotes and #remotes > 0 then
+      -- get other remote as default if origin is not found
+      remote, err = self:remote_lookup(remotes[1])
+    else
+      return nil, 0
+    end
+  end
+  return remote, err
+end
+
+
+---Retrieve pushremote for a branch, if not found
+---returns remote from config.
+---@param name string branch name
+---@return string?
+function Repository:branch_push_remote(name)
+  if name == "" then
+    return nil
+  end
+
+  local config, _ = self:config()
+  if not config then
+    return nil
+  end
+
+  local config_prefix = "branch." .. name
+  return config:get_string(config_prefix .. ".pushremote")
+    or config:get_string(config_prefix .. ".remote")
+end
+
+
+---Default signature user and now timestamp.
 ---@return GitSignature?
 ---@return GIT_ERROR
 function Repository:signature_default()
@@ -2109,6 +2304,21 @@ function Repository:apply(diff, workdir, index)
   return libgit2.C.git_apply(self.repo, diff.diff, location, opts)
 end
 
+
+---@param oid GitObjectId
+---@return GitTag?
+---@return GIT_ERROR
+function Repository:tag_lookup(oid)
+  local git_tag = libgit2.git_tag_double_pointer()
+
+  local err = libgit2.C.git_tag_lookup(git_tag, self.repo, oid.oid)
+  if err ~= 0 then
+    return nil, err
+  end
+
+  return Tag.new(git_tag[0]), 0
+end
+
 -- ===================
 -- | Utils functions |
 -- ===================
@@ -2180,6 +2390,7 @@ end
 ---@class Git2Module
 local M = {}
 
+M.Config = Config
 M.Diff = Diff
 M.Repository = Repository
 M.Reference = Reference
@@ -2192,6 +2403,7 @@ M.GIT_REFERENCE = libgit2.GIT_REFERENCE
 M.GIT_REFERENCE_NAMESPACE = GIT_REFERENCE_NAMESPACE
 M.GIT_INDEX_STAGE = libgit2.GIT_INDEX_STAGE
 M.GIT_OPT = libgit2.GIT_OPT
+M.GIT_OBJECT = libgit2.GIT_OBJECT
 
 
 M.head = Repository.head

@@ -304,8 +304,8 @@ function GitStatus:init(ns_id, repo, last_window)
   ---@field head_tree GitTree
   ---@field unstaged_diff { [string]: GitPatch }
   ---@field staged_diff { [string]: GitPatch }
-  ---@field remote GitStatusRemote?
-  ---@field push_target GitStatusPushTarget?
+  ---@field remote { name: string, url: string, push_url: string? }?
+  ---@field push_target { name: string, oid: string, ahead: integer, behind: integer }?
   self._git = {
     head = nil, ahead = 0, behind = 0,
     index_updated = false,
@@ -716,7 +716,15 @@ function GitStatus:update()
   else
     -- update status panel
     self._git.head = git_status.head
-    self._git.remote = git_status.remote
+
+    local remote, _ = self.repo:remote_default()
+    if remote then
+      self._git.remote = {
+        name = remote.name,
+        url = remote.url,
+        puhs_urel = remote.push_url
+      }
+    end
 
     local head_line = NuiLine { NuiText("HEAD", "Fugit2Header") }
     if git_status.head.is_detached then
@@ -771,7 +779,7 @@ function GitStatus:update()
     end
 
     head_line:append(string.format(author_format, git_status.head.author), "Fugit2Author")
-    head_line:append(" " .. git_status.head.oid .. " ", "Fugit2ObjectId")
+    head_line:append(string.format(" %s ", git_status.head.oid), "Fugit2ObjectId")
     head_line:append(utils.message_title_prettify(git_status.head.message))
     table.insert(lines, head_line)
 
@@ -796,7 +804,7 @@ function GitStatus:update()
       self._states.upstream_text = upstream_text
 
       upstream_line:append(string.format(author_format, git_status.upstream.author), "Fugit2Author")
-      upstream_line:append(" " .. git_status.upstream.oid .. " ", "Fugit2ObjectId")
+      upstream_line:append(string.format(" %s ", git_status.upstream.oid), "Fugit2ObjectId")
 
       upstream_line:append(utils.message_title_prettify(git_status.upstream.message))
     else
@@ -805,7 +813,33 @@ function GitStatus:update()
     table.insert(lines, upstream_line)
 
     -- get info of default push
-    self._git.push_target = git_status.push
+    if git_status.head.namespace == git2.GIT_REFERENCE_NAMESPACE.BRANCH then
+      local push_remote = self.repo:branch_push_remote(git_status.head.name)
+      if push_remote then
+        local push_name = push_remote .. "/" .. git_status.head.name
+        local push_ref = "refs/remotes/" .. push_name
+
+        if push_name == git_status.upstream.name then
+          self._git.push_target = {
+            name = push_name,
+            oid = git_status.upstream.oid and tostring(git_status.upstream.oid) or "",
+            ahead = git_status.upstream.ahead,
+            behind = git_status.upstream.behind
+          }
+        else
+          local push_target_id, _ = self.repo:reference_name_to_id(push_ref)
+          if push_target_id and git_status.head.oid then
+            local ahead1, behind1 = self.repo:ahead_behind(git_status.head.oid, push_target_id)
+            self._git.push_target = {
+              name   = push_name,
+              oid    = tostring(push_target_id),
+              ahead  = ahead1 or 0,
+              behind = behind1 or 0
+            }
+          end
+        end
+      end
+    end
 
     -- update files tree
     self._tree:update(git_status.status)
@@ -1800,7 +1834,7 @@ function GitStatus:setup_handlers()
   -- popup:on(event.BufLeave, exit_fn)
 
   -- refresh
-  self.file_popup:map("n", "g", function ()
+  self.file_popup:map("n", "r", function ()
     self:update()
     self:render()
   end, map_options)

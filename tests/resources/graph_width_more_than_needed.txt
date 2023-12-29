@@ -4,12 +4,12 @@
 002a 2-a 00initial
 00initial initial
 ---
-󰍌 ──╮       ▌ merge
+󰍌 ──╮       ▊ merge
 │   │
-│   ●       ▌ 2-c
+│   ●       ▊ 2-c
 │   │
-│   ●       ▌ 2-b
+│   ●       ▊ 2-b
 │   │
-│   ●       ▌ 2-a
+│   ●       ▊ 2-a
 │   │
-●───╯       ▌ initial
+●───╯       ▊ initial

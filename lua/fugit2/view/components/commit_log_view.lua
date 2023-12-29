@@ -67,9 +67,11 @@ local GitGraphColumn = {
 
 
 ---@class Fugit2GitGraphCommitNode
----@field oid string
----@field message string
+---@field oid string commit oid
+---@field message string commit message
+---@field author string commit author
 ---@field parents string[]
+---@field tags string[] Tags to show beside commit
 ---@field vis Fugit2GitGraphCommitNodeVis?
 local GitGraphCommitNode = Object("Fugit2GitGraphCommitNode")
 
@@ -78,10 +80,12 @@ local GitGraphCommitNode = Object("Fugit2GitGraphCommitNode")
 ---@param oid string
 ---@param msg string
 ---@param parents Fugit2GitGraphCommitNode[]
-function GitGraphCommitNode:init(oid, msg, parents)
+function GitGraphCommitNode:init(oid, msg, author, parents, tags)
   self.oid = oid
+  self.author = author
   self.message = msg
   self.parents = parents
+  self.tags = tags
 end
 
 
