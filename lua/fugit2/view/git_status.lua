@@ -8,6 +8,8 @@ local NuiText = require "nui.text"
 local NuiPopup = require "nui.popup"
 local Object = require "nui.object"
 local event = require "nui.utils.autocmd".event
+local async = require "plenary.async"
+local async_utils = require "plenary.async.util"
 local PlenaryJob = require "plenary.job"
 
 local UI = require "fugit2.view.components.menus"
@@ -233,9 +235,6 @@ function GitStatus:init(ns_id, repo, last_window)
     right = 1,
   }
 
-  -- self._popups = {
-  -- }
-
   -- menus
   local amend_confirm = UI.Confirm(
     self.ns_id,
@@ -335,8 +334,10 @@ function GitStatus:init(ns_id, repo, last_window)
   -- keymaps
   self:setup_handlers()
 
-  -- get git content
-  self:update()
+  async.run(
+    function() self:update() end, -- get git content
+    async_utils.scheduler(function() self:render() end)
+  )
 end
 
 

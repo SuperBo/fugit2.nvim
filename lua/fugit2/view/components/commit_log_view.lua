@@ -573,7 +573,7 @@ function CommitLogView.draw_commit_nodes(nodes, width, draw_meta)
       if pre_line_meta then
         pre_line:append(pre_line_meta)
       end
-      local author_text = "  " .. commit.author .. " " .. commit.oid:sub(1, 8)
+      local author_text = string.format("  %s %s", commit.author, commit.oid:sub(1, 8))
       if #commit.tags < 1 then
         pre_line_meta = NuiText(author_text, "Fugit2ObjectId")
       else

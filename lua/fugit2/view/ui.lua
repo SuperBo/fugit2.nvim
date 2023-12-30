@@ -22,7 +22,6 @@ function M.new_fugit2_status_window(namespace, repo)
   local current_win = vim.api.nvim_get_current_win()
   local status = GitStatus(namespace, repo, current_win)
   last_status_window = status
-  status:render()
   return status
 end
 
