@@ -16,6 +16,7 @@ local UI = require "fugit2.view.components.menus"
 local GitStatusTree = require "fugit2.view.components.file_tree_view"
 local GitBranchTree = require "fugit2.view.components.branch_tree_view"
 local PatchView = require "fugit2.view.components.patch_view"
+local LogView = require "fugit2.view.components.commit_log_view"
 local git2 = require "fugit2.git2"
 local utils = require "fugit2.utils"
 
@@ -88,7 +89,6 @@ local SidePanel = {
 
 ---@class Fugit2GitStatusView
 ---@field info_popup NuiPopup
----@field file_popup NuiPopup
 ---@field input_popup NuiPopup
 ---@field repo GitRepository
 ---@field closed boolean
@@ -125,6 +125,13 @@ function GitStatus:init(ns_id, repo, last_window)
     error("Null repo")
   end
 
+  local default_padding = {
+    top = 0,
+    bottom = 0,
+    left = 1,
+    right = 1,
+  }
+
   local win_hl = "Normal:Normal,FloatBorder:FloatBorder"
   local buf_readonly_opts = {
       modifiable = false,
@@ -133,7 +140,8 @@ function GitStatus:init(ns_id, repo, last_window)
       buftype  = "nofile",
     }
 
-  -- create popups
+  -- create popups/views
+  self._views = {}
   self.info_popup = NuiPopup {
     ns_id = ns_id,
     enter = false,
@@ -156,32 +164,6 @@ function GitStatus:init(ns_id, repo, last_window)
     },
     buf_options = buf_readonly_opts,
   }
-  self.file_popup = NuiPopup {
-    ns_id = ns_id,
-    enter = true,
-    focusable = true,
-    zindex = 50,
-    border = {
-      style = "rounded",
-      padding = {
-        top = 0,
-        bottom = 0,
-        left = 1,
-        right = 1,
-      },
-      text = {
-        top = NuiText(" 󰙅 Files ", "Fugit2FloatTitle"),
-        top_align = "left",
-        bottom = NuiText("[b]ranches [c]ommits [d]iff", "FloatFooter"),
-        bottom_align = "right",
-      },
-    },
-    win_options = {
-      winhighlight = win_hl,
-      cursorline = true,
-    },
-    buf_options = buf_readonly_opts,
-  }
 
   self.input_popup = NuiPopup {
     ns_id = ns_id,
@@ -189,13 +171,11 @@ function GitStatus:init(ns_id, repo, last_window)
     focusable = true,
     border = {
       style = "rounded",
-      padding = {
-        left = 1, right = 1
-      },
+      padding = default_padding,
       text = {
         top = NuiText(" Create commit ", "Fugit2MessageHeading"),
         top_align = "left",
-        bottom = NuiText("[ctrl-c][esc][q]uit, [ctrl-enter][enter]", "FloatFooter"),
+        bottom = NuiText("[Ctrl-c][󱊷 ][q]uit, [Ctrl 󰌑 ][󰌑 ]", "FloatFooter"),
         bottom_align = "right",
       }
     },
@@ -214,7 +194,7 @@ function GitStatus:init(ns_id, repo, last_window)
     focusable = true,
     border = {
       style = "rounded",
-      padding = { left = 1, right = 1 },
+      padding = default_padding,
       text = {
         top = NuiText("  Console ", "Fugit2FloatTitle"),
         top_align = "left",
@@ -228,12 +208,12 @@ function GitStatus:init(ns_id, repo, last_window)
     buf_options = buf_readonly_opts,
   }
 
-  local default_padding = {
-    top = 0,
-    bottom = 0,
-    left = 1,
-    right = 1,
-  }
+  ---@type Fugit2CommitLogView
+  self._views.commits = LogView(self.ns_id, "   Commits ")
+  ---@type Fugit2GitStatusTree
+  self._views.files = GitStatusTree(
+    self.ns_id, " 󰙅 Files ", "[b]ranches [c]ommits [d]iff", "FloatFooter"
+  )
 
   -- menus
   local amend_confirm = UI.Confirm(
@@ -244,9 +224,7 @@ function GitStatus:init(ns_id, repo, last_window)
     amend_confirm = amend_confirm,
   }
   ---@type { [integer]: Fugit2UITransientMenu }
-  self._menus = {
-    -- commit = self:_init_menus(Menu.COMMIT),
-  }
+  self._menus = {}
 
   -- setup others
 
@@ -262,21 +240,17 @@ function GitStatus:init(ns_id, repo, last_window)
 
   ---@type NuiLine[]
   self._status_lines = {}
-  ---@type Fugit2GitStatusTree
-  self._tree = GitStatusTree(self.file_popup.bufnr, self.ns_id)
-  ---@type Fugit2GitBranchTree
-  self._branches_view = GitBranchTree(self.ns_id)
 
   -- setup layout
   ---@type { [string]: NuiLayout.Box }
   self._boxes = {
     main = NuiLayout.Box({
         NuiLayout.Box(self.info_popup, { size = 6 }),
-        NuiLayout.Box(self.file_popup, { size = "50%" }),
-        NuiLayout.Box(self._branches_view.popup, { size = "32%" }),
+        NuiLayout.Box(self._views.files.popup, { grow = 1 }),
+        -- NuiLayout.Box(self._branches_view.popup, { size = "32%" }),
       }, { dir = "col" }
     ),
-    main_row = NuiLayout.Box(self.file_popup, { grow = 1 })
+    main_row = NuiLayout.Box(self._views.files.popup, { grow = 1 })
   }
   self._layout_opts = {
     main = {
@@ -511,14 +485,14 @@ end
 
 
 ---Inits Patch View popup
-function GitStatus:_init_patch_popups()
+function GitStatus:_init_patch_views()
   local patch_unstaged = PatchView(self.ns_id, "Unstaged", "Fugit2Unstaged")
   local patch_staged = PatchView(self.ns_id, "Staged", "Fugit2Staged")
   local opts = { noremap = true, nowait= true }
   local states = self._states
-  local tree = self._tree
-  self._patch_unstaged = patch_unstaged
-  self._patch_staged = patch_staged
+  local tree = self._views.files
+  self._views.patch_unstaged = patch_unstaged
+  self._views.patch_staged = patch_staged
 
   local exit_fn = function()
     self:focus_file()
@@ -547,7 +521,8 @@ function GitStatus:_init_patch_popups()
     self:focus_file()
   end, opts)
   patch_staged:map("n", "h", function()
-    if states.patch_unstaged_shown then self._patch_unstaged:focus()
+    if states.patch_unstaged_shown then
+      patch_unstaged:focus()
     else
       self:focus_file()
     end
@@ -556,7 +531,7 @@ function GitStatus:_init_patch_popups()
   -- [l]: move right
   patch_unstaged.popup:map("n", "l", function()
     if states.patch_staged_shown then
-      self._patch_staged:focus()
+      patch_staged:focus()
     else
       vim.cmd("normal! l")
     end
@@ -588,9 +563,9 @@ function GitStatus:_init_patch_popups()
   local diff_update_fn = function(node)
     -- update node status in file tree
     local wstatus, istatus = node.wstatus, node.istatus
-    self._tree:update_single_node(self.repo, node)
+    tree:update_single_node(self.repo, node)
     if wstatus ~= node.wstatus or istatus ~= node.istatus then
-      self._tree:render()
+      tree:render()
     end
 
     -- invalidate cache
@@ -606,10 +581,10 @@ function GitStatus:_init_patch_popups()
       self:focus_file()
     elseif not states.patch_unstaged_shown and states.patch_staged_shown then
       -- no more diff in unstaged
-      self._patch_staged:focus()
+      patch_staged:focus()
     elseif states.patch_unstaged_shown and not states.patch_staged_shown then
       -- no more diff in staged
-      self._patch_unstaged:focus()
+      patch_unstaged:focus()
     end
   end
 
@@ -703,9 +678,7 @@ end
 function GitStatus:update()
   local git_status, git_error = git2.status(self.repo)
 
-  for i, _ in ipairs(self._status_lines) do
-    self._status_lines[i] = nil
-  end
+  utils.list_clear(self._status_lines)
 
   ---@type NuiLine[]
   local lines = self._status_lines
@@ -843,15 +816,15 @@ function GitStatus:update()
     end
 
     -- update files tree
-    self._tree:update(git_status.status)
+    self._views.files:update(git_status.status)
 
     -- update branches tree
-    local branches, err = self.repo:branches(true, false)
-    if not branches then
-      vim.notify("[Fugit2] Failed to get local branch list, error code: " .. err)
-    else
-      self._branches_view:update(branches, git_status.head.refname)
-    end
+    -- local branches, err = self.repo:branches(true, false)
+    -- if not branches then
+    --   vim.notify("[Fugit2] Failed to get local branch list, error code: " .. err)
+    -- else
+    --   self._branches_view:update(branches, git_status.head.refname)
+    -- end
 
     -- clean cached diffs
     if self._git.unstaged_diff then
@@ -881,8 +854,8 @@ function GitStatus:render()
     line:render(self.info_popup.bufnr, self.ns_id, i)
   end
 
-  self._tree:render()
-  self._branches_view:render()
+  self._views.files:render()
+  -- self._branches_view:render()
 
   vim.api.nvim_buf_set_option(self.info_popup.bufnr, "readonly", true)
   vim.api.nvim_buf_set_option(self.info_popup.bufnr, "modifiable", false)
@@ -891,11 +864,11 @@ end
 
 ---Scrolls to active branch
 function GitStatus:scroll_to_active_branch()
-  local _, linenr = self._branches_view:get_active_branch()
-  local winid = self._branches_view:winid()
-  if linenr and vim.api.nvim_win_is_valid(winid) then
-    vim.api.nvim_win_set_cursor(winid, { linenr, 0 })
-  end
+  -- local _, linenr = self._branches_view:get_active_branch()
+  -- local winid = self._branches_view:winid()
+  -- if linenr and vim.api.nvim_win_is_valid(winid) then
+  --   vim.api.nvim_win_set_cursor(winid, { linenr, 0 })
+  -- end
 end
 
 
@@ -910,16 +883,12 @@ function GitStatus:unmount()
   self.closed = true
 
   self._status_lines = nil
-  self._tree = nil
 
-  if self._patch_unstaged then
-    self._patch_unstaged:unmount()
-    self._patch_unstaged = nil
+  for _, v in ipairs(self._views) do
+    v:unmount()
   end
-  if self._patch_staged then
-    self._patch_staged:unmount()
-    self._patch_staged = nil
-  end
+  self._views = nil
+
   self._prompts.amend_confirm:unmount()
   self._menus = {}
   self.command_popup:unmount()
@@ -942,7 +911,7 @@ end
 ---@param reset boolean reset from enable
 ---@return fun()
 function GitStatus:index_add_reset_handler(add, reset)
-  local tree = self._tree
+  local tree = self._views.files
   local git = self._git
   local states = self._states
 
@@ -998,7 +967,7 @@ function GitStatus:focus_input()
 end
 
 function GitStatus:focus_file()
-  vim.api.nvim_set_current_win(self.file_popup.winid)
+  self._views.files:focus()
 end
 
 ---@param back_to_main boolean
@@ -1252,8 +1221,8 @@ function GitStatus:update_patch(node)
   local unstaged_updated, staged_updated = false, false
 
   -- init in the first update
-  if not self._patch_staged or not self._patch_unstaged then
-    self:_init_patch_popups()
+  if not self._views.patch_staged or not self._views.patch_unstaged then
+    self:_init_patch_views()
   end
 
   if node.id then
@@ -1277,7 +1246,7 @@ function GitStatus:update_patch(node)
     end
 
     if found then
-      self._patch_unstaged:update(found)
+      self._views.patch_unstaged:update(found)
       unstaged_updated = true
     end
 
@@ -1299,7 +1268,7 @@ function GitStatus:update_patch(node)
     end
 
     if found then
-      self._patch_staged:update(found)
+      self._views.patch_staged:update(found)
       staged_updated = true
     end
   end
@@ -1320,25 +1289,25 @@ function GitStatus:show_patch_view(unstaged, staged)
     row = self._boxes.patch_unstaged_staged
     if not row then
       row = utils.update_table(self._boxes, "patch_unstaged_staged", {
-        NuiLayout.Box(self.file_popup, { size = FILE_WINDOW_WIDTH }),
-        NuiLayout.Box(self._patch_unstaged.popup, { grow = 1 }),
-        NuiLayout.Box(self._patch_staged.popup, { grow = 1 })
+        NuiLayout.Box(self._views.files.popup, { size = FILE_WINDOW_WIDTH }),
+        NuiLayout.Box(self._views.patch_unstaged.popup, { grow = 1 }),
+        NuiLayout.Box(self._views.patch_staged.popup, { grow = 1 })
       })
     end
   elseif unstaged then
     row = self._boxes.patch_unstaged
     if not row then
       row = utils.update_table(self._boxes, "patch_unstaged", {
-        NuiLayout.Box(self.file_popup, { size = FILE_WINDOW_WIDTH }),
-        NuiLayout.Box(self._patch_unstaged.popup, { grow = 1 }),
+        NuiLayout.Box(self._views.files.popup, { size = FILE_WINDOW_WIDTH }),
+        NuiLayout.Box(self._views.patch_unstaged.popup, { grow = 1 }),
       })
     end
   else
     row = self._boxes.patch_staged
     if not row then
       row = utils.update_table(self._boxes, "patch_staged", {
-        NuiLayout.Box(self.file_popup, { size = FILE_WINDOW_WIDTH }),
-        NuiLayout.Box(self._patch_staged.popup, { grow = 1 })
+        NuiLayout.Box(self._views.files.popup, { size = FILE_WINDOW_WIDTH }),
+        NuiLayout.Box(self._views.patch_staged.popup, { grow = 1 })
       })
     end
   end
@@ -1356,7 +1325,7 @@ end
 
 function GitStatus:hide_patch_view()
   self._layout:update(self._layout_opts.main, self._boxes.main)
-  self._boxes.main_row = NuiLayout.Box(self.file_popup, { grow = 1 })
+  self._boxes.main_row = NuiLayout.Box(self._views.files.popup, { grow = 1 })
   self._states.side_panel = SidePanel.NONE
 end
 
@@ -1366,7 +1335,7 @@ function GitStatus:_init_diff_menu()
   local m = self:_init_menus(Menu.DIFF)
   m:on_submit(function(item_id, _)
     if item_id == "d" then
-      local node, _ = self._tree:get_child_node_linenr()
+      local node, _ = self._views.files:get_child_node_linenr()
       if node and vim.fn.exists(":DiffviewOpen") > 0 then
         self:unmount()
         vim.cmd({ cmd = "DiffviewOpen", args = { "--selected-file=" .. vim.fn.fnameescape(node.id) } })
@@ -1818,7 +1787,7 @@ end
 -- Setup keymap and event handlers
 function GitStatus:setup_handlers()
   local map_options = { noremap = true, nowait = true }
-  local tree = self._tree
+  local file_tree = self._views.files
   -- local menus = self._menus
   local states = self._states
   -- local popups = self._popups
@@ -1828,58 +1797,56 @@ function GitStatus:setup_handlers()
   end
 
   -- exit
-  self.file_popup:map("n", {"q", "<esc>"}, exit_fn, map_options)
-  self.file_popup:map("i", "<c-c>", exit_fn, map_options)
-  self._branches_view:map("n", { "q", "<esc>" }, exit_fn, map_options)
-  self._branches_view:map("i", "<c-c>", exit_fn, map_options)
+  file_tree:map("n", {"q", "<esc>"}, exit_fn, map_options)
+  file_tree:map("i", "<c-c>", exit_fn, map_options)
   -- popup:on(event.BufLeave, exit_fn)
 
   -- refresh
-  self.file_popup:map("n", "r", function ()
+  file_tree:map("n", "r", function ()
     self:update()
     self:render()
   end, map_options)
 
   -- collapse
-  self.file_popup:map("n", "h",
+  file_tree:map("n", "h",
     function()
-      local node = tree.tree:get_node()
+      local node = file_tree.tree:get_node()
 
       if node and node:collapse() then
-        tree:render()
+        file_tree:render()
       end
     end,
     map_options
   )
 
   -- collapse all
-  self.file_popup:map("n", "H",
+  file_tree:map("n", "H",
     function()
       local updated = false
 
-      for _, node in pairs(tree.tree.nodes.by_id) do
+      for _, node in pairs(file_tree.tree.nodes.by_id) do
         updated = node:collapse() or updated
       end
 
       if updated then
-        tree:render()
+        file_tree:render()
       end
     end,
     map_options
   )
 
   -- Expand and move right
-  self.file_popup:map("n", "l", function()
-    local node = tree.tree:get_node()
+  file_tree:map("n", "l", function()
+    local node = file_tree.tree:get_node()
     if node then
       if node:expand() then
-        tree:render()
+        file_tree:render()
       end
       if not node:has_children() and states.side_panel == SidePanel.PATCH_VIEW then
         if states.patch_unstaged_shown then
-          self._patch_unstaged:focus()
+          self._views.patch_unstaged:focus()
         elseif states.patch_staged_shown then
-          self._patch_staged:focus()
+          self._views.patch_staged:focus()
         end
       end
     end
@@ -1887,32 +1854,32 @@ function GitStatus:setup_handlers()
   )
 
   -- Move to branch popup
-  self.file_popup:map("n", { "J", "<tab>" }, function()
-    if states.side_panel == SidePanel.NONE then
-      vim.api.nvim_set_current_win(self._branches_view:winid())
-    end
-  end, map_options)
-  self.file_popup:map("n", "K", "", map_options)
+  -- self.file_popup:map("n", { "J", "<tab>" }, function()
+  --   if states.side_panel == SidePanel.NONE then
+  --     vim.api.nvim_set_current_win(self._branches_view:winid())
+  --   end
+  -- end, map_options)
+  file_tree:map("n", "K", "", map_options)
 
   -- Move back to file popup
-  self._branches_view:map("n", { "K", "<tab>" }, function()
-    if states.side_panel == SidePanel.NONE then
-      vim.api.nvim_set_current_win(self.file_popup.winid)
-    end
-  end, map_options)
-  self._branches_view:map("n", "J", "", map_options)
+  -- self._branches_view:map("n", { "K", "<tab>" }, function()
+  --   if states.side_panel == SidePanel.NONE then
+  --     vim.api.nvim_set_current_win(self.file_popup.winid)
+  --   end
+  -- end, map_options)
+  -- self._branches_view:map("n", "J", "", map_options)
 
   -- expand all
-  self.file_popup:map("n", "L",
+  file_tree:map("n", "L",
     function()
       local updated = false
 
-      for _, node in pairs(tree.tree.nodes.by_id) do
+      for _, node in pairs(file_tree.tree.nodes.by_id) do
         updated = node:expand() or updated
       end
 
       if updated then
-        tree:render()
+        file_tree:render()
       end
     end,
     map_options
@@ -1923,9 +1890,9 @@ function GitStatus:setup_handlers()
   states.patch_staged_shown = false
   states.patch_unstaged_shown = false
 
-  self.file_popup:on(event.CursorMoved, function()
+  file_tree:on(event.CursorMoved, function()
     if states.side_panel == SidePanel.PATCH_VIEW then
-      local node, linenr = tree:get_child_node_linenr()
+      local node, linenr = file_tree:get_child_node_linenr()
       if node and linenr and linenr ~= states.last_patch_line then
         states.patch_unstaged_shown, states.patch_staged_shown = self:update_patch(node)
         if states.patch_unstaged_shown or states.patch_staged_shown then
@@ -1937,11 +1904,11 @@ function GitStatus:setup_handlers()
   end)
 
   ---- Turn on/off patch view
-  self.file_popup:map("n", "=", function()
+  file_tree:map("n", "=", function()
     if states.side_panel == SidePanel.PATCH_VIEW then
       self:hide_patch_view()
     elseif states.side_panel == SidePanel.NONE then
-      local node, linenr = tree:get_child_node_linenr()
+      local node, linenr = file_tree:get_child_node_linenr()
       if node and linenr and linenr ~= states.last_patch_line then
         states.patch_unstaged_shown, states.patch_staged_shown = self:update_patch(node)
         if states.patch_unstaged_shown or states.patch_staged_shown then
@@ -1955,15 +1922,15 @@ function GitStatus:setup_handlers()
   end, map_options)
 
   ---- Enter: collapse expand toggle, move to file buffer and diff
-  self.file_popup:map("n", "<cr>", function ()
-    local node = tree.tree:get_node()
+  file_tree:map("n", "<cr>", function ()
+    local node = file_tree.tree:get_node()
     if node and node:has_children() then
       if node:is_expanded() then
         node:collapse()
       else
         node:expand()
       end
-      tree:render()
+      file_tree:render()
     -- elseif states.patch_shown then
     --   if states.patch_unstaged_shown then
     --     self._patch_unstaged:focus()
@@ -1977,16 +1944,16 @@ function GitStatus:setup_handlers()
   end, map_options)
 
   ---- Space/[-]: Add or remove index
-  self.file_popup:map("n", { "-", "<space>" }, self:index_add_reset_handler(true, true), map_options)
+  file_tree:map("n", { "-", "<space>" }, self:index_add_reset_handler(true, true), map_options)
 
   ---- [s]: stage file
-  self.file_popup:map("n", "s", self:index_add_reset_handler(true, false), map_options)
+  file_tree:map("n", "s", self:index_add_reset_handler(true, false), map_options)
 
   ---- [u]: unstage file
-  self.file_popup:map("n", "u", self:index_add_reset_handler(false, true), map_options)
+  file_tree:map("n", "u", self:index_add_reset_handler(false, true), map_options)
 
   ---- Write index
-  self.file_popup:map("n", "w",
+  file_tree:map("n", "w",
     function ()
       if self.index:write() == 0 then
         vim.notify("[Fugit2] Index saved", vim.log.levels.INFO)
@@ -1996,7 +1963,7 @@ function GitStatus:setup_handlers()
   )
 
   -- Commit Menu
-  self.file_popup:map("n", "c", self:_menu_handlers(Menu.COMMIT), map_options)
+  file_tree:map("n", "c", self:_menu_handlers(Menu.COMMIT), map_options)
 
   -- Amend confirm
   self._prompts.amend_confirm:on_yes(self:amend_confirm_yes_handler())
@@ -2031,19 +1998,19 @@ function GitStatus:setup_handlers()
   end, map_options)
 
   -- Diff Menu
-  self.file_popup:map("n", "d", self:_menu_handlers(Menu.DIFF), map_options)
+  file_tree:map("n", "d", self:_menu_handlers(Menu.DIFF), map_options)
 
   -- Branch Menu
-  self.file_popup:map("n", "b", self:_menu_handlers(Menu.BRANCH), map_options)
+  file_tree:map("n", "b", self:_menu_handlers(Menu.BRANCH), map_options)
 
   -- Push menu
-  self.file_popup:map("n", "P", self:_menu_handlers(Menu.PUSH), map_options)
+  file_tree:map("n", "P", self:_menu_handlers(Menu.PUSH), map_options)
 
   -- Fetch menu
-  self.file_popup:map("n", "f", self:_menu_handlers(Menu.FETCH), map_options)
+  file_tree:map("n", "f", self:_menu_handlers(Menu.FETCH), map_options)
 
   -- Pull menu
-  self.file_popup:map("n", "p", self:_menu_handlers(Menu.PULL), map_options)
+  file_tree:map("n", "p", self:_menu_handlers(Menu.PULL), map_options)
 end
 
 

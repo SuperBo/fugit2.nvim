@@ -2,7 +2,9 @@
 
 local Object = require "nui.object"
 local NuiLine = require "nui.line"
+local NuiText = require "nui.text"
 local NuiTree = require "nui.tree"
+local NuiPopup = require "nui.popup"
 local WebDevIcons = require "nvim-web-devicons"
 
 local git2 = require "fugit2.git2"
@@ -148,7 +150,7 @@ local function tree_prepare_node(node)
   line:append(string.rep("  ", node:get_depth() - 1))
 
   if node:has_children() then
-    line:append(node:is_expanded() and "  " or "  ", "Fugit2SymbolicRef")
+    line:append(node:is_expanded() and "  " or "  ", "Fugit2SymbolicRef")
     line:append(node.text, "Fugit2SymbolicRef")
   else
     local format_str = "%s %-" .. (FILE_ENTRY_PADDING - node:get_depth() * 2) .. "s"
@@ -162,21 +164,48 @@ local function tree_prepare_node(node)
 end
 
 ---@class Fugit2GitStatusTree
----@field bufnr integer
----@field namespace integer
+---@field ns_id integer
 ---@field tree NuiTree
+---@field popup NuiPopup
 local GitStatusTree = Object("Fugit2GitStatusTree")
 
 
----@param bufnr integer
----@param namespace integer
-function GitStatusTree:init(bufnr, namespace)
-  self.bufnr = bufnr
-  self.namespace = namespace
+---@param ns_id integer
+---@param top_title string
+---@param bottom_title string
+function GitStatusTree:init(ns_id, top_title, bottom_title)
+  self.namespace = ns_id
+
+  self.popup = NuiPopup {
+    ns_id = ns_id,
+    enter = true,
+    focusable = true,
+    zindex = 50,
+    border = {
+      style = "rounded",
+      padding = { left = 1, right = 1 },
+      text = {
+        top = NuiText(top_title, "Fugit2FloatTitle"),
+        top_align = "left",
+        bottom = NuiText(bottom_title, "FloatFooter"),
+        bottom_align = "right",
+      },
+    },
+    win_options = {
+      winhighlight = "Normal:Normal,FloatBorder:FloatBorder",
+      cursorline = true,
+    },
+    buf_options = {
+      modifiable = false,
+      readonly = true,
+      swapfile = false,
+      buftype  = "nofile",
+    },
+  }
 
   self.tree = NuiTree {
-    bufnr = bufnr,
-    ns_id = namespace,
+    bufnr = self.popup.bufnr,
+    ns_id = ns_id,
     buf_options = {
       buftype = "nofile",
       swapfile = false,
@@ -364,9 +393,33 @@ end
 
 
 function GitStatusTree:render()
-  vim.api.nvim_buf_set_option(self.bufnr, "readonly", false)
+  vim.api.nvim_buf_set_option(self.popup.bufnr, "readonly", false)
   self.tree:render()
-  vim.api.nvim_buf_set_option(self.bufnr, "readonly", true)
+  vim.api.nvim_buf_set_option(self.popup.bufnr, "readonly", true)
+end
+
+
+function GitStatusTree:focus()
+  local winid = self.popup.winid
+  if winid and vim.api.nvim_win_is_valid(winid) then
+    vim.api.nvim_set_current_win(winid)
+  end
+end
+
+
+---@param mode string
+---@param key string|string[]
+---@param fn fun()|string
+---@param opts table
+function GitStatusTree:map(mode, key, fn, opts)
+  return self.popup:map(mode, key, fn, opts)
+end
+
+
+---@param event string | string[]
+---@param handler fun()
+function GitStatusTree:on(event, handler)
+  return self.popup:on(event, handler)
 end
 
 

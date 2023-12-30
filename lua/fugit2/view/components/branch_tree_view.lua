@@ -35,7 +35,7 @@ function GitBranchTree:init(ns_id, width)
       style = "rounded",
       padding = { top = 0, bottom = 0, left = 1, right = 1 },
       text = {
-        top = NuiText(" 󰊢 Branches ", "Fugit2FloatTitle"),
+        top = NuiText(" 󰳐 Branches ", "Fugit2FloatTitle"),
         top_align = "left",
         bottom = NuiText("[b]ranches", "FloatFooter"),
         bottom_align = "right",
