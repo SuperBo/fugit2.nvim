@@ -7,9 +7,11 @@ local NuiLine = require "nui.line"
 local string_utils = require "plenary.strings"
 
 local utils = require "fugit2.utils"
+local git2 = require "fugit2.git2"
 
 
 local TAG_PRE_WIDTH = 40
+local TAG_WIDTH = 30
 
 
 local SYMBOLS = {
@@ -48,13 +50,6 @@ local SYMBOLS = {
   MESSAGE_START         = "▊",
 }
 
----Helper enum for graph column
----@enum Fugit2GitGraphColumn
-local GitGraphColumn = {
-  NONE   = 1, -- column not allocated
-  COMMIT = 2, -- column contains main commit
-  ACTIVE = 3, -- column is allocated by other branch
-}
 
 ---@alias Fugit2GitGraphActiveBranch { j: integer, out_cols: integer[]? }
 ---@alias Fugit2GitGraphLine { cols: string[] }
@@ -74,7 +69,7 @@ local GitGraphColumn = {
 ---@field message string commit message
 ---@field author string commit author
 ---@field parents string[]
----@field tags string[] Tags to show beside commit
+---@field refs string[] Tags to show beside commit
 ---@field vis Fugit2GitGraphCommitNodeVis?
 local GitGraphCommitNode = Object("Fugit2GitGraphCommitNode")
 
@@ -83,12 +78,13 @@ local GitGraphCommitNode = Object("Fugit2GitGraphCommitNode")
 ---@param oid string
 ---@param msg string
 ---@param parents Fugit2GitGraphCommitNode[]
-function GitGraphCommitNode:init(oid, msg, author, parents, tags)
+---@param refs string[] List of full refname to tag
+function GitGraphCommitNode:init(oid, msg, author, parents, refs)
   self.oid = oid
   self.author = author
   self.message = msg
   self.parents = parents
-  self.tags = tags
+  self.refs = refs
 end
 
 
@@ -106,14 +102,15 @@ local CommitLogView = Object("Fugit2CommitLogView")
 ---Inits Fugit2GitGraph.
 ---@param ns_id integer
 ---@param title string
-function CommitLogView:init(ns_id, title)
+---@param enter boolean? -- popup enter
+function CommitLogView:init(ns_id, title, enter)
   self.ns_id = ns_id
   self.title = title
 
   -- popup
   self.popup = NuiPopup {
     ns_id = ns_id,
-    enter = true,
+    enter = enter and true or false,
     focusable = true,
     border = {
       style = "rounded",
@@ -169,10 +166,36 @@ end
 
 ---Updates buffer content with commit log
 ---@param commits Fugit2GitGraphCommitNode[]
-function CommitLogView:update(commits)
+---@param remote_icons { [string]: string }
+function CommitLogView:update(commits, remote_icons)
   local width
   self._commits, width = self.prepare_commit_node_visualisation(commits)
-  self._commit_lines = self.draw_commit_nodes(self._commits, width, true)
+  self._commit_lines = self.draw_commit_nodes(self._commits, width, true, remote_icons)
+end
+
+
+---Draws tag text with icon
+---@param refname string Full refname
+---@param remote_icons { [string]: string }?
+---@return string
+local function draw_tag(refname, remote_icons)
+  local icon = ""
+  local namespace = git2.reference_name_namespace(refname)
+  if namespace == git2.GIT_REFERENCE_NAMESPACE.BRANCH
+    or namespace == git2.GIT_REFERENCE_NAMESPACE.TAG
+  then
+    icon = utils.get_git_namespace_icon(namespace)
+  elseif namespace == git2.GIT_REFERENCE_NAMESPACE.REMOTE then
+    local remote = git2.reference_name_remote(refname)
+    if remote and remote_icons then
+      icon = remote_icons[remote]
+    else
+      icon = utils.get_git_namespace_icon(namespace)
+    end
+  end
+
+  local text = git2.reference_name_shorthand(refname)
+  return string_utils.truncate(" " .. icon .. text .. " ", TAG_WIDTH)
 end
 
 
@@ -536,8 +559,9 @@ end
 ---@param nodes Fugit2GitGraphCommitNode[]
 ---@param width integer graph part width
 ---@param draw_meta boolean? Whether to draw meta info (author, oid, ...)
+---@param remote_icons { [string]: string }?
 ---@return NuiLine[] lines
-function CommitLogView.draw_commit_nodes(nodes, width, draw_meta)
+function CommitLogView.draw_commit_nodes(nodes, width, draw_meta, remote_icons)
   local lines = {} -- output lines
   local pre_line, commit_line  = {}, {}
   width = width + 1
@@ -574,7 +598,7 @@ function CommitLogView.draw_commit_nodes(nodes, width, draw_meta)
         pre_line:append(pre_line_meta)
       end
       local author_text = string.format("  %s %s", commit.author, commit.oid:sub(1, 8))
-      if #commit.tags < 1 then
+      if #commit.refs < 1 then
         pre_line_meta = NuiText(author_text, "Fugit2ObjectId")
       else
         pre_line_meta = NuiLine()
@@ -582,9 +606,9 @@ function CommitLogView.draw_commit_nodes(nodes, width, draw_meta)
           string_utils.align_str(author_text, TAG_PRE_WIDTH), "Fugit2ObjectId"
         )
         local hl = commit.vis and tag_hl(commit.vis.j) or nil
-        for k, tag in ipairs(commit.tags) do
-          pre_line_meta:append(" " .. tag .. " ", hl)
-          if k ~= #commit.tags then
+        for k, refname in ipairs(commit.refs) do
+          pre_line_meta:append(draw_tag(refname, remote_icons), hl)
+          if k ~= #commit.refs then
             pre_line_meta:append(" ")
           end
         end
@@ -629,6 +653,14 @@ function CommitLogView:render()
 
   vim.api.nvim_buf_set_option(bufnr, "readonly", true)
   vim.api.nvim_buf_set_option(bufnr, "modifiable", false)
+end
+
+
+function CommitLogView:focus()
+  local winid = self.popup.winid
+  if winid and vim.api.nvim_win_is_valid(winid) then
+    vim.api.nvim_set_current_win(winid)
+  end
 end
 
 

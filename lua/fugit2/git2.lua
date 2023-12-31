@@ -637,6 +637,13 @@ local function reference_name_shorthand(refname)
 end
 
 
+---@param refname string
+---@return string?
+local function reference_name_remote(refname)
+  return refname:match("refs/remotes/(%a+)/")
+end
+
+
 ---Creates new Reference object
 ---@param git_reference ffi.cdata* libgit2.git_reference_pointer, own cdata
 ---@return GitReference
@@ -2497,6 +2504,7 @@ M.status_string = status_string
 M.message_prettify = message_prettify
 M.reference_name_namespace = reference_name_namespace
 M.reference_name_shorthand = reference_name_shorthand
+M.reference_name_remote = reference_name_remote
 
 
 function M.destroy()

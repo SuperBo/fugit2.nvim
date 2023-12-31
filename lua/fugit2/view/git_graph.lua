@@ -29,27 +29,33 @@ local GitGraph = Object("Fugit2GitGraphView")
 ---@param repo GitRepository
 function GitGraph:init(ns_id, repo)
   if not repo then
-    error("Null repo ")
+    error("[Fugit2] Null repo")
   end
 
   self.views = {
     branch = BranchView(ns_id, BRANCH_WINDOW_WIDTH),
-    log = LogView(ns_id, " 󱁉 Commits Log ")
+    log = LogView(ns_id, " 󱁉 Commits Log ", true)
   }
 
   self.repo = repo
 
   ---@alias Fugit2GitCommitLogCache { [string]: Fugit2GitGraphCommitNode[] }
   self._git = {
-    walker = nil --[[@as GitRevisionWalker?]],
     commits = {} --[[@as Fugit2GitCommitLogCache]],
     refs = {} --[[@as { [string]: string }]],
     default_branch = nil --[[@as string?]],
     default_branch_oid = nil --[[@as string?]],
     default_remote_branch = nil --[[@as string?]],
     default_remote_branch_oid = nil --[[@as string?]],
-    remote_icon = "" --[[@as string]],
+    remote_icons = {} --[[@as {[string]: string}]],
   }
+
+  local walker, err = self.repo:walker()
+  if walker then
+    self._git.walker = walker
+  else
+    error("[Fugit2] Failed to create walker! " .. err)
+  end
 
   self._layout = NuiLayout(
     {
@@ -110,7 +116,7 @@ function GitGraph:update()
     oid, _ = repo:reference_name_to_id(default_branch)
     git.default_remote_branch_oid = oid and oid:tostring(GIT_OID_LENGTH) or nil
 
-    git.remote_icon = utils.get_git_icon(remote.url)
+    git.remote_icons[remote.name] = utils.get_git_icon(remote.url)
   end
 
   if self._last_branch_linenr == -1 then
@@ -122,29 +128,6 @@ function GitGraph:update()
       self:update_log(node.id)
     end
   end
-end
-
-
----@param tags string[]
----@param id_str string commit id string
----@param refname string refname
----@param refid string ref oid string id
-function GitGraph:_add_tag(tags, id_str, refname, refid)
-  if id_str ~= refid then
-    return
-  end
-
-  local icon = ""
-  local namespace = git2.reference_name_namespace(refname)
-  if namespace == git2.GIT_REFERENCE_NAMESPACE.BRANCH
-    or namespace == git2.GIT_REFERENCE_NAMESPACE.TAG
-  then
-    icon = utils.get_git_namespace_icon(git2.GIT_REFERENCE_NAMESPACE.BRANCH)
-  elseif namespace == git2.GIT_REFERENCE_NAMESPACE.REMOTE then
-    icon = self._git.remote_icon
-  end
-
-  tags[#tags+1] = icon .. string_utils.truncate(git2.reference_name_shorthand(refname), TAG_MAX_WIDTH)
 end
 
 
@@ -160,7 +143,7 @@ function GitGraph:update_log(refname)
   tip = self._git.refs[refname]
   commit_list = self._git.commits[tip]
   if tip and commit_list then
-    self.views.log:update(commit_list)
+    self.views.log:update(commit_list, self._git.remote_icons)
     return
   elseif not tip then
     oid, _ = self.repo:reference_name_to_id(refname)
@@ -174,23 +157,12 @@ function GitGraph:update_log(refname)
 
     commit_list = self._git.commits[tip]
     if commit_list then
-      self.views.log:update(commit_list)
+      self.views.log:update(commit_list, self._git.remote_icons)
       return
     end
   end
 
-  if not walker then
-    walker, err = self.repo:walker()
-    self._git.walker = walker
-  else
-    err = walker:reset()
-  end
-
-  if not walker then
-    self._commits = {}
-    vim.notify("[Fugit2] Failed to get commit, error: " .. err, vim.log.levels.ERROR)
-    return
-  end
+  walker:reset()
 
   -- Get upstream if refname is not default and is branch
   if refname == git.default_branch and git.default_remote_branch then
@@ -224,25 +196,25 @@ function GitGraph:update_log(refname)
     )
 
     --Retrieve tag and branches
-    local tags = {}
+    local refs = {}
     local tag, _ = self.repo:tag_lookup(id)
     if tag then
-      tags[1] = utils.get_git_namespace_icon(git2.GIT_REFERENCE_NAMESPACE.TAG) .. tag
+      refs[1] = tag
     end
 
     local id_str = id:tostring(GIT_OID_LENGTH)
 
-    if git.default_branch and git.default_branch_oid then
-      self:_add_tag(tags, id_str, git.default_branch, git.default_branch_oid)
+    if git.default_branch and id_str == git.default_branch_oid then
+      refs[#refs+1] = git.default_branch
     end
-    if git.default_remote_branch and git.default_remote_branch_oid then
-      self:_add_tag(tags, id_str, git.default_remote_branch, git.default_remote_branch_oid)
+    if git.default_remote_branch and id_str == git.default_remote_branch_oid then
+      refs[#refs+1] = git.default_remote_branch
     end
-    if refname ~= git.default_branch then
-      self:_add_tag(tags, id_str, refname, tip)
+    if refname ~= git.default_branch and id_str == tip then
+      refs[#refs+1] = refname
     end
-    if upstream and upstream_id then
-      self:_add_tag(tags, id_str, upstream, upstream_id)
+    if upstream and id_str == upstream_id then
+      refs[#refs+1] = upstream
     end
 
     ---@type Fugit2GitGraphCommitNode
@@ -251,7 +223,7 @@ function GitGraph:update_log(refname)
       commit:message(),
       commit:author(),
       parents,
-      tags
+      refs
     )
 
     i = i + 1
@@ -265,7 +237,7 @@ function GitGraph:update_log(refname)
 
   -- cache commits list with head oid
   self._git.commits[tip] = commit_list
-  self.views.log:update(commit_list)
+  self.views.log:update(commit_list, self._git.remote_icons)
 end
 
 

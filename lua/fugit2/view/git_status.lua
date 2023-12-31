@@ -14,7 +14,7 @@ local PlenaryJob = require "plenary.job"
 
 local UI = require "fugit2.view.components.menus"
 local GitStatusTree = require "fugit2.view.components.file_tree_view"
-local GitBranchTree = require "fugit2.view.components.branch_tree_view"
+-- local GitBranchTree = require "fugit2.view.components.branch_tree_view"
 local PatchView = require "fugit2.view.components.patch_view"
 local LogView = require "fugit2.view.components.commit_log_view"
 local git2 = require "fugit2.git2"
@@ -83,7 +83,6 @@ local LOADING_CHARS = {
 local SidePanel = {
   NONE       = 0,
   PATCH_VIEW = 1,
-  DIFF_VIEW  = 2
 }
 
 
@@ -106,23 +105,47 @@ function GitStatus:init(ns_id, repo, last_window)
   end
 
   self.closed = false
+  ---@class Fugit2GitStatusGitStates
+  ---@field head GitStatusHead?
+  ---@field upstream GitStatusUpstream?
+  ---@field ahead integer
+  ---@field behind integer
+  ---@field index_updated boolean Whether git status is updated
+  ---@field head_tree GitTree
+  ---@field unstaged_diff { [string]: GitPatch }
+  ---@field staged_diff { [string]: GitPatch }
+  ---@field remote { name: string, url: string, push_url: string? }?
+  ---@field remote_icons { [string]: string }?
+  ---@field push_target { name: string, oid: string, ahead: integer, behind: integer }?
+  ---@field signature GitSignature?
+  ---@field walker GitRevisionWalker?
+  self._git = {
+    head = nil, ahead = 0, behind = 0,
+    index_updated = false,
+    unstaged_diff = {}, staged_diff = {},
+  }
 
   if repo ~= nil then
     self.repo = repo
-    local index, sig, err
+    local index, sig, walker, err
 
     index, err = repo:index()
     if index == nil then
-      error("libgit2 Error " .. err)
+      error("[Fugit2] libgit2 Error " .. err)
     end
     self.index = index
 
     sig, err = repo:signature_default()
     if sig then
-      self.sign = sig
+      self._git.signature = sig
+    end
+
+    walker, err = repo:walker()
+    if walker then
+      self._git.walker = walker
     end
   else
-    error("Null repo")
+    error("[Fugit2] Null repo")
   end
 
   local default_padding = {
@@ -209,7 +232,7 @@ function GitStatus:init(ns_id, repo, last_window)
   }
 
   ---@type Fugit2CommitLogView
-  self._views.commits = LogView(self.ns_id, "   Commits ")
+  self._views.commits = LogView(self.ns_id, "   Commits ", false)
   ---@type Fugit2GitStatusTree
   self._views.files = GitStatusTree(
     self.ns_id, " 󰙅 Files ", "[b]ranches [c]ommits [d]iff", "FloatFooter"
@@ -247,7 +270,7 @@ function GitStatus:init(ns_id, repo, last_window)
     main = NuiLayout.Box({
         NuiLayout.Box(self.info_popup, { size = 6 }),
         NuiLayout.Box(self._views.files.popup, { grow = 1 }),
-        -- NuiLayout.Box(self._branches_view.popup, { size = "32%" }),
+        NuiLayout.Box(self._views.commits.popup, { size = 10 }),
       }, { dir = "col" }
     ),
     main_row = NuiLayout.Box(self._views.files.popup, { grow = 1 })
@@ -268,22 +291,7 @@ function GitStatus:init(ns_id, repo, last_window)
     self._boxes.main
   )
 
-  ---@class Fugit2GitStatusGitStates
-  ---@field head GitStatusHead?
-  ---@field upstream GitStatusUpstream?
-  ---@field ahead integer
-  ---@field behind integer
-  ---@field index_updated boolean Whether git status is updated
-  ---@field head_tree GitTree
-  ---@field unstaged_diff { [string]: GitPatch }
-  ---@field staged_diff { [string]: GitPatch }
-  ---@field remote { name: string, url: string, push_url: string? }?
-  ---@field push_target { name: string, oid: string, ahead: integer, behind: integer }?
-  self._git = {
-    head = nil, ahead = 0, behind = 0,
-    index_updated = false,
-    unstaged_diff = {}, staged_diff = {},
-  }
+
   -- state variables for UI
   ---@class Fugit2GitStatusInternal
   ---@field last_window integer
@@ -373,7 +381,7 @@ function GitStatus:_init_menus(menu_type)
       { texts = { NuiText("Commit") }, key = "c" },
       { texts = { NuiText("Edit ", head_hl), NuiText("HEAD", "Fugit2Staged") } },
       { texts = { NuiText("Extend") }, key = "e" },
-      { texts = { NuiText("Reword") }, key = "w" },
+      { texts = { NuiText("Reword") }, key = "r" },
       { texts = { NuiText("Amend") },  key = "a" },
       { texts = { NuiText("View/Edit", head_hl) } },
       { texts = { NuiText("Graph") },  key = "g" },
@@ -696,8 +704,20 @@ function GitStatus:update()
       self._git.remote = {
         name = remote.name,
         url = remote.url,
-        puhs_urel = remote.push_url
+        push_url = remote.push_url
       }
+    end
+
+    if not self._git.remote_icons then
+      local remote_icons = {}
+      local remotes = self.repo:remote_list()
+      if remotes then
+        for _, r in ipairs(remotes) do
+          local rem, _ = self.repo:remote_lookup(r)
+          remote_icons[r] = rem and utils.get_git_icon(rem.url) or ""
+        end
+      end
+      self._git.remote_icons = remote_icons
     end
 
     local head_line = NuiLine { NuiText("HEAD", "Fugit2Header") }
@@ -826,6 +846,49 @@ function GitStatus:update()
     --   self._branches_view:update(branches, git_status.head.refname)
     -- end
 
+    -- update top commits
+    if self._git.walker then
+      local id_len = 16
+      self._git.walker:reset()
+
+      if git_status.upstream then
+        self._git.walker:push(git_status.upstream.oid)
+      end
+
+      self._git.walker:push(git_status.head.oid)
+
+      local commits = {}
+      for oid, commit in self._git.walker:iter() do
+        local parents = vim.tbl_map(
+          function(p) return p:tostring(id_len) end,
+          commit:parent_oids()
+        )
+
+        local id_str = oid:tostring(id_len)
+        local refs = {}
+        if oid == git_status.head.oid then
+          refs[1] = git_status.head.refname
+        end
+        if git_status.upstream and oid == git_status.upstream.oid then
+          refs[#refs+1] = "refs/remotes/" .. git_status.upstream.name
+        end
+
+        commits[#commits+1] = LogView.CommitNode(
+          id_str,
+          commit:message(),
+          commit:author(),
+          parents,
+          refs
+        )
+
+        if #commits > 6 then
+          break
+        end
+      end
+
+      self._views.commits:update(commits, self._git.remote_icons)
+    end
+
     -- clean cached diffs
     if self._git.unstaged_diff then
       for k, _ in pairs(self._git.unstaged_diff) do
@@ -855,6 +918,7 @@ function GitStatus:render()
   end
 
   self._views.files:render()
+  self._views.commits:render()
   -- self._branches_view:render()
 
   vim.api.nvim_buf_set_option(self.info_popup.bufnr, "readonly", true)
@@ -970,13 +1034,15 @@ function GitStatus:focus_file()
   self._views.files:focus()
 end
 
----@param back_to_main boolean
-function GitStatus:off_input(back_to_main)
+
+---Hides input popup
+---@param back_to_main boolean Reset back to main layout
+function GitStatus:hide_input(back_to_main)
   vim.api.nvim_buf_set_lines(
     self.input_popup.bufnr,
     0, -1, true, {}
   )
-  if back_to_main then
+  if back_to_main or self._states.side_panel == SidePanel.NONE then
     self._layout:update(self._layout_opts.main, self._boxes.main)
   else
     self._layout:update(NuiLayout.Box(
@@ -1026,14 +1092,14 @@ end
 ---Creates a commit
 ---@param message string
 function GitStatus:_git_create_commit(message)
-  local prettified = check_signature_message(self.sign, message)
+  local prettified = check_signature_message(self._git.signature, message)
 
-  if self.sign and prettified then
+  if self._git.signature and prettified then
     self:write_index()
-    local commit_id, err = self.repo:commit(self.index, self.sign, prettified)
+    local commit_id, err = self.repo:commit(self.index, self._git.signature, prettified)
     if commit_id then
-      vim.notify("New commit " .. commit_id:tostring(8), vim.log.levels.INFO)
-      self:off_input(true)
+      vim.notify("[Fugit2] New commit " .. commit_id:tostring(8), vim.log.levels.INFO)
+      self:hide_input(true)
       self:update()
       self:render()
     else
@@ -1049,7 +1115,7 @@ function GitStatus:_git_extend_commit()
   self:write_index()
   local commit_id, err = self.repo:amend_extend(self.index)
   if commit_id then
-    vim.notify("Extend HEAD " .. commit_id:tostring(8), vim.log.levels.INFO)
+    vim.notify("[Fugit2] Extend HEAD " .. commit_id:tostring(8), vim.log.levels.INFO)
     self:update()
     self:render()
   else
@@ -1062,13 +1128,13 @@ end
 ---change commit message of HEAD commit
 ---@param message string commit message
 function GitStatus:_git_reword_commit(message)
-  local prettified = check_signature_message(self.sign, message)
+  local prettified = check_signature_message(self._git.signature, message)
 
-  if self.sign and prettified then
-    local commit_id, err = self.repo:amend_reword(self.sign, prettified)
+  if self._git.signature and prettified then
+    local commit_id, err = self.repo:amend_reword(self._git.signature, prettified)
     if commit_id then
       vim.notify("Reword HEAD " .. commit_id:tostring(8), vim.log.levels.INFO)
-      self:off_input(false)
+      self:hide_input(false)
       self:update()
       self:render()
     else
@@ -1081,13 +1147,13 @@ end
 ---add files from index and also change message or HEAD commit
 ---@param message string
 function GitStatus:_git_amend_commit(message)
-  local prettified = check_signature_message(self.sign, message)
-  if self.sign and prettified then
+  local prettified = check_signature_message(self._git.signature, message)
+  if self._git.signature and prettified then
     self:write_index()
-    local commit_id, err = self.repo:amend(self.index, self.sign, prettified)
+    local commit_id, err = self.repo:amend(self.index, self._git.signature, prettified)
     if commit_id then
       vim.notify("Amend HEAD " .. commit_id:tostring(8), vim.log.levels.INFO)
-      self:off_input(true)
+      self:hide_input(true)
       self:update()
       self:render()
     else
@@ -1118,8 +1184,8 @@ function GitStatus:_set_input_popup_commit_title(init_str, include_changes, noti
   end
 
   local title = string.format(
-    " %s - %s %s%s%s",
-    init_str, tostring(self.sign),
+    " %s -  %s %s%s%s",
+    init_str, tostring(self._git.signature),
     file_changed > 0 and string.format("%d 󰈙", file_changed) or "",
     insertions > 0 and string.format(" +%d", insertions) or "",
     deletions > 0 and string.format(" -%d", deletions) or ""
@@ -1199,7 +1265,7 @@ function GitStatus:_init_commit_menu()
       self:commit_create()
     elseif item_id == "e" then
       self:commit_extend()
-    elseif item_id == "w" then
+    elseif item_id == "r" then
       self:commit_amend(true)
     elseif item_id == "a" then
       self:commit_amend(false)
@@ -1788,7 +1854,7 @@ end
 function GitStatus:setup_handlers()
   local map_options = { noremap = true, nowait = true }
   local file_tree = self._views.files
-  -- local menus = self._menus
+  local commit_log = self._views.commits
   local states = self._states
   -- local popups = self._popups
 
@@ -1799,6 +1865,9 @@ function GitStatus:setup_handlers()
   -- exit
   file_tree:map("n", {"q", "<esc>"}, exit_fn, map_options)
   file_tree:map("i", "<c-c>", exit_fn, map_options)
+  file_tree:on(event.BufUnload, function()
+    self.closed = true
+  end)
   -- popup:on(event.BufLeave, exit_fn)
 
   -- refresh
@@ -1808,32 +1877,26 @@ function GitStatus:setup_handlers()
   end, map_options)
 
   -- collapse
-  file_tree:map("n", "h",
-    function()
-      local node = file_tree.tree:get_node()
+  file_tree:map("n", "h", function()
+    local node = file_tree.tree:get_node()
 
-      if node and node:collapse() then
-        file_tree:render()
-      end
-    end,
-    map_options
-  )
+    if node and node:collapse() then
+      file_tree:render()
+    end
+  end, map_options)
 
   -- collapse all
-  file_tree:map("n", "H",
-    function()
-      local updated = false
+  file_tree:map("n", "H", function()
+    local updated = false
 
-      for _, node in pairs(file_tree.tree.nodes.by_id) do
-        updated = node:collapse() or updated
-      end
+    for _, node in pairs(file_tree.tree.nodes.by_id) do
+      updated = node:collapse() or updated
+    end
 
-      if updated then
-        file_tree:render()
-      end
-    end,
-    map_options
-  )
+    if updated then
+      file_tree:render()
+    end
+  end, map_options)
 
   -- Expand and move right
   file_tree:map("n", "l", function()
@@ -1850,40 +1913,36 @@ function GitStatus:setup_handlers()
         end
       end
     end
-  end, map_options
-  )
+  end, map_options)
 
-  -- Move to branch popup
-  -- self.file_popup:map("n", { "J", "<tab>" }, function()
-  --   if states.side_panel == SidePanel.NONE then
-  --     vim.api.nvim_set_current_win(self._branches_view:winid())
-  --   end
-  -- end, map_options)
+  -- Move to commit view
+  file_tree:map("n", { "J", "<tab>" }, function()
+    if states.side_panel == SidePanel.NONE then
+      commit_log:focus()
+    end
+  end, map_options)
   file_tree:map("n", "K", "", map_options)
 
   -- Move back to file popup
-  -- self._branches_view:map("n", { "K", "<tab>" }, function()
-  --   if states.side_panel == SidePanel.NONE then
-  --     vim.api.nvim_set_current_win(self.file_popup.winid)
-  --   end
-  -- end, map_options)
-  -- self._branches_view:map("n", "J", "", map_options)
+  commit_log:map("n", { "K", "<tab>" }, function()
+    if states.side_panel == SidePanel.NONE then
+      file_tree:focus()
+    end
+  end, map_options)
+  commit_log:map("n", "J", "", map_options)
 
   -- expand all
-  file_tree:map("n", "L",
-    function()
-      local updated = false
+  file_tree:map("n", "L", function()
+    local updated = false
 
-      for _, node in pairs(file_tree.tree.nodes.by_id) do
-        updated = node:expand() or updated
-      end
+    for _, node in pairs(file_tree.tree.nodes.by_id) do
+      updated = node:expand() or updated
+    end
 
-      if updated then
-        file_tree:render()
-      end
-    end,
-    map_options
-  )
+    if updated then
+      file_tree:render()
+    end
+  end, map_options)
 
   -- Patch view & move cursor
   states.last_patch_line = -1
@@ -1970,9 +2029,8 @@ function GitStatus:setup_handlers()
 
   -- Message input
   self.input_popup:map("n", { "q", "<esc>" }, function()
-    self:off_input(false)
+    self:hide_input(false)
   end, map_options)
-
 
   self.input_popup:map("i", "<c-c>", "<esc>q", { nowait = true })
 
