@@ -35,6 +35,7 @@ git2.set_opts(git2.GIT_OPT.SET_SERVER_TIMEOUT, SERVER_TIMEOUT)
 
 
 local FILE_WINDOW_WIDTH = 58
+local GIT_LOG_MAX_COMMITS = 8
 
 -- ======================
 -- | Helper enum buffer |
@@ -881,7 +882,7 @@ function GitStatus:update()
           refs
         )
 
-        if #commits > 6 then
+        if #commits > GIT_LOG_MAX_COMMITS then
           break
         end
       end
