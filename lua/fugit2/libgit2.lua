@@ -22,6 +22,7 @@ ffi.cdef[[
   typedef struct git_index_iterator git_index_iterator;
   typedef struct git_object git_object;
   typedef struct git_patch git_patch;
+  typedef struct git_rebase git_rebase;
   typedef struct git_reference git_reference;
   typedef struct git_remote git_remote;
   typedef struct git_repository git_repository;
@@ -31,7 +32,7 @@ ffi.cdef[[
   typedef struct git_tree git_tree;
   typedef struct git_tree_entry git_tree_entry;
 
-  typedef struct git_strarray {
+    typedef struct git_strarray {
     char **strings;
     size_t count;
   } git_strarray;
@@ -176,6 +177,12 @@ ffi.cdef[[
     void *payload;
     unsigned int flags;
   } git_apply_options;
+
+  typedef struct git_rebase_operation{
+    unsigned int type;
+    const git_oid id;
+    const char *exec;
+  } git_rebase_operation;
 
   typedef struct git_status_entry {
     unsigned int status;
@@ -554,6 +561,7 @@ M.GIT_FETCH_OPTIONS_VERSION = 1
 M.GIT_PROXY_OPTIONS_VERSION = 1
 M.GIT_REMOTE_CALLBACKS_VERSION = 1
 M.GIT_STATUS_OPTIONS_VERSION = 1
+M.GIT_REBASE_OPTIONS_VERSION = 1
 
 -- ================
 -- | libgit2 enum |
@@ -940,6 +948,15 @@ M.GIT_DIFF_LINE = {
 	BINARY        = 'B'  -- For "Binary files x and y differ"
 }
 
+---@enum GIT_REBASE_OPERATION
+M.GIT_REBASE_OPERATION = {
+  PICK   = 0,
+  REWORD = 1,
+  EDIT   = 2,
+  SQUASH = 3,
+  FIXUP  = 4,
+  EXEC   = 5,
+}
 
 -- Inits helper
 

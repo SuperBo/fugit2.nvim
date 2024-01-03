@@ -1,5 +1,3 @@
-local utils = require "fugit2.utils"
-
 ---Diff helper module
 ---@module 'Fugit2DiffHelper'
 local M = {}

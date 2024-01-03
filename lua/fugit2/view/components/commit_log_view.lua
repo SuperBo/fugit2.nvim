@@ -187,7 +187,7 @@ local function draw_tag(refname, remote_icons)
     icon = utils.get_git_namespace_icon(namespace)
   elseif namespace == git2.GIT_REFERENCE_NAMESPACE.REMOTE then
     local remote = git2.reference_name_remote(refname)
-    if remote and remote_icons then
+    if remote and remote_icons and remote_icons[remote] then
       icon = remote_icons[remote]
     else
       icon = utils.get_git_namespace_icon(namespace)
@@ -661,6 +661,20 @@ function CommitLogView:focus()
   if winid and vim.api.nvim_win_is_valid(winid) then
     vim.api.nvim_set_current_win(winid)
   end
+end
+
+
+---Get current focus commit
+---@return Fugit2GitGraphCommitNode?
+function CommitLogView:get_commit()
+  local winid = self:winid()
+  if not vim.api.nvim_win_is_valid(winid) then
+    return nil
+  end
+
+  local row = vim.api.nvim_win_get_cursor(winid)[1]
+  local commit = self._commits[math.floor((row+1)/2)]
+  return commit
 end
 
 

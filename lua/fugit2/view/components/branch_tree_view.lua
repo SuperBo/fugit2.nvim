@@ -102,6 +102,13 @@ function GitBranchTree:map(mode, key, fn, opts)
 end
 
 
+---@param mode string
+---@param key string|string[]
+function GitBranchTree:unmap(mode, key)
+  return self.popup:unmap(mode, key)
+end
+
+
 ---@param event string | string[]
 ---@param handler fun()
 function GitBranchTree:on(event, handler)

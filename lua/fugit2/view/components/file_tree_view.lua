@@ -66,7 +66,11 @@ local function tree_node_colors(worktree_status, index_status, modified)
   local text_color, icon_color = "Fugit2Modifier", "Fugit2Modifier"
   local status_icon = "  "
 
-  if worktree_status == git2.GIT_DELTA.UNTRACKED then
+  if worktree_status == git2.GIT_DELTA.CONFLICTED then
+    text_color = "Fugit2Untracked"
+    icon_color = "Fugit2Untracked"
+    status_icon = "󰽜 "
+  elseif worktree_status == git2.GIT_DELTA.UNTRACKED then
     text_color = "Fugit2Untracked"
     icon_color = "Fugit2Untracked"
     status_icon = " "
@@ -110,6 +114,9 @@ local function tree_node_data_from_item(item, bufs)
   local filename = vim.fs.basename(path)
   local extension = vim.filetype.match({ filename = filename })
   local modified = bufs[path] and bufs[path].modified or false
+  local conflicted = (item.worktree_status == git2.GIT_DELTA.CONFLICTED
+    or item.index_status == git2.GIT_DELTA.CONFLICTED
+  )
 
   local icon = WebDevIcons.get_icon(filename, extension, { default = true })
   local wstatus = git2.status_char_dash(item.worktree_status)
@@ -138,7 +145,8 @@ local function tree_node_data_from_item(item, bufs)
     istatus = istatus,
     stage_icon = stage_icon,
     stage_color = icon_color,
-    modified = modified
+    modified = modified,
+    conflicted = conflicted
   }
 end
 
@@ -306,7 +314,11 @@ function GitStatusTree:index_add_reset(repo, index, add, reset, node)
 
     updated = true
     inplace = false -- requires full refresh
-  elseif add and (node.wstatus == "?" or node.wstatus == "T" or node.wstatus == "M") then
+  elseif add and (
+    node.wstatus == "?" or node.wstatus == "T" or node.wstatus == "M"
+    or node.conflicted
+  )
+  then
     -- add to index if worktree status is in (UNTRACKED, MODIFIED, TYPECHANGE)
     ret = index:add_bypath(node.id)
     if ret ~= 0 then
@@ -372,9 +384,10 @@ function GitStatusTree:update_single_node(repo, node)
   node.color, node.stage_color, node.stage_icon = tree_node_colors(
     worktree_status, index_status, node.modified or false
   )
+  node.conflicted = worktree_status == git2.GIT_DELTA.CONFLICTED or index_status == git2.GIT_DELTA.CONFLICTED
 
-  -- remove node when status == "--"
-  if node.wstatus == "-" and node.istatus == "-" then
+  -- remove node when status == "--" and not conflicted
+  if node.wstatus == "-" and node.istatus == "-" and not node.conflicted then
     local parent_id = node:get_parent_id()
     self.tree:remove_node(node:get_id())
     while parent_id ~= nil do

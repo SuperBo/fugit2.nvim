@@ -58,6 +58,7 @@ local Menu = {
   FETCH  = 4,
   PULL   = 5,
   PUSH   = 6,
+  REBASE = 7,
 }
 
 -- ===================
@@ -378,13 +379,17 @@ function GitStatus:_init_menus(menu_type)
   if menu_type == Menu.COMMIT then
     menu_title = NuiText(" Committing ", title_hl)
     menu_items = {
-      { texts = { NuiText("Create", head_hl) } },
+      { texts = { NuiText(" Create", head_hl) } },
       { texts = { NuiText("Commit") }, key = "c" },
-      { texts = { NuiText("Edit ", head_hl), NuiText("HEAD", "Fugit2Staged") } },
+      { texts = { NuiText(" Edit ", head_hl), NuiText("HEAD", "Fugit2Header") } },
       { texts = { NuiText("Extend") }, key = "e" },
       { texts = { NuiText("Reword") }, key = "r" },
       { texts = { NuiText("Amend") },  key = "a" },
-      { texts = { NuiText("View/Edit", head_hl) } },
+      { texts = { NuiText("󰽜 Edit", head_hl) } },
+      { texts = { NuiText("Fixup") },  key = "f" },
+      { texts = { NuiText("Squash") },  key = "s" },
+      { texts = { NuiText("Absorb") },  key = "b" },
+      { texts = { NuiText("Log", head_hl) } },
       { texts = { NuiText("Graph") },  key = "g" },
     }
   elseif menu_type == Menu.DIFF then
@@ -715,7 +720,7 @@ function GitStatus:update()
       if remotes then
         for _, r in ipairs(remotes) do
           local rem, _ = self.repo:remote_lookup(r)
-          remote_icons[r] = rem and utils.get_git_icon(rem.url) or ""
+          remote_icons[r] = rem and utils.get_git_icon(rem.url) or nil
         end
       end
       self._git.remote_icons = remote_icons
@@ -1626,8 +1631,7 @@ function GitStatus:run_command(cmd, args, refresh)
   queue[#queue+1] = command_id
 
   if queue[1] == command_id then
-    self:_run_single_command(cmd, args, refresh)
-    return
+    return self:_run_single_command(cmd, args, refresh)
   end
 
   local timer = uv.new_timer()
@@ -1743,11 +1747,6 @@ function GitStatus:_run_single_command(cmd, args, refresh)
           vim.log.levels.ERROR
         )
       end
-
-      -- vim.defer_fn(function()
-      --   vim.api.nvim_buf_set_option(bufnr, "modifiable", false)
-      --   vim.api.nvim_buf_set_option(bufnr, "readonly", true)
-      -- end, 100)
     end),
     on_stdout = function(_, data)
       if data then
@@ -1866,6 +1865,7 @@ function GitStatus:setup_handlers()
   -- exit
   file_tree:map("n", {"q", "<esc>"}, exit_fn, map_options)
   file_tree:map("i", "<c-c>", exit_fn, map_options)
+  commit_log:map("n", {"q", "<esc>"}, exit_fn, map_options)
   file_tree:on(event.BufUnload, function()
     self.closed = true
   end)

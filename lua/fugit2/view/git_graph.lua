@@ -1,9 +1,9 @@
 -- NUI Git graph module
 
-local event = require "nui.utils.autocmd".event
 local NuiLayout = require "nui.layout"
 local Object = require "nui.object"
-local string_utils = require "plenary.strings"
+local event = require "nui.utils.autocmd".event
+local iter = require "plenary.iterators"
 
 local BranchView = require "fugit2.view.components.branch_tree_view"
 local LogView = require "fugit2.view.components.commit_log_view"
@@ -13,7 +13,6 @@ local git2 = require "fugit2.git2"
 
 local BRANCH_WINDOW_WIDTH = 36
 local GIT_OID_LENGTH = 16
-local TAG_MAX_WIDTH = 30
 
 
 ---@class Fugit2GitGraphView
@@ -105,7 +104,7 @@ function GitGraph:update()
 
   remote, err = repo:remote_default()
   default_branch = remote and repo:remote_default_branch(remote.name) or nil
-  if remote and default_branch then
+  if default_branch then
     local splitted = vim.split(default_branch, "/", { plain = true })
     git.default_branch = "refs/heads/" .. splitted[#splitted]
     git.default_remote_branch = default_branch
@@ -115,9 +114,12 @@ function GitGraph:update()
 
     oid, _ = repo:reference_name_to_id(default_branch)
     git.default_remote_branch_oid = oid and oid:tostring(GIT_OID_LENGTH) or nil
-
-    git.remote_icons[remote.name] = utils.get_git_icon(remote.url)
   end
+
+  iter.iter(repo:remote_list() or {}):for_each(function(remote_name)
+    local r, _ = repo:remote_lookup(remote_name)
+    git.remote_icons[remote_name] = r and utils.get_git_icon(r.url) or nil
+  end)
 
   if self._last_branch_linenr == -1 then
     self:update_log(head.name)
@@ -257,17 +259,58 @@ function GitGraph:mount()
 end
 
 
+function GitGraph:unmount()
+  self._layout:unmount()
+end
+
+
+---Set callback to be called when user select commit
+---@param callback fun(commit: Fugit2GitGraphCommitNode)
+function GitGraph:on_commit_select(callback)
+  local log_view = self.views.log
+  self._commit_select_fn = callback
+
+  -- commit select
+  log_view:map("n", { "<cr>", "<space>" }, function()
+    local commit = self.views.log:get_commit()
+    if commit then
+      self:unmount()
+      callback(commit)
+    end
+  end, { noremap = true, nowait = true })
+end
+
+
+---Set call be called when user select branch
+---@param callback fun(branch: string)
+function GitGraph:on_branch_select(callback)
+  local branch_view = self.views.branch
+  self._branch_select_fn = callback
+
+  -- branch select
+  branch_view:unmap("n", { "<cr>", "<space>" })
+  branch_view:map("n", { "<cr>", "<space>" }, function()
+    local node, _ = branch_view:get_child_node_linenr()
+    if node and node.id then
+      self:unmount()
+      callback(node.id)
+    end
+  end, { noremap = true, nowait = true })
+end
+
+
 -- Setups keymap handlers
 function GitGraph:setup_handlers()
-  local map_options = { noremap = true }
+  local map_options = { noremap = true, nowait = true }
   local log_view = self.views.log
   local branch_view = self.views.branch
-
 
   -- exit func
   local exit_fn = function()
     self.repo:free_walker() -- free cached walker
-    self._layout:unmount()
+    self:unmount()
+    self.views = nil
+    self._git = nil
   end
   log_view:map("n", "q", exit_fn, map_options)
   log_view:map("n", "<esc>", exit_fn, map_options)
@@ -289,7 +332,7 @@ function GitGraph:setup_handlers()
     function() vim.api.nvim_set_current_win(branch_view:winid()) end,
     map_options
   )
-  branch_view:map("n", "l",
+  branch_view:map("n", { "l", "<cr>", "<space>" },
     function() vim.api.nvim_set_current_win(log_view:winid()) end,
     map_options
   )
@@ -303,6 +346,7 @@ function GitGraph:setup_handlers()
       self:render()
     end
   end)
+
 end
 
 
