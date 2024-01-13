@@ -379,18 +379,18 @@ function GitStatus:_init_menus(menu_type)
   if menu_type == Menu.COMMIT then
     menu_title = NuiText(" Committing ", title_hl)
     menu_items = {
-      { texts = { NuiText(" Create", head_hl) } },
-      { texts = { NuiText("Commit") }, key = "c" },
-      { texts = { NuiText(" Edit ", head_hl), NuiText("HEAD", "Fugit2Header") } },
-      { texts = { NuiText("Extend") }, key = "e" },
-      { texts = { NuiText("Reword") }, key = "r" },
-      { texts = { NuiText("Amend") },  key = "a" },
-      { texts = { NuiText("󰽜 Edit", head_hl) } },
-      { texts = { NuiText("Fixup") },  key = "f" },
-      { texts = { NuiText("Squash") },  key = "s" },
-      { texts = { NuiText("Absorb") },  key = "b" },
-      { texts = { NuiText("Log", head_hl) } },
-      { texts = { NuiText("Graph") },  key = "g" },
+      { texts = { NuiText("  Create ", head_hl) } },
+      { texts = { NuiText(" Commit ") }, key = "c" },
+      { texts = { NuiText("  Edit ", head_hl), NuiText("HEAD ", "Fugit2Header") } },
+      { texts = { NuiText("󰦒 Extend") }, key = "e" },
+      { texts = { NuiText("󰧭 Reword") }, key = "r" },
+      { texts = { NuiText("󰣪 Amend") },  key = "a" },
+      { texts = { NuiText(" 󰽜 Edit ", head_hl) } },
+      { texts = { NuiText("󰇾 Fixup") },  key = "f" },
+      { texts = { NuiText("󰶯 Squash") },  key = "s" },
+      { texts = { NuiText(" Absorb") },  key = "b" },
+      { texts = { NuiText("  Log ", head_hl) } },
+      { texts = { NuiText("󱁉 Graph") },  key = "g" },
     }
   elseif menu_type == Menu.DIFF then
     menu_title = NuiText(" Diffing ", title_hl)
@@ -430,7 +430,7 @@ function GitStatus:_init_menus(menu_type)
       },
     }
     menu_items = {
-      { texts = { NuiText("Push ", head_hl), states.current_text, NuiText(" to", head_hl) } },
+      { texts = { NuiText("  Push ", head_hl), states.current_text, NuiText(" to ", head_hl) } },
       { texts = { NuiText("@pushRemote") }, key = "p" }
     }
     menu_items = prepare_pull_push_items(git, menu_items)
@@ -449,7 +449,7 @@ function GitStatus:_init_menus(menu_type)
       },
     }
     menu_items = {
-      { texts = { NuiText("Fetch from", head_hl) } },
+      { texts = { NuiText("  Fetch from ", head_hl) } },
       { texts = { NuiText("@pushRemote") }, key = "p" },
     }
 
@@ -488,7 +488,7 @@ function GitStatus:_init_menus(menu_type)
       }
     }
     menu_items = {
-      { texts = { NuiText("Pull into ", head_hl), states.current_text, NuiText(" from", head_hl) } },
+      { texts = { NuiText("  Pull into ", head_hl), states.current_text, NuiText(" from ", head_hl) } },
       { texts = { NuiText("@pushRemote") }, key = "p" },
     }
     menu_items = prepare_pull_push_items(git, menu_items)

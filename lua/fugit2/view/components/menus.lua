@@ -188,7 +188,7 @@ function Menu:init(ns_id, title, menu_items, arg_items)
     if not item.key then
       return NuiMenu.separator(NuiLine(item.texts), menu_item_align)
     end
-    local texts = { NuiText(item.key .. " ", key_hl) }
+    local texts = { NuiText(item.key .. "  ", key_hl) }
     vim.list_extend(texts, item.texts)
     return NuiMenu.item(NuiLine(texts), { id = item.key })
   end, menu_items)
