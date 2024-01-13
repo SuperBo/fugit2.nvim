@@ -325,6 +325,7 @@ ffi.cdef[[
   char * git_oid_tostr(char *out, size_t n, const git_oid *id);
   char * git_oid_tostr_s(const git_oid *oid);
   int git_oid_equal(const git_oid *a, const git_oid *b);
+  int git_oid_cpy(git_oid *out, const git_oid *src);
 
   char git_diff_status_char(unsigned int status);
   int git_message_prettify(git_buf *out, const char *message, int strip_comments, char comment_char);

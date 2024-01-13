@@ -1,4 +1,4 @@
----Main UI for Git Rebasing
+---Main UI for Git Rebasing]
 ---Designated for in-memory rebasing with libgit2
 
 local Object = require "nui.object"
@@ -39,8 +39,9 @@ local RebaseAction = {
   SQUASH = git2.GIT_REBASE_OPERATION.SQUASH,
   FIXUP  = git2.GIT_REBASE_OPERATION.FIXUP,
   EXEC   = git2.GIT_REBASE_OPERATION.EXEC,
-  DROP   = 7,
-  BREAK  = 8,
+  BASE   = 7,
+  DROP   = 8,
+  BREAK  = 9,
 }
 
 
@@ -155,6 +156,8 @@ function RebaseView:init(ns_id, repo, ref_config, revspec_config)
   self._git.commits = {}
   ---@type Fugit2UIGitRebaseAction[]
   self._git.actions = {}
+  ---@type GitObjectId[]
+  self._git.oids = {}
 
   -- popup views
   self.views = {}
@@ -166,8 +169,8 @@ function RebaseView:init(ns_id, repo, ref_config, revspec_config)
     border = {
       style = "rounded",
       padding = {
-        top = 1,
-        bottom = 1,
+        top = 0,
+        bottom = 0,
         left = 2,
         right = 2,
       },
@@ -193,12 +196,19 @@ function RebaseView:init(ns_id, repo, ref_config, revspec_config)
       size = { width = 100, height = "60%" }
     },
     NuiLayout.Box({
-      NuiLayout.Box(self.views.status, { size = 5 }),
+      NuiLayout.Box(self.views.status, { size = 4 }),
       NuiLayout.Box(self.views.commits.popup, { grow = 1 }),
     }, {dir = "col"})
   )
 
-  self._states = {}
+  self._states = {
+    help_line = NuiLine {
+      NuiText(
+        "Actions: [p]ick, [r]e[w]ord, [s]quash, [f]ixup, [d]rop, [b]reak, [gj][C-j], [gk][C-k], []",
+        "Fugit2ObjectId"
+      )
+    }
+  }
 
   self:setup_handlers()
 
@@ -222,7 +232,7 @@ local function rebase_action_text(action)
   elseif action == RebaseAction.EXEC then
     return NuiText(" EXEC    ", "Fugit2RebasePick")
   elseif action == RebaseAction.REWORD then
-    return NuiText("󰭸 REWORD  ", "Fugit2RebasePick")
+    return NuiText("󰧭 REWORD  ", "Fugit2RebasePick")
   elseif action == RebaseAction.DROP then
     return NuiText("󰹎 DROP    ", "Fugit2RebaseDrop"), SYMBOLS.DROP_COMMIT
   elseif action == RebaseAction.BREAK then
@@ -234,13 +244,14 @@ end
 
 ---Updates buffer contents based on status of libgit2 git_rebase
 function RebaseView:update()
-  self._states.status_line  = NuiLine {
+  self._states.status_line = NuiLine {
     NuiText(tostring(self._git.rebase))
   }
 
   ---@type Fugit2GitGraphCommitNode[]
   local commits = self._git.commits
   local actions = self._git.actions
+  local oids = self._git.oids
   local n_commits = self._git.rebase:noperations()
 
   for i = n_commits-1,0,-1 do
@@ -270,6 +281,7 @@ function RebaseView:update()
     )
     commits[n_commits-i] = node
     actions[n_commits-i] = op_type
+    oids[n_commits-i] = op_id:clone()
   end
   for i = 1,#commits-1 do
     commits[i].parents[1] = commits[i+1].oid
@@ -281,8 +293,38 @@ end
 
 function RebaseView:render()
   self._states.status_line:render(self.views.status.bufnr, self.ns_id, 1)
+  self._states.help_line:render(self.views.status.bufnr, self.ns_id, 2)
 
   self.views.commits:render()
+end
+
+
+---Starts rebase process with given user actions
+function RebaseView:start_rebase()
+  local actions = self._git.actions
+  local oids = self._git.oids
+
+  -- change git2 rebase
+  local n_commits = self._git.rebase:noperations()
+  for i = 0,n_commits-1 do
+    local op = self._git.rebase:operation_byindex(i)
+    if not op then
+      break
+    end
+
+    local oid = oids[n_commits-i]
+    if oid ~= op:id() then
+      op:set_id(oid)
+    end
+
+    local action = actions[n_commits-i]
+    if action >= 0 and action <= 5 then
+      op:set_type(action)
+    elseif action == RebaseAction.DROP then
+      op:set_type(git2.GIT_REBASE_OPERATION.EXEC)
+      op:set_exec(nil)
+    end
+  end
 end
 
 
@@ -291,7 +333,7 @@ function RebaseView:setup_handlers()
   local commit_view = self.views.commits
   local commits = self._git.commits
   local actions = self._git.actions
-
+  local oids = self._git.oids
 
   -- main function to handle rebase action
   local action_fn = function(action)
@@ -376,7 +418,10 @@ function RebaseView:setup_handlers()
     -- swap actions
     actions[i], actions[j] = actions[j], actions[i]
 
-    -- swap commits
+    -- swap oids
+    oids[i], oids[j] = oids[j], oids[i]
+
+    -- swap commits log
     local ci, cj = commits[i], commits[j]
     if i > 1 then
       -- change pre i parents
@@ -406,8 +451,16 @@ function RebaseView:setup_handlers()
     reorder_fn(true)
   end, opts)
 
-  commit_view:map("n", { "gk", "<C-k" }, function()
+  commit_view:map("n", { "gk", "<C-k>" }, function()
     reorder_fn(false)
+  end, opts)
+
+  -- Movements
+  commit_view:map("n", "j", "2j", opts)
+  commit_view:map("n", "k", "2k", opts)
+
+  commit_view:map("n", "<cr>", function()
+    self:start_rebase()
   end, opts)
 end
 

@@ -1386,7 +1386,7 @@ end
 
 
 ---Sets rebase operation exec string
----@param exec string
+---@param exec string?
 function RebaseOperation:set_exec(exec)
   self.operation["exec"] = exec
 end
