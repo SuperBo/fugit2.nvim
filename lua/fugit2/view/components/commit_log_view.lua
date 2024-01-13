@@ -71,6 +71,8 @@ local SYMBOLS = {
 ---@field parents string[]
 ---@field refs string[] Tags to show beside commit
 ---@field vis Fugit2GitGraphCommitNodeVis?
+---@field pre_message NuiText? Text used for overriding default pre_message symbol
+---@field symbol string? Commit symbol used for overriding commit symbol
 local GitGraphCommitNode = Object("Fugit2GitGraphCommitNode")
 
 
@@ -79,12 +81,16 @@ local GitGraphCommitNode = Object("Fugit2GitGraphCommitNode")
 ---@param msg string
 ---@param parents Fugit2GitGraphCommitNode[]
 ---@param refs string[] List of full refname to tag
-function GitGraphCommitNode:init(oid, msg, author, parents, refs)
+---@param symbol string? Commit symbol
+---@param pre_message NuiText?
+function GitGraphCommitNode:init(oid, msg, author, parents, refs, symbol, pre_message)
   self.oid = oid
   self.author = author
   self.message = msg
   self.parents = parents
   self.refs = refs
+  self.symbol = symbol
+  self.pre_message = pre_message
 end
 
 
@@ -96,6 +102,8 @@ local GitGraphCommitGraph = Object("Fugit2GitGraphCommitGraph")
 ---@field popup NuiPopup Commit popup.
 ---@field ns_id integer Namespace id.
 ---@field repo GitRepository
+---
+
 local CommitLogView = Object("Fugit2CommitLogView")
 
 
@@ -468,8 +476,9 @@ end
 
 ---@param vis Fugit2GitGraphCommitNodeVis
 ---@param width integer
+---@param symbol string? Symbol override
 ---@return NuiLine commit_line
-local function draw_graph_node_commit_line_bare(vis, width)
+local function draw_graph_node_commit_line_bare(vis, width, symbol)
   local max_j = vis.j
 
   if vis.active_cols then
@@ -479,7 +488,7 @@ local function draw_graph_node_commit_line_bare(vis, width)
   local commit_cols = utils.list_init(SYMBOLS.COMMIT_EMPTY, max_j)
   utils.list_fill(commit_cols, SYMBOLS.COMMIT_BRANCH, vis.active_cols)
 
-  commit_cols[vis.j] = SYMBOLS.CURRENT_COMMIT
+  commit_cols[vis.j] = symbol or SYMBOLS.CURRENT_COMMIT
 
   return CommitLogView.draw_graph_line(commit_cols, width, vis.j)
 end
@@ -585,10 +594,14 @@ function CommitLogView.draw_commit_nodes(nodes, width, draw_meta, remote_icons)
       else
         -- draw commmit only
         pre_line = draw_graph_node_pre_line_bare(commit.vis, pre_line_width)
-        commit_line = draw_graph_node_commit_line_bare(commit.vis, width)
+        commit_line = draw_graph_node_commit_line_bare(commit.vis, width, commit.symbol)
       end
 
-      commit_line:append(SYMBOLS.MESSAGE_START .. " ", col_hl(commit.vis.j))
+      if commit.pre_message then
+        commit_line:append(commit.pre_message)
+      else
+        commit_line:append(SYMBOLS.MESSAGE_START .. " ", col_hl(commit.vis.j))
+      end
     end
 
     commit_line:append(utils.message_title_prettify(commit.message))
@@ -666,15 +679,17 @@ end
 
 ---Get current focus commit
 ---@return Fugit2GitGraphCommitNode?
+---@return integer? commit_index commit index 1-based
 function CommitLogView:get_commit()
   local winid = self:winid()
   if not vim.api.nvim_win_is_valid(winid) then
-    return nil
+    return nil, nil
   end
 
   local row = vim.api.nvim_win_get_cursor(winid)[1]
-  local commit = self._commits[math.floor((row+1)/2)]
-  return commit
+  local index = math.floor((row+1)/2)
+  local commit = self._commits[index]
+  return commit, index
 end
 
 

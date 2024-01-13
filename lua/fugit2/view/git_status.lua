@@ -234,7 +234,7 @@ function GitStatus:init(ns_id, repo, last_window)
   }
 
   ---@type Fugit2CommitLogView
-  self._views.commits = LogView(self.ns_id, "   Commits ", false)
+  self._views.commits = LogView(self.ns_id, "  Commits ", false)
   ---@type Fugit2GitStatusTree
   self._views.files = GitStatusTree(
     self.ns_id, " 󰙅 Files ", "[b]ranches [c]ommits [d]iff", "FloatFooter"

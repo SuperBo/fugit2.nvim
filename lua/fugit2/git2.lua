@@ -103,6 +103,11 @@ TreeEntry.__index = TreeEntry
 local Commit = {}
 Commit.__index = Commit
 
+---@class GitAnnotatedCommit
+---@field commit ffi.cdata* libgit2 git_annotated_commit pointer
+local AnnotatedCommit = {}
+AnnotatedCommit.__index = AnnotatedCommit
+
 ---@class GitTag
 ---@field tag ffi.cdata* libgit2 git_tag pointer
 ---@field name string Git Tag name
@@ -142,12 +147,12 @@ local Signature = {}
 Signature.__index = Signature
 
 ---@class GitPatch
----@field patch ffi.cdata* libgit2 git_patch*[1]
+---@field patch ffi.cdata* libgit2 git_patch*
 local Patch = {}
 Patch.__index = Patch
 
 ---@class GitDiff
----@field diff ffi.cdata* libgit2 git_diff*[1]
+---@field diff ffi.cdata* libgit2 git_diff*
 local Diff = {}
 Diff.__index = Diff
 
@@ -166,6 +171,17 @@ local DiffHunk = {}
 ---@field new_lineno integer
 ---@field num_lines integer
 ---@field content string
+
+---@class GitRebase
+---@field rebase ffi.cdata* libgit2 git_rebase* pointer
+local Rebase = {}
+Rebase.__index = Rebase
+
+
+---@class GitRebaseOperation
+---@field operation ffi.cdata* libgit2 git_rebase_operation pointer
+local RebaseOperation = {}
+RebaseOperation.__index = RebaseOperation
 
 
 -- ========================
@@ -325,11 +341,52 @@ end
 -- | ObjectId functions |
 -- ======================
 
+
+---Creates new lbigit2 oid, then copy value from old oid.
+---@param oid GitObjectId
+---@return GitObjectId?
+---@return GIT_ERROR
+function ObjectId.from(oid)
+  local git_object_id = libgit2.git_oid()
+
+  local err = libgit2.C.git_oid_cpy(git_object_id, oid.oid)
+  if err ~= 0 then
+    return nil, err
+  end
+
+  return ObjectId.borrow(git_object_id), 0
+end
+
+
 ---@param oid ffi.cdata* libgit2 git_oid*, borrow data
 function ObjectId.borrow (oid)
   local object_id = { oid = oid }
   setmetatable(object_id, ObjectId)
   return object_id
+end
+
+
+---Creates a new ObjectId with the same value of the old one.
+---@return GitObjectId?
+---@return GIT_ERROR
+function ObjectId:clone()
+  return ObjectId.from(self)
+end
+
+
+---Sets this oid the same value as the given oid
+---@param oid GitObjectId
+---@return GIT_ERROR
+function ObjectId:copy_from(oid)
+  return libgit2.C.git_oid_cpy(self.oid, oid.oid)
+end
+
+
+---Copies this oid to target oid.
+---@param oid GitObjectId
+---@return GIT_ERROR
+function ObjectId:copy_to(oid)
+  return libgit2.C.git_oid_cpy(oid.oid, self.oid)
 end
 
 
@@ -360,10 +417,13 @@ end
 
 
 ---@param a GitObjectId
----@param b GitObjectId
+---@param b GitObjectId | string
 ---@return boolean
 function ObjectId.__eq(a, b)
-   return (libgit2.C.git_oid_equal(a.oid, b.oid) ~= 0)
+  if type(b) == "string" then
+    return (libgit2.C.git_oid_streq(a.oid, b) == 0)
+  end
+  return (libgit2.C.git_oid_equal(a.oid, b.oid) ~= 0)
 end
 
 
@@ -518,6 +578,23 @@ end
 ---Get the name of a tag
 function Tag:__tostring()
   return self.name
+end
+
+
+-- =============================
+-- | AnnotatedCommit functions |
+-- =============================
+
+
+---Init GitAnnotatedCommit
+---@param git_commit ffi.cdata* libgit2.git_annotated_commit_pointer, this owns cdata.
+---@return GitAnnotatedCommit
+function AnnotatedCommit.new(git_commit)
+  local commit = { commit = libgit2.git_annotated_commit_pointer(git_commit) }
+  setmetatable(commit, AnnotatedCommit)
+
+  ffi.gc(commit.commit, libgit2.C.git_annotated_commit_free)
+  return commit
 end
 
 
@@ -1269,6 +1346,241 @@ function Patch:hunk_num_lines(i)
 end
 
 
+--- ============================
+-- | RebaseOperation functions |
+-- =============================
+
+
+---Borrow new RebaseOperation
+---@param operation_ptr ffi.cdata* libgit2 git_rebase_operation pointer
+---@return GitRebaseOperation
+function RebaseOperation.borrow(operation_ptr)
+  local op = {
+    operation = libgit2.git_rebase_operation_pointer(operation_ptr)
+  }
+  setmetatable(op, RebaseOperation)
+  return op
+end
+
+
+---Gets type of a rebase operation
+---@return GIT_REBASE_OPERATION
+function RebaseOperation:type()
+  return self.operation["type"]
+end
+
+
+---Changes type of a rebase operation.
+---@param type GIT_REBASE_OPERATION
+function RebaseOperation:set_type(type)
+  self.operation["type"] = type
+end
+
+
+---Gets rebase operation exec.
+---@return string
+function RebaseOperation:exec()
+  local str_ptr = self.operation["exec"]
+  return str_ptr ~= nil and ffi.string(str_ptr) or ""
+end
+
+
+---Sets rebase operation exec string
+---@param exec string
+function RebaseOperation:set_exec(exec)
+  self.operation["exec"] = exec
+end
+
+
+---Gets ObjectId of rebase operation.
+---@return GitObjectId
+function RebaseOperation:id()
+  return ObjectId.borrow(
+    ffi.cast(libgit2.git_oid_pointer, self.operation["id"])
+  )
+end
+
+
+---Copies another git_oid to this RebaseOperation oid.
+---@param oid GitObjectId
+---@return GIT_ERROR err 0 on success or error code
+function RebaseOperation:set_id(oid)
+  local op_id_ptr = ffi.cast(libgit2.git_oid_pointer, self.operation["id"])
+  return libgit2.C.git_oid_cpy(op_id_ptr, oid.oid)
+end
+
+
+-- ====================
+-- | Rebase functions |
+-- ====================
+
+
+---Init new Gitrebase
+---@param git_rebase_ptr ffi.cdata* libgit2 git_rebase*, own cdata
+---@return GitRebase
+function Rebase.new(git_rebase_ptr)
+  local rebase = { rebase = libgit2.git_rebase_pointer(git_rebase_ptr) }
+  setmetatable(rebase, Rebase)
+
+  ffi.gc(rebase.rebase, libgit2.C.git_rebase_free)
+  return rebase
+end
+
+
+---Pretty print current rebase operation
+function Rebase:__tostring()
+  local str = "Rebase "
+  local onto_id = libgit2.C.git_rebase_onto_id(self.rebase)
+  local org_id =  libgit2.C.git_rebase_orig_head_id(self.rebase)
+
+  local org_str = libgit2.C.git_oid_tostr_s(org_id)
+  if org_str ~= nil then
+    str = str .. string.sub(ffi.string(org_str), 1, 8)
+  end
+
+  local onto_str = libgit2.C.git_oid_tostr_s(onto_id)
+  if onto_str ~= nil then
+    str = str .. " onto " .. string.sub(ffi.string(onto_str), 1, 8)
+  end
+
+  return str
+end
+
+
+---Performs the next rebase operation and returns the information about it.
+---@return GitRebaseOperation?
+---@return GIT_ERROR
+function Rebase:next()
+  local operation = libgit2.git_rebase_operation_double_pointer()
+  local err = libgit2.C.git_rebase_next(operation, self.rebase)
+  if err ~= 0 then
+    return nil, err
+  end
+
+  return RebaseOperation.borrow(operation[0]), 0
+end
+
+
+---Gets the count of rebase operations that are to be applied.
+---@return integer
+function Rebase:noperations()
+  return tonumber(libgit2.C.git_rebase_operation_entrycount(self.rebase)) or -1
+end
+
+
+---Gets the index of the rebase operation that is currently being applied.
+---@return integer index If the first operation has not yet been applied, returns GIT_REBASE_NO_OPERATION
+function Rebase:operation_current()
+  return libgit2.C.git_rebase_operation_current(self.rebase)
+end
+
+
+---Gets the rebase operation specified by the given index.
+---@return GitRebaseOperation? The rebase operation or NULL if `idx` was out of bounds.
+function Rebase:operation_byindex(idx)
+  local operation = libgit2.C.git_rebase_operation_byindex(self.rebase, idx)
+  if operation == nil then
+    return nil
+  end
+
+  return RebaseOperation.borrow(operation)
+end
+
+
+---Gets the onto ref name for merge rebases.
+---@return string
+function Rebase:onto_name()
+  local name_ptr = libgit2.C.git_rebase_onto_name(self.rebase)
+  if name_ptr == nil then
+    return ""
+  end
+  return ffi.string(name_ptr)
+end
+
+
+---Gets the onto id for merge rebases.
+function Rebase:onto_id()
+  local oid_ptr = libgit2.C.git_rebase_onto_id(self.rebase)
+  return ObjectId.borrow(oid_ptr)
+end
+
+
+---Gets the original HEAD ref name for merge rebases.
+---@return string
+function Rebase:orig_head_name()
+  local name_ptr = libgit2.C.git_rebase_orig_head_name(self.rebase)
+  if name_ptr == nil then
+    return ""
+  end
+  return ffi.string(name_ptr)
+end
+
+
+---Gets the original HEAD id for merge rebases.
+---@return GitObjectId
+function Rebase:orig_head_id()
+  local oid_ptr = libgit2.C.git_rebase_orig_head_id(self.rebase)
+  return ObjectId.borrow(oid_ptr)
+end
+
+
+---Aborts a rebase that is currently in progress,
+---resetting the repository and working directory to their state before rebase began.
+---@return GIT_ERROR
+function Rebase:abort()
+  return libgit2.C.git_rebase_abort(self.rebase)
+end
+
+
+---Commits the current patch. You must have resolved any conflicts.
+---@param author GitSignature? The author of the updated commit, or NULL to keep the author from the original commit
+---@param commiter GitSignature The committer of the rebase
+---@param message string? The message for this commit, or NULL to use the message from the original commit.
+---@return GitObjectId?
+---@return GIT_ERROR err Zero on success, GIT_EUNMERGED if there are unmerged changes in the index, GIT_EAPPLIED if the current commit has already been applied to the upstream and there is nothing to commit, -1 on failure.
+function Rebase:commit(author, commiter, message)
+  local new_oid = libgit2.git_oid()
+
+  local err = libgit2.C.git_rebase_commit(
+    new_oid,
+    self.rebase,
+    author and author.sign or nil,
+    commiter.sign,
+    "UTF-8",
+    message
+  )
+  if err ~= 0 then
+    return nil, err
+  end
+
+  return ObjectId.borrow(new_oid), 0
+end
+
+
+---Finishes a rebase that is currently in progress once all patches have been applied.
+---@param signature GitSignature
+---@return GIT_ERROR err Zero on success; -1 on error
+function Rebase:finish(signature)
+  return libgit2.C.git_rebase_finish(self.rebase, signature.sign)
+end
+
+
+---Gets the index produced by the last operation,
+---which is the result of git_rebase_next and which will be committed
+---by the next invocation of git_rebase_commit
+---@return GitIndex? The result index of the last operation.
+---@return GIT_ERROR
+function Rebase:inmemory_index()
+  local index = libgit2.git_index_double_pointer()
+  local err = libgit2.C.git_rebase_inmemory_index(index, self.rebase)
+  if err ~= 0 then
+    return nil, err
+  end
+
+  return Index.new(index[0]), 0
+end
+
+
 -- ========================
 -- | Repository functions |
 -- ========================
@@ -1414,6 +1726,36 @@ function Repository:config()
 end
 
 
+---@param ref GitReference
+---@return GitAnnotatedCommit?
+---@return GIT_ERROR
+function Repository:annotated_commit_from_ref(ref)
+  local git_commit = libgit2.git_annotated_commit_double_pointer()
+
+  local err = libgit2.C.git_annotated_commit_from_ref(git_commit, self.repo, ref.ref)
+  if err ~= 0 then
+    return nil, 0
+  end
+
+  return AnnotatedCommit.new(git_commit[0]), 0
+end
+
+
+---@param revspec string
+---@return GitAnnotatedCommit?
+---@return GIT_ERROR
+function Repository:annotated_commit_from_revspec(revspec)
+  local git_commit = libgit2.git_annotated_commit_double_pointer()
+
+  local err = libgit2.C.git_annotated_commit_from_revspec(git_commit, self.repo, revspec)
+  if err ~= 0 then
+    return nil, 0
+  end
+
+  return AnnotatedCommit.new(git_commit[0]), 0
+end
+
+
 ---Retrieves reference pointed at by HEAD.
 ---@return GitReference?
 ---@return GIT_ERROR
@@ -1426,6 +1768,7 @@ function Repository:head()
 
   return Reference.new(c_ref[0]), 0
 end
+
 
 ---@return GitCommit?
 ---@return GIT_ERROR
@@ -2407,6 +2750,55 @@ function Repository:remote_default_branch(remote_name)
 end
 
 
+---Initializes a rebase operation
+---@param branch GitAnnotatedCommit?
+---@param upstream GitAnnotatedCommit?
+---@param onto GitAnnotatedCommit?
+---@param opts { inmemory: boolean? }
+---@return GitRebase?
+---@return GIT_ERROR
+function Repository:rebase_init(branch, upstream, onto, opts)
+  local git_rebase = libgit2.git_rebase_double_pointer()
+  local rebase_opts = libgit2.git_rebase_options(libgit2.GIT_REBASE_OPTIONS_INIT)
+
+  if opts.inmemory then
+    rebase_opts[0].inmemory = 1
+  end
+
+  local err = libgit2.C.git_rebase_init(
+    git_rebase,
+    self.repo,
+    branch and branch.commit,
+    upstream and upstream.commit,
+    onto and onto.commit,
+    rebase_opts
+  )
+  if err ~= 0 then
+    return nil, 0
+  end
+
+  return Rebase.new(git_rebase[0]), 0
+end
+
+
+---Opens an existing rebase.
+---@return GitRebase?
+---@return GIT_ERROR
+function Repository:rebase_open()
+  local git_rebase = libgit2.git_rebase_double_pointer()
+  local opts = libgit2.git_rebase_options(libgit2.GIT_REBASE_OPTIONS_INIT)
+
+  local err = libgit2.C.git_rebase_open(
+    git_rebase, self.repo, opts
+  )
+  if err ~= 0 then
+    return nil, 0
+  end
+
+  return Rebase.new(git_rebase[0]), 0
+end
+
+
 -- ===================
 -- | Utils functions |
 -- ===================
@@ -2493,6 +2885,8 @@ M.GIT_REFERENCE_NAMESPACE = GIT_REFERENCE_NAMESPACE
 M.GIT_INDEX_STAGE = libgit2.GIT_INDEX_STAGE
 M.GIT_OPT = libgit2.GIT_OPT
 M.GIT_OBJECT = libgit2.GIT_OBJECT
+M.GIT_REBASE_NO_OPERATION = libgit2.GIT_REBASE_NO_OPERATION
+M.GIT_REBASE_OPERATION = libgit2.GIT_REBASE_OPERATION
 
 
 M.head = Repository.head

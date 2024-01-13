@@ -10,6 +10,7 @@ ffi.cdef[[
   typedef int64_t git_off_t;
   typedef int64_t git_time_t;
 
+  typedef struct git_annotated_commit git_annotated_commit;
   typedef struct git_blob git_blob;
   typedef struct git_branch_iterator git_branch_iterator;
   typedef struct git_commit git_commit;
@@ -178,7 +179,89 @@ ffi.cdef[[
     unsigned int flags;
   } git_apply_options;
 
-  typedef struct git_rebase_operation{
+  typedef int (*git_commit_create_cb)(
+    git_oid *out,
+    const git_signature *author,
+    const git_signature *committer,
+    const char *message_encoding,
+    const char *message,
+    const git_tree *tree,
+    size_t parent_count,
+    const git_commit *parents[],
+    void *payload
+  );
+  typedef int (*git_checkout_notify_cb)(
+    unsigned int why,
+    const char *path,
+    const git_diff_file *baseline,
+    const git_diff_file *target,
+    const git_diff_file *workdir,
+    void *payload
+  );
+  typedef void (*git_checkout_progress_cb)(
+    const char *path,
+    size_t completed_steps,
+    size_t total_steps,
+    void *payload
+  );
+  typedef struct git_checkout_perfdata {
+    size_t mkdir_calls;
+    size_t stat_calls;
+    size_t chmod_calls;
+  } git_checkout_perfdata;
+  typedef void (*git_checkout_perfdata_cb)(
+    const git_checkout_perfdata *perfdata,
+    void *payload
+  );
+
+  typedef struct git_checkout_options {
+    unsigned int version;
+    unsigned int checkout_strategy;
+    int disable_filters;    /**< don't apply filters like CRLF conversion */
+    unsigned int dir_mode;  /**< default is 0755 */
+    unsigned int file_mode; /**< default is 0644 or 0755 as dictated by blob */
+    int file_open_flags;    /**< default is O_CREAT | O_TRUNC | O_WRONLY */
+    unsigned int notify_flags; /**< see `git_checkout_notify_t` above */
+    git_checkout_notify_cb notify_cb;
+    void *notify_payload;
+    git_checkout_progress_cb progress_cb;
+    void *progress_payload;
+    git_strarray paths;
+    git_tree *baseline;
+    git_index *baseline_index;
+    const char *target_directory; /**< alternative checkout path to workdir */
+    const char *ancestor_label; /**< the name of the common ancestor side of conflicts */
+    const char *our_label; /**< the name of the "our" side of conflicts */
+    const char *their_label; /**< the name of the "their" side of conflicts */
+    git_checkout_perfdata_cb perfdata_cb;
+    void *perfdata_payload;
+  } git_checkout_options;
+
+  typedef struct git_merge_options {
+    unsigned int version;
+    uint32_t flags;
+    unsigned int rename_threshold;
+    unsigned int target_limit;
+    git_diff_similarity_metric *metric;
+    unsigned int recursion_limit;
+    const char *default_driver;
+    unsigned int file_favor;
+    uint32_t file_flags;
+  } git_merge_options;
+
+  typedef struct git_rebase_options {
+    unsigned int version;
+    int quiet;
+    int inmemory;
+    const char *rewrite_notes_ref;
+    git_merge_options merge_options;
+    git_checkout_options checkout_options;
+    git_commit_create_cb commit_create_cb;
+    void *reserved;
+    void *payload;
+  } git_rebase_options;
+
+  typedef struct git_rebase_operation {
     unsigned int type;
     const git_oid id;
     const char *exec;
@@ -240,6 +323,7 @@ ffi.cdef[[
   void git_blob_free(git_blob *blob);
 
   char * git_oid_tostr(char *out, size_t n, const git_oid *id);
+  char * git_oid_tostr_s(const git_oid *oid);
   int git_oid_equal(const git_oid *a, const git_oid *b);
 
   char git_diff_status_char(unsigned int status);
@@ -411,6 +495,28 @@ ffi.cdef[[
   int git_tag_lookup(git_tag **out, git_repository *repo, const git_oid *id);
   const char * git_tag_name(const git_tag *tag);
   void git_tag_free(git_tag *tag);
+
+  int git_annotated_commit_from_ref(git_annotated_commit **out, git_repository *repo, const git_reference *ref);
+  int git_annotated_commit_from_revspec(git_annotated_commit **out, git_repository *repo, const char *revspec);
+  const git_oid * git_annotated_commit_id(const git_annotated_commit *commit);
+  const char * git_annotated_commit_ref(const git_annotated_commit *commit);
+  void git_annotated_commit_free(git_annotated_commit *commit);
+
+  int git_rebase_init(git_rebase **out, git_repository *repo, const git_annotated_commit *branch, const git_annotated_commit *upstream, const git_annotated_commit *onto, const git_rebase_options *opts);
+  int git_rebase_open(git_rebase **out, git_repository *repo, const git_rebase_options *opts);
+  const char * git_rebase_orig_head_name(git_rebase *rebase);
+  const git_oid * git_rebase_orig_head_id(git_rebase *rebase);
+  const char * git_rebase_onto_name(git_rebase *rebase);
+  const git_oid * git_rebase_onto_id(git_rebase *rebase);
+  size_t git_rebase_operation_entrycount(git_rebase *rebase);
+  size_t git_rebase_operation_current(git_rebase *rebase);
+  git_rebase_operation * git_rebase_operation_byindex(git_rebase *rebase, size_t idx);
+  int git_rebase_inmemory_index(git_index **index, git_rebase *rebase);
+  int git_rebase_next(git_rebase_operation **operation, git_rebase *rebase);
+  int git_rebase_commit(git_oid *id, git_rebase *rebase, const git_signature *author, const git_signature *committer, const char *message_encoding, const char *message);
+  int git_rebase_abort(git_rebase *rebase);
+  int git_rebase_finish(git_rebase *rebase, const git_signature *signature);
+  void git_rebase_free(git_rebase *rebase);
 ]]
 
 
@@ -420,6 +526,7 @@ local M = {
   C = ffi.load "libgit2",
 }
 
+M.char_pointer = ffi.typeof("char*")
 M.char_array = ffi.typeof("char[?]")
 M.const_char_pointer_array = ffi.typeof("const char *[?]")
 M.unsigned_int_array = ffi.typeof("unsigned int[?]")
@@ -444,11 +551,18 @@ M.git_config_iterator_double_pointer = ffi.typeof("git_config_iterator*[1]")
 
 ---@type ffi.ctype* git_oid[1]
 M.git_oid = ffi.typeof("git_oid[1]")
+---@type ffi.ctype* git_oid*
+M.git_oid_pointer = ffi.typeof("git_oid*")
 
 ---@type ffi.ctype* git_strarray_readonly[1]
 M.git_strarray_readonly = ffi.typeof("git_strarray_readonly[1]")
 ---@type ffi.ctype* git_strarray[1]
 M.git_strarray = ffi.typeof("git_strarray[1]")
+
+---@type ffi.ctype* git_annotated_commit **
+M.git_annotated_commit_double_pointer = ffi.typeof("git_annotated_commit*[1]")
+---@type ffi.ctype* git_annotated_commit *
+M.git_annotated_commit_pointer = ffi.typeof("git_annotated_commit*")
 
 ---@type ffi.ctype* git_object **
 M.git_object_double_pointer = ffi.typeof("git_object*[1]")
@@ -474,6 +588,9 @@ M.git_tree_pointer = ffi.typeof("git_tree*")
 M.git_tree_entry_double_pointer = ffi.typeof("git_tree_entry*[1]")
 ---@type ffi.ctype* git_tree_entry*
 M.git_tree_entry_pointer = ffi.typeof("git_tree_entry*")
+
+---@type ffi.ctype* git_rebase_options[1]
+M.git_rebase_options = ffi.typeof("git_rebase_options[1]")
 
 ---@type ffi.ctype* git_apply_options[1]
 M.git_apply_options = ffi.typeof("git_apply_options[1]")
@@ -502,6 +619,16 @@ M.git_diff_stats_double_pointer = ffi.typeof("git_diff_stats*[1]")
 M.git_patch_double_pointer = ffi.typeof("git_patch*[1]")
 ---@type ffi.ctype* struct git_patch *
 M.git_patch_pointer = ffi.typeof("git_patch*")
+
+---@type ffi.ctype* git_rebase **
+M.git_rebase_double_pointer = ffi.typeof("git_rebase*[1]")
+---@type ffi.ctype* git_rebase *
+M.git_rebase_pointer = ffi.typeof("git_rebase*")
+
+---@type ffi.ctype* git_rebase_operation_double_pointer
+M.git_rebase_operation_double_pointer = ffi.typeof("git_rebase_operation*[1]")
+---@type ffi.ctype* git_rebase_operation struct pointer
+M.git_rebase_operation_pointer = ffi.typeof("git_rebase_operation*")
 
 ---@type ffi.ctype* struct git_repository**
 M.git_repository_double_pointer = ffi.typeof("git_repository*[1]")
@@ -554,6 +681,8 @@ M.git_branch_iterator_double_pointer = ffi.typeof("git_branch_iterator *[1]")
 -- | libgit2 struct version |
 -- ==========================
 
+local _UI64_MAX = 0xffffffffffffffffULL
+
 M.GIT_APPLY_OPTIONS_VERSION = 1
 M.GIT_DIFF_FIND_OPTIONS_VERSION = 1
 M.GIT_DIFF_OPTIONS_VERSION = 1
@@ -561,11 +690,51 @@ M.GIT_FETCH_OPTIONS_VERSION = 1
 M.GIT_PROXY_OPTIONS_VERSION = 1
 M.GIT_REMOTE_CALLBACKS_VERSION = 1
 M.GIT_STATUS_OPTIONS_VERSION = 1
+M.GIT_MERGE_OPTIONS_VERSION = 1
+M.GIT_CHECKOUT_OPTIONS_VERSION = 1
 M.GIT_REBASE_OPTIONS_VERSION = 1
+
+M.GIT_REBASE_NO_OPERATION = _UI64_MAX
 
 -- ================
 -- | libgit2 enum |
 -- ================
+
+
+local POW = {
+  2,  -- 1 << 1
+  4,  -- 1 << 2
+  8,  -- 1 << 3
+  16, -- 1 << 4
+  32, -- 1 << 5
+  64, -- 1 << 6
+  0x80, -- 1 << 7
+  0x100, -- 1 << 8
+  0x200, -- 1 << 9
+  0x400, -- 1 << 10
+  0x800, -- 1 << 11
+  0x1000, -- 1 << 12
+  0x2000, -- 1 << 13
+  0x4000, -- 1 << 14
+  0x8000, -- 1 << 15
+  0x10000, -- 1 << 16
+  0x20000, -- 1 << 17
+  0x40000, -- 1 << 18
+  0x80000, -- 1 << 19
+  0x100000, -- 1 << 20
+  0x200000, -- 1 << 21
+  0x400000, -- 1 << 22
+  0x800000, -- 1 << 23
+  0x1000000, -- 1 << 24
+  0x2000000, -- 1 << 25
+  0x4000000, -- 1 << 26
+  0x8000000, -- 1 << 27
+  0x10000000, -- 1 << 28
+  0x20000000, -- 1 << 29
+  0x40000000, -- 1 << 30
+  0x80000000, -- 1 << 31
+  0x100000000, -- 1 << 32
+}
 
 
 ---@enum GIT_OPT
@@ -733,21 +902,21 @@ M.GIT_SORT = {
 M.GIT_STATUS = {
   CURRENT          = 0,
 
-  INDEX_NEW        = 1,     -- 1u << 0
-  INDEX_MODIFIED   = 2,     -- 1u << 1
-  INDEX_DELETED    = 4,     -- 1u << 2
-  INDEX_RENAMED    = 8,     -- 1u << 3
-  INDEX_TYPECHANGE = 16,    -- 1u << 4
+  INDEX_NEW        = 1,      -- 1u << 0
+  INDEX_MODIFIED   = POW[1], -- 1u << 1
+  INDEX_DELETED    = POW[2], -- 1u << 2
+  INDEX_RENAMED    = POW[3], -- 1u << 3
+  INDEX_TYPECHANGE = POW[4], -- 1u << 4
 
-  WT_NEW           = 128,   -- 1u << 7
-  WT_MODIFIED      = 256,   -- 1u << 8
-  WT_DELETED       = 512,   -- 1u << 9
-  WT_TYPECHANGE    = 1024,  -- 1u << 10
-  WT_RENAMED       = 2048,  -- 1u << 11
-  WT_UNREADABLE    = 4096,  -- 1u << 12
+  WT_NEW           = POW[7],  -- 1u << 7
+  WT_MODIFIED      = POW[8],  -- 1u << 8
+  WT_DELETED       = POW[9],  -- 1u << 9
+  WT_TYPECHANGE    = POW[10], -- 1u << 10
+  WT_RENAMED       = POW[11], -- 1u << 11
+  WT_UNREADABLE    = POW[12], -- 1u << 12
 
-  IGNORED          = 0x4000, -- 1u << 14
-  CONFLICTED       = 0x8000, -- 1u << 15
+  IGNORED          = POW[14], -- 1u << 14
+  CONFLICTED       = POW[15], -- 1u << 15
 }
 
 ---@enum GIT_STATUS_SHOW
@@ -759,22 +928,22 @@ M.GIT_STATUS_SHOW = {
 
 ---@enum GIT_STATUS_OPT
 M.GIT_STATUS_OPT = {
-	INCLUDE_UNTRACKED               = 1,      -- (1u << 0),
-	INCLUDE_IGNORED                 = 2,      -- (1u << 1),
-	INCLUDE_UNMODIFIED              = 4,      -- (1u << 2),
-	EXCLUDE_SUBMODULES              = 8,      -- (1u << 3),
-	RECURSE_UNTRACKED_DIRS          = 16,     -- (1u << 4),
-	DISABLE_PATHSPEC_MATCH          = 32,     -- (1u << 5),
-	RECURSE_IGNORED_DIRS            = 64,     -- (1u << 6),
-	RENAMES_HEAD_TO_INDEX           = 128,    -- (1u << 7),
-	RENAMES_INDEX_TO_WORKDIR        = 256,    -- (1u << 8),
-	SORT_CASE_SENSITIVELY           = 512,    -- (1u << 9),
-	SORT_CASE_INSENSITIVELY         = 1024,   -- (1u << 10),
-	RENAMES_FROM_REWRITES           = 2048,   -- (1u << 11),
-	NO_REFRESH                      = 4096,   -- (1u << 12),
-	UPDATE_INDEX                    = 8192,   -- (1u << 13),
-	INCLUDE_UNREADABLE              = 0x4000, -- (1u << 14),
-	INCLUDE_UNREADABLE_AS_UNTRACKED = 0x8000, --(1u << 15)
+	INCLUDE_UNTRACKED               = 1,       -- (1u << 0),
+	INCLUDE_IGNORED                 = POW[1],  -- (1u << 1),
+	INCLUDE_UNMODIFIED              = POW[2],  -- (1u << 2),
+	EXCLUDE_SUBMODULES              = POW[3],  -- (1u << 3),
+	RECURSE_UNTRACKED_DIRS          = POW[4],  -- (1u << 4),
+	DISABLE_PATHSPEC_MATCH          = POW[5],  -- (1u << 5),
+	RECURSE_IGNORED_DIRS            = POW[6],  -- (1u << 6),
+	RENAMES_HEAD_TO_INDEX           = POW[7],  -- (1u << 7),
+	RENAMES_INDEX_TO_WORKDIR        = POW[8],  -- (1u << 8),
+	SORT_CASE_SENSITIVELY           = POW[9],  -- (1u << 9),
+	SORT_CASE_INSENSITIVELY         = POW[10], -- (1u << 10),
+	RENAMES_FROM_REWRITES           = POW[11], -- (1u << 11),
+	NO_REFRESH                      = POW[12], -- (1u << 12),
+	UPDATE_INDEX                    = POW[13], -- (1u << 13),
+	INCLUDE_UNREADABLE              = POW[14], -- (1u << 14),
+	INCLUDE_UNREADABLE_AS_UNTRACKED = POW[15], -- (1u << 15)
 }
 
 ---@enum GIT_DELTA
@@ -913,17 +1082,17 @@ M.GIT_DIFF_FIND = {
   FIND_RENAMES_FROM_REWRITES      = 2,      -- (1u << 1)
   FIND_COPIES                     = 4,      -- (1u << 2)
   FIND_COPIES_FROM_UNMODIFIED     = 8,      -- (1u << 3)
-  FIND_REWRITES                   = 16,     -- (1u << 4)
-  BREAK_REWRITES                  = 32,     -- (1u << 5),
+  FIND_REWRITES                   = POW[4], -- (1u << 4)
+  BREAK_REWRITES                  = POW[5], -- (1u << 5)
   FIND_AND_BREAK_REWRITES         = 48,     -- (GIT_DIFF_FIND_REWRITES | GIT_DIFF_BREAK_REWRITES)
-  FIND_FOR_UNTRACKED              = 64,     -- (1u << 6)
+  FIND_FOR_UNTRACKED              = POW[6], -- (1u << 6)
   FIND_ALL                        = 0xff,   -- (0x0ff) Turn on all finding features.
   FIND_IGNORE_LEADING_WHITESPACE  = 0,
-  FIND_IGNORE_WHITESPACE          = 0x1000, -- (1u << 12),
-  FIND_DONT_IGNORE_WHITESPACE     = 0x2000, -- (1u << 13),
-  FIND_EXACT_MATCH_ONLY           = 0x4000, -- (1u << 14),
-  BREAK_REWRITES_FOR_RENAMES_ONLY = 0x8000, -- (1u << 15),
-  FIND_REMOVE_UNMODIFIED          = 0x10000,-- (1u << 16)
+  FIND_IGNORE_WHITESPACE          = POW[12], -- (1u << 12),
+  FIND_DONT_IGNORE_WHITESPACE     = POW[13], -- (1u << 13),
+  FIND_EXACT_MATCH_ONLY           = POW[14], -- (1u << 14),
+  BREAK_REWRITES_FOR_RENAMES_ONLY = POW[15], -- (1u << 15),
+  FIND_REMOVE_UNMODIFIED          = POW[16], -- (1u << 16)
 }
 
 ---@enum GIT_SUBMODULE
@@ -958,6 +1127,44 @@ M.GIT_REBASE_OPERATION = {
   EXEC   = 5,
 }
 
+---@enum GIT_CHECKOUT
+M.GIT_CHECKOUT = {
+  NONE              = 0, -- default is a dry run, no actual updates
+  SAFE              = 1, --(1u << 0): Allow safe updates that cannot overwrite uncommitted data.
+  FORCE             = 2, --(1u << 1): Allow all updates to force working directory to look like index.
+  RECREATE_MISSING  = 4, --(1u << 2): Allow checkout to recreate missing files.
+  ALLOW_CONFLICTS   = POW[4],  --(1u << 4): Allow checkout to make safe updates even if conflicts are found.
+	REMOVE_UNTRACKED  = POW[5],  --(1u << 5): Remove untracked files not in index (that are not ignored.
+	REMOVE_IGNORED    = POW[6], --(1u << 6): Remove ignored files not in index */
+	UPDATE_ONLY       = POW[7],--(1u << 7) Only update existing files, don't create new ones.
+	DONT_UPDATE_INDEX = POW[8],--(1u << 8) Normally checkout updates index entries as it goes; this stops that.
+	NO_REFRESH        = POW[9],--(1u << 9) Don't refresh index/config/etc before doing checkout.
+	SKIP_UNMERGED     = POW[10],-- (1u << 10) Allow checkout to skip unmerged files,
+	USE_OURS          = POW[11],--(1u << 11) For unmerged files, checkout stage 2 from index,
+	USE_THEIRS        = POW[12],-- (1u << 12) For unmerged files, checkout stage 3 from index */
+	DISABLE_PATHSPEC_MATCH  = POW[13],-- (1u << 13) Treat pathspec as simple list of exact match file paths,
+	SKIP_LOCKED_DIRECTORIES = POW[18],--(1u << 18) Ignore directories in use, they will be left empty
+	DONT_OVERWRITE_IGNORED  = POW[19],--(1u << 19) Don't overwrite ignored files that exist in the checkout target
+	CONFLICT_STYLE_MERGE    = POW[20],--(1u << 20) Write normal merge files for conflicts
+	CONFLICT_STYLE_DIFF3    = POW[21],--(1u << 21) Include common ancestor data in diff3 format files for conflicts
+	DONT_REMOVE_EXISTING    = POW[22],--(1u << 22) Don't overwrite existing files or folders
+	DONT_WRITE_INDEX        = POW[23],--(1u << 23) Normally checkout writes the index upon completion; this prevents that.
+	DRY_RUN                 = POW[24],--(1u << 24),
+	CONFLICT_STYLE_ZDIFF3   = POW[25],--(1u << 25) Include common ancestor data in zdiff3 format for conflicts.
+	--(NOT IMPLEMENTED)
+	UPDATE_SUBMODULES            = POW[16], --(1u << 16) Recursively checkout submodules with same options
+	UPDATE_SUBMODULES_IF_CHANGED = POW[17], --(1u << 17) Recursively checkout submodules if HEAD moved in super repo
+}
+
+---@enum GIT_MERGE
+M.GIT_MERGE = {
+  FIND_RENAMES     = 1, --(1 << 0): Detect renames that occur between the common ancestor and the "ours"
+  FAIL_ON_CONFLICT = POW[1], --(1 << 1): If a conflict occurs, exit immediately
+  SKIP_REUC        = POW[2], --(1 << 2): Do not write the REUC extension on the generated index
+  NO_RECURSIVE     = POW[3], --(1 << 3): This flag provides a similar merge base to `git-merge-resolve`.
+  VIRTUAL_BASE     = POW[4], --(1 << 4): Treat this merge as if it is to produce the virtual base of recursive.
+}
+
 -- Inits helper
 
 local NULL = ffi.cast("void*", nil)
@@ -969,6 +1176,14 @@ M.GIT_DIFF_OPTIONS_INIT = {{
   { NULL, 0 }, NULL, NULL, NULL, 3
 }}
 M.GIT_DIFF_FIND_OPTIONS_INIT = {{ M.GIT_DIFF_FIND_OPTIONS_VERSION }}
+M.GIT_CHECKOUT_OPTIONS_INIT = {{ M.GIT_CHECKOUT_OPTIONS_VERSION, M.GIT_CHECKOUT.SAFE }}
+M.GIT_MERGE_OPTIONS_INIT = {{ M.GIT_MERGE_OPTIONS_VERSION, M.GIT_MERGE.FIND_RENAMES }}
+M.GIT_REBASE_OPTIONS_INIT = {{
+  M.GIT_REBASE_OPTIONS_VERSION, 0, 0, NULL,
+  M.GIT_MERGE_OPTIONS_INIT[1],
+	M.GIT_CHECKOUT_OPTIONS_INIT[1],
+  NULL, NULL
+}}
 
 
 return M
