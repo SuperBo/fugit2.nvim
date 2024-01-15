@@ -127,6 +127,7 @@ Reference.__index = Reference
 local Index = {}
 Index.__index = Index
 
+
 ---@class GitRemote
 ---@field remote ffi.cdata* libgit2 struct git_remote*[1]
 ---@field name string
@@ -350,6 +351,21 @@ function ObjectId.from(oid)
   local git_object_id = libgit2.git_oid()
 
   local err = libgit2.C.git_oid_cpy(git_object_id, oid.oid)
+  if err ~= 0 then
+    return nil, err
+  end
+
+  return ObjectId.borrow(git_object_id), 0
+end
+
+---Creates new lbigit2 oid, then copy value from old oid.
+---@param git_oid ffi.cdata*
+---@return GitObjectId? Objectid
+---@return GIT_ERROR
+function ObjectId.from_git_oid(git_oid)
+  local git_object_id = libgit2.git_oid()
+
+  local err = libgit2.C.git_oid_cpy(git_object_id, git_oid)
   if err ~= 0 then
     return nil, err
   end
@@ -948,6 +964,7 @@ function RevisionWalker:hide(oid)
 end
 
 
+---Iterates through git_oid revisions.
 ---@return fun(): GitObjectId?, GitCommit?
 function RevisionWalker:iter()
   local git_oid = libgit2.git_oid()
@@ -1030,6 +1047,8 @@ end
 -- | Index functions |
 -- ===================
 
+---@alias GitIndexEntry { file_size: integer, id: GitObjectId, path: string, flags: integer }
+
 
 -- Inits new GitIndex object.
 ---@param git_index ffi.cdata* libgit2.git_index_pointer, own cdata
@@ -1046,7 +1065,7 @@ end
 
 -- Gets the count of entries currently in the index
 ---@return integer
-function Index:nentry()
+function Index:nentries()
   local entrycount = libgit2.C.git_index_entrycount(self.index)
   return math.floor(tonumber(entrycount) or -1)
 end
@@ -1105,20 +1124,46 @@ end
 
 ---@param path string
 ---@param stage_number GIT_INDEX_STAGE
----@return { file_size: integer, id: GitObjectId, path: string }?
+---@return GitIndexEntry?
 function Index:get_bypath(path, stage_number)
   local entry = libgit2.C.git_index_get_bypath(self.index, path, stage_number)
   if entry == nil then
     return nil
   end
 
-  -- TODO: check this
-  local oid = libgit2.git_oid({ entry.id })
   return {
     file_size = tonumber(entry.file_size),
     path      = ffi.string(entry.path),
-    id        = ObjectId.borrow(oid),
+    id        = ObjectId.borrow(entry.id),
+    flags     = tonumber(entry.flags),
   }
+end
+
+
+---Iterates through entries in the index.
+---@return (fun(): GitIndexEntry?)?
+function Index:iter()
+  local entry = libgit2.git_index_entry_double_pointer()
+  local iterator = libgit2.git_index_iterator_double_pointer()
+  local err = libgit2.C.git_index_iterator_new(iterator, self.index)
+  if err ~= 0 then
+    return nil
+  end
+
+  return function()
+    err = libgit2.C.git_index_iterator_next(entry, iterator[0])
+    if err ~= 0 then
+      libgit2.C.git_index_iterator_free(iterator[0])
+      return nil
+    end
+
+    return {
+      file_size = tonumber(entry[0].file_size),
+      path      = ffi.string(entry[0].path),
+      id        = ObjectId.borrow(entry[0].id),
+      flags     = tonumber(entry[0].flags),
+    }
+  end
 end
 
 -- ==================
@@ -1612,7 +1657,7 @@ end
 ---@field refname string
 
 ---@class GitStatusResult
----@field head GitStatusHead
+---@field head GitStatusHead?
 ---@field upstream GitStatusUpstream?
 ---@field status GitStatusItem[]
 
@@ -2113,58 +2158,36 @@ function Repository:status_file(path)
 end
 
 
--- Reads the status of the repository and returns a dictionary.
--- with file paths as keys and status flags as values.
----@return GitStatusResult? status_result git status result.
----@return integer return_code Return code.
-function Repository:status()
-  ---@type GIT_ERROR
+---Reads head and upstream status.
+---@return GitStatusHead?
+---@return GitStatusUpstream?
+---@return GIT_ERROR
+function Repository:status_head_upstream()
   local err
 
-  local opts = libgit2.git_status_options(libgit2.GIT_STATUS_OPTIONS_INIT)
-  -- libgit2.C.git_status_options_init(opts, libgit2.GIT_STATUS_OPTIONS_VERSION)
-  opts[0].show = libgit2.GIT_STATUS_SHOW.INDEX_AND_WORKDIR
-  opts[0].flags = DEFAULT_STATUS_FLAGS
-
-  local status = libgit2.git_status_list_double_pointer()
-  err = libgit2.C.git_status_list_new(status, self.repo, opts)
-  if err ~= 0 then
-    return nil, err
-  end
-
   -- Get Head information
-  local repo_head
+  local repo_head, repo_head_oid, head_status
   repo_head, err = self:head()
-  if repo_head == nil then
-    return nil, err
+  if not repo_head then
+    return nil, nil, err
   end
-
-  -- local repo_head_oid, _ = repo_head:target()
-  -- if repo_head_oid ~= nil then
-  --   repo_head_oid_str = tostring(repo_head_oid)
-  --   repo_head_msg = self:commit_lookup(repo_head_oid):message()
-  -- end
 
   local repo_head_commit, _ = repo_head:peel_commit()
-  local repo_head_oid = repo_head_commit and repo_head_commit:id() or nil
+  repo_head_oid = repo_head_commit and repo_head_commit:id() or nil
 
-  ---@type GitStatusResult
-  local result = {
-    head = {
-      name        = repo_head:shorthand(),
-      oid         = repo_head_oid,
-      author      = repo_head_commit and repo_head_commit:author() or "",
-      message     = repo_head_commit and repo_head_commit:message() or "",
-      is_detached = self:is_head_detached(),
-      namespace   = repo_head.namespace,
-      refname     = repo_head.name,
-    },
-    status = {}
+  head_status = {
+    name        = repo_head:shorthand(),
+    oid         = repo_head_oid,
+    author      = repo_head_commit and repo_head_commit:author() or "",
+    message     = repo_head_commit and repo_head_commit:message() or "",
+    is_detached = self:is_head_detached(),
+    namespace   = repo_head.namespace,
+    refname     = repo_head.name,
   }
 
   -- Get upstream information
-  local repo_upstream
-  repo_upstream, err = repo_head:branch_upstream()
+  local repo_upstream, upstream_status
+  repo_upstream, err = repo_head and repo_head:branch_upstream() or nil, 0
   if repo_upstream then
     ---@type number
     local ahead, behind = 0, 0
@@ -2186,7 +2209,7 @@ function Repository:status()
       remote, _ = self:remote_lookup(remote_name)
     end
 
-    result.upstream = {
+    upstream_status = {
       name       = repo_upstream:shorthand(),
       oid        = commit_upstream_oid,
       message    = commit_upstream and commit_upstream:message() or "",
@@ -2198,7 +2221,32 @@ function Repository:status()
     }
   end
 
+  return head_status, upstream_status, 0
+end
+
+
+-- Reads the status of the repository and returns a dictionary.
+-- with file paths as keys and status flags as values.
+---@return GitStatusItem[]? status_result git status result.
+---@return integer return_code Return code.
+function Repository:status()
+  ---@type GIT_ERROR
+  local err
+
+  local opts = libgit2.git_status_options(libgit2.GIT_STATUS_OPTIONS_INIT)
+  -- libgit2.C.git_status_options_init(opts, libgit2.GIT_STATUS_OPTIONS_VERSION)
+  opts[0].show = libgit2.GIT_STATUS_SHOW.INDEX_AND_WORKDIR
+  opts[0].flags = DEFAULT_STATUS_FLAGS
+
+  local status = libgit2.git_status_list_double_pointer()
+  err = libgit2.C.git_status_list_new(status, self.repo, opts)
+  if err ~= 0 then
+    return nil, err
+  end
+
   local n_entry = tonumber(libgit2.C.git_status_list_entrycount(status[0]))
+  ---@type GitStatusItem[]
+  local status_list = {}
 
   -- Iterate through git status list
   for i = 0,n_entry-1 do
@@ -2248,14 +2296,14 @@ function Repository:status()
       end
     end
 
-    table.insert(result.status, status_item)
+    status_list[#status_list+1] = status_item
     ::git_status_list_continue::
   end
 
   -- free C resources
   libgit2.C.git_status_list_free(status[0])
 
-  return result, 0
+  return status_list, 0
 end
 
 
@@ -2826,6 +2874,10 @@ end
 ---@param delta GIT_DELTA
 ---@return string Git status char such as M, A, D.
 local function status_char_dash(delta)
+  if delta == libgit2.GIT_DELTA.CONFLICTED then
+    return "U"
+  end
+
   local c = libgit2.C.git_diff_status_char(delta);
   if c == 32 then
     return "-"

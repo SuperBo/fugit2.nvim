@@ -173,12 +173,7 @@ function GitStatus:init(ns_id, repo, last_window)
     focusable = true,
     border = {
       style = "rounded",
-      padding = {
-        top = 1,
-        bottom = 1,
-        left = 2,
-        right = 2,
-      },
+      padding = { top = 1, bottom = 1, left = 1, right = 1 },
       text = {
         top = NuiText(" 󱖫 Status ", "Fugit2FloatTitle"),
         top_align = "left",
@@ -690,20 +685,38 @@ end
 
 ---Updates git status.
 function GitStatus:update()
-  local git_status, git_error = git2.status(self.repo)
-
   utils.list_clear(self._status_lines)
+  -- clean cached menus
+  self._menus[Menu.PUSH] = nil
+  self._menus[Menu.PULL] = nil
+  -- clean cached diffs
+  if self._git.unstaged_diff then
+    for k, _ in pairs(self._git.unstaged_diff) do
+      self._git.unstaged_diff[k] = nil
+    end
+  end
+  if self._git.staged_diff then
+    for k, _ in pairs(self._git.staged_diff) do
+      self._git.staged_diff[k] = nil
+    end
+  end
 
+  local status_files, status_head, status_upstream, err
   ---@type NuiLine[]
   local lines = self._status_lines
 
-  if git_status == nil then
-    lines = {
-      NuiLine { NuiText(string.format("Git2 Error Code: %d", git_error), "Error") }
-    }
+  status_head, status_upstream, err = self.repo:status_head_upstream()
+  if not status_head then
+    local line = NuiLine { NuiText("HEAD: ", "Fugit2Header") }
+    if err == git2.GIT_ERROR.GIT_EUNBORNBRANCH then
+      line:append("No commits!", "Error")
+    else
+      line:append("Libgit2 code: " .. err, "Error")
+    end
+    lines[1] = line
   else
     -- update status panel
-    self._git.head = git_status.head
+    self._git.head = status_head
 
     local remote, _ = self.repo:remote_default()
     if remote then
@@ -727,46 +740,46 @@ function GitStatus:update()
     end
 
     local head_line = NuiLine { NuiText("HEAD", "Fugit2Header") }
-    if git_status.head.is_detached then
+    if status_head.is_detached then
       head_line:append(" (detached)", "Fugit2Heading")
     else
       head_line:append("     ")
     end
 
     local ahead, behind = 0, 0
-    if git_status.upstream then
-      ahead, behind = git_status.upstream.ahead, git_status.upstream.behind
+    if status_upstream then
+      ahead, behind = status_upstream.ahead, status_upstream.behind
       self._git.ahead, self._git.behind = ahead, behind
-      self._git.upstream = git_status.upstream
+      self._git.upstream = status_upstream
     end
     local ahead_behind = ahead + behind
 
     local branch_width = math.max(
-      git_status.head.name:len() + (ahead_behind > 0 and 5 or 0),
-      git_status.upstream and git_status.upstream.name:len() or 0
+      status_head.name:len() + (ahead_behind > 0 and 5 or 0),
+      status_upstream and status_upstream.name:len() or 0
     )
     local branch_format = "%s%-" .. branch_width .. "s"
 
     local author_width = math.max(
-      git_status.head.author:len(),
-      git_status.upstream and git_status.upstream.author:len() or 0
+      status_head.author:len(),
+      status_upstream and status_upstream.author:len() or 0
     )
     local author_format = " %-" .. author_width .. "s"
 
-    local head_icon = utils.get_git_namespace_icon(git_status.head.namespace)
+    local head_icon = utils.get_git_namespace_icon(status_head.namespace)
 
-    self._states.current_text = NuiText( head_icon .. git_status.head.name, "Fugit2BranchHead")
+    self._states.current_text = NuiText( head_icon .. status_head.name, "Fugit2BranchHead")
 
     if ahead_behind == 0 then
       head_line:append(
-        string.format(branch_format, head_icon, git_status.head.name),
+        string.format(branch_format, head_icon, status_head.name),
         "Fugit2BranchHead"
       )
     else
-      head_line:append(head_icon .. git_status.head.name, "Fugit2BranchHead")
+      head_line:append(head_icon .. status_head.name, "Fugit2BranchHead")
       local padding = (
         branch_width
-        - git_status.head.name:len()
+        - status_head.name:len()
         - (ahead > 0 and 2 or 0)
         - (behind > 0 and 2 or 0)
       )
@@ -778,24 +791,24 @@ function GitStatus:update()
       head_line:append(ahead_behind_str, "Fugit2Count")
     end
 
-    head_line:append(string.format(author_format, git_status.head.author), "Fugit2Author")
-    head_line:append(string.format(" %s ", git_status.head.oid), "Fugit2ObjectId")
-    head_line:append(utils.message_title_prettify(git_status.head.message))
+    head_line:append(string.format(author_format, status_head.author), "Fugit2Author")
+    head_line:append(string.format(" %s ", status_head.oid), "Fugit2ObjectId")
+    head_line:append(utils.message_title_prettify(status_head.message))
     table.insert(lines, head_line)
 
     local upstream_line = NuiLine { NuiText("Upstream ", "Fugit2Header") }
-    if git_status.upstream then
+    if status_upstream then
       self._prompts.amend_confirm:set_text(NuiLine {
         NuiText("This commit has already been pushed to "),
-        NuiText(git_status.upstream.name, "Fugit2SymbolicRef"),
+        NuiText(status_upstream.name, "Fugit2SymbolicRef"),
         NuiText(", do you really want to modify it?")
       })
 
-      local remote_icon = utils.get_git_icon(git_status.upstream.remote_url)
+      local remote_icon = utils.get_git_icon(status_upstream.remote_url)
 
-      local upstream_name = string.format(branch_format, remote_icon, git_status.upstream.name)
+      local upstream_name = string.format(branch_format, remote_icon, status_upstream.name)
       local upstream_text
-      if git_status.upstream.ahead > 0 or git_status.upstream.behind > 0 then
+      if status_upstream.ahead > 0 or status_upstream.behind > 0 then
         upstream_text = NuiText(upstream_name, "Fugit2Heading")
       else
         upstream_text = NuiText(upstream_name, "Fugit2Staged")
@@ -803,33 +816,33 @@ function GitStatus:update()
       upstream_line:append(upstream_text)
       self._states.upstream_text = upstream_text
 
-      upstream_line:append(string.format(author_format, git_status.upstream.author), "Fugit2Author")
-      upstream_line:append(string.format(" %s ", git_status.upstream.oid), "Fugit2ObjectId")
+      upstream_line:append(string.format(author_format, status_upstream.author), "Fugit2Author")
+      upstream_line:append(string.format(" %s ", status_upstream.oid), "Fugit2ObjectId")
 
-      upstream_line:append(utils.message_title_prettify(git_status.upstream.message))
+      upstream_line:append(utils.message_title_prettify(status_upstream.message))
     else
       upstream_line:append("?", "Fugit2SymbolicRef")
     end
     table.insert(lines, upstream_line)
 
     -- get info of default push
-    if git_status.head.namespace == git2.GIT_REFERENCE_NAMESPACE.BRANCH then
-      local push_remote = self.repo:branch_push_remote(git_status.head.name)
+    if status_head.namespace == git2.GIT_REFERENCE_NAMESPACE.BRANCH then
+      local push_remote = self.repo:branch_push_remote(status_head.name)
       if push_remote then
-        local push_name = push_remote .. "/" .. git_status.head.name
+        local push_name = push_remote .. "/" .. status_head.name
         local push_ref = "refs/remotes/" .. push_name
 
-        if push_name == git_status.upstream.name then
+        if status_upstream and push_name == status_upstream.name then
           self._git.push_target = {
             name = push_name,
-            oid = git_status.upstream.oid and tostring(git_status.upstream.oid) or "",
-            ahead = git_status.upstream.ahead,
-            behind = git_status.upstream.behind
+            oid = status_upstream.oid and tostring(status_upstream.oid) or "",
+            ahead = status_upstream.ahead,
+            behind = status_upstream.behind
           }
         else
           local push_target_id, _ = self.repo:reference_name_to_id(push_ref)
-          if push_target_id and git_status.head.oid then
-            local ahead1, behind1 = self.repo:ahead_behind(git_status.head.oid, push_target_id)
+          if push_target_id and status_head.oid then
+            local ahead1, behind1 = self.repo:ahead_behind(status_head.oid, push_target_id)
             self._git.push_target = {
               name   = push_name,
               oid    = tostring(push_target_id),
@@ -841,9 +854,6 @@ function GitStatus:update()
       end
     end
 
-    -- update files tree
-    self._views.files:update(git_status.status)
-
     -- update branches tree
     -- local branches, err = self.repo:branches(true, false)
     -- if not branches then
@@ -852,16 +862,16 @@ function GitStatus:update()
     --   self._branches_view:update(branches, git_status.head.refname)
     -- end
 
-    -- update top commits
+    -- update top commits graph
     if self._git.walker then
       local id_len = 16
       self._git.walker:reset()
 
-      if git_status.upstream then
-        self._git.walker:push(git_status.upstream.oid)
+      if status_upstream then
+        self._git.walker:push(status_upstream.oid)
       end
 
-      self._git.walker:push(git_status.head.oid)
+      self._git.walker:push(status_head.oid)
 
       local commits = {}
       for oid, commit in self._git.walker:iter() do
@@ -872,11 +882,11 @@ function GitStatus:update()
 
         local id_str = oid:tostring(id_len)
         local refs = {}
-        if oid == git_status.head.oid then
-          refs[1] = git_status.head.refname
+        if oid == status_head.oid then
+          refs[1] = status_head.refname
         end
-        if git_status.upstream and oid == git_status.upstream.oid then
-          refs[#refs+1] = "refs/remotes/" .. git_status.upstream.name
+        if status_upstream and oid == status_upstream.oid then
+          refs[#refs+1] = "refs/remotes/" .. status_upstream.name
         end
 
         commits[#commits+1] = LogView.CommitNode(
@@ -894,22 +904,12 @@ function GitStatus:update()
 
       self._views.commits:update(commits, self._git.remote_icons)
     end
+  end
 
-    -- clean cached diffs
-    if self._git.unstaged_diff then
-      for k, _ in pairs(self._git.unstaged_diff) do
-        self._git.unstaged_diff[k] = nil
-      end
-    end
-    if self._git.staged_diff then
-      for k, _ in pairs(self._git.staged_diff) do
-        self._git.staged_diff[k] = nil
-      end
-    end
-
-    -- clean cached menus
-    self._menus[Menu.PUSH] = nil
-    self._menus[Menu.PULL] = nil
+  status_files, err = self.repo:status()
+  if status_files then
+    -- update files tree
+    self._views.files:update(status_files)
   end
 end
 
