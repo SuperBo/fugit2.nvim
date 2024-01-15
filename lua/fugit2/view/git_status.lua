@@ -707,9 +707,24 @@ function GitStatus:update()
 
   status_head, status_upstream, err = self.repo:status_head_upstream()
   if not status_head then
-    local line = NuiLine { NuiText("HEAD: ", "Fugit2Header") }
+    local line = NuiLine { NuiText("HEAD  ", "Fugit2Header") }
+
+    -- Get status head only
+    local head, _ = self.repo:reference_lookup("HEAD")
+    local head_ref_name = head and head:symbolic_target()
+    if head_ref_name then
+      local head_namespace = git2.reference_name_namespace(head_ref_name)
+      local head_icon = utils.get_git_namespace_icon(head_namespace)
+      local head_name = git2.reference_name_shorthand(head_ref_name)
+      line:append(head_icon .. head_name .. "  ", "Fugit2BranchHead")
+    end
+
     if err == git2.GIT_ERROR.GIT_EUNBORNBRANCH then
       line:append("No commits!", "Error")
+    elseif err == git2.GIT_ERROR.GIT_EUNBORNBRANCH then
+      line:append("Non existing branch!", "Error")
+    elseif err == git2.GIT_ERROR.GIT_ENOTFOUND then
+      line:append("Missing!", "Error")
     else
       line:append("Libgit2 code: " .. err, "Error")
     end

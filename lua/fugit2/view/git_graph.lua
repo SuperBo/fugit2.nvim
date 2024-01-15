@@ -1,4 +1,4 @@
--- NUI Git graph module
+-- Fugit2 Git graph module
 
 local NuiLayout = require "nui.layout"
 local Object = require "nui.object"
