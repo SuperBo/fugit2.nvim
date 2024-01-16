@@ -346,6 +346,9 @@ function GitStatusTree:index_add_reset(repo, index, add, reset, node)
   elseif reset and node.istatus ~= "-" and node.istatus ~= "?" then
     -- else reset if index status is not in (UNCHANGED, UNTRACKED, RENAMED)
     err = repo:reset_default({ node.id })
+    if err == git2.GIT_ERROR.GIT_EUNBORNBRANCH then
+      err = index:remove_bypath(node.id)
+    end
     if err ~= 0 then
       error("Git Error when unstage from index: " .. err)
     end
