@@ -11,6 +11,8 @@ local event = require "nui.utils.autocmd".event
 local async = require "plenary.async"
 local async_utils = require "plenary.async.util"
 local PlenaryJob = require "plenary.job"
+local iterators = require "plenary.iterators"
+local functional = require "plenary.functional"
 
 local UI = require "fugit2.view.components.menus"
 local GitStatusTree = require "fugit2.view.components.file_tree_view"
@@ -648,8 +650,7 @@ function GitStatus:_init_patch_views()
       return
     end
 
-    local keys = vim.api.nvim_replace_termcodes("<esc>", true, false, true)
-    vim.api.nvim_feedkeys(keys, "n", false)
+    vim.api.nvim_feedkeys(utils.KEY_ESC, "n", false)
 
     if diff_apply_fn(diff_str) == 0 then
       local node, _ = tree:get_child_node_linenr()
@@ -670,8 +671,7 @@ function GitStatus:_init_patch_views()
       return
     end
 
-    local keys = vim.api.nvim_replace_termcodes("<esc>", true, false, true)
-    vim.api.nvim_feedkeys(keys, "n", false)
+    vim.api.nvim_feedkeys(utils.KEY_ESC, "n", false)
 
     if diff_apply_fn(diff_str) == 0 then
       local node, _ = tree:get_child_node_linenr()
@@ -992,21 +992,57 @@ function GitStatus:write_index()
   end
 end
 
+
+---Add/reset file entries handler.
+---@param is_visual_mode boolean whether this handler is called in visual mode.
 ---@param add boolean add to index enable
 ---@param reset boolean reset from enable
 ---@return fun()
-function GitStatus:index_add_reset_handler(add, reset)
+function GitStatus:index_add_reset_handler(is_visual_mode, add, reset)
   local tree = self._views.files
   local git = self._git
   local states = self._states
 
   return function()
-    local node, linenr = tree.tree:get_node()
-    if not node or node:has_children() then
-      return
+    local nodes
+
+    if not is_visual_mode then
+      local node, _ = tree.tree:get_node()
+      nodes = iterators.iter({node})
+    else
+      local cursor_start = vim.fn.getpos("v")[2]
+      local cursor_end = vim.fn.getpos(".")[2]
+      if cursor_end < cursor_start then
+        cursor_start, cursor_end = cursor_end, cursor_start
+      end
+
+      nodes = iterators.range(
+        cursor_start, cursor_end, 1
+      ):map(function(linenr)
+        local node = tree.tree:get_node(linenr)
+        return node
+      end)
+
+      vim.api.nvim_feedkeys(utils.KEY_ESC, "n", false)
     end
 
-    local updated, refresh = tree:index_add_reset(self.repo, self.index, add, reset, node)
+    nodes = nodes:filter(function(node) return not node:has_children() end)
+
+    local results = nodes:map(function(node)
+      local is_updated, is_refresh = tree:index_add_reset(self.repo, self.index, add, reset, node)
+
+      if is_updated then
+        -- remove cached diff
+        git.staged_diff[node.id] = nil
+        git.unstaged_diff[node.id] = nil
+      end
+
+      return { is_updated, is_refresh }
+    end):tolist()
+
+    local updated = utils.list_any(function(r) return r[1] end, results)
+    local refresh = utils.list_any(function(r) return r[2] end, results)
+
     if not updated then
       return
     end
@@ -1020,12 +1056,9 @@ function GitStatus:index_add_reset_handler(add, reset)
 
     git.index_updated = true
 
-    node, linenr = tree.tree:get_node()
+    -- old node at current cursor maybe deleted
+    local node, linenr = tree.tree:get_node()
     if node and linenr then
-      -- remove cached diff
-      git.staged_diff[node.id] = nil
-      git.unstaged_diff[node.id] = nil
-
       if states.side_panel == SidePanel.NONE then
         states.last_patch_line = -1 -- remove cache behaviors
       elseif states.side_panel == SidePanel.PATCH_VIEW then
@@ -1978,7 +2011,7 @@ function GitStatus:setup_handlers()
     end
   end)
 
-  ---- Turn on/off patch view
+  ---- Toggle patch views
   file_tree:map("n", "=", function()
     if states.side_panel == SidePanel.PATCH_VIEW then
       self:hide_patch_view()
@@ -2019,13 +2052,22 @@ function GitStatus:setup_handlers()
   end, map_options)
 
   ---- Space/[-]: Add or remove index
-  file_tree:map("n", { "-", "<space>" }, self:index_add_reset_handler(true, true), map_options)
+  file_tree:map("n", { "-", "<space>" }, self:index_add_reset_handler(false, true, true), map_options)
 
   ---- [s]: stage file
-  file_tree:map("n", "s", self:index_add_reset_handler(true, false), map_options)
+  file_tree:map("n", "s", self:index_add_reset_handler(false, true, false), map_options)
 
   ---- [u]: unstage file
-  file_tree:map("n", "u", self:index_add_reset_handler(false, true), map_options)
+  file_tree:map("n", "u", self:index_add_reset_handler(false, false, true), map_options)
+
+  ---- Visual Space/[-]: Add remove for range
+  file_tree:map("v", { "-", "<space>" }, self:index_add_reset_handler(true, true, true), map_options)
+
+  --- Visual [s]: stage files in range
+  file_tree:map("v", "s", self:index_add_reset_handler(true, true, false), map_options)
+
+  --- Visual [u]: unstage files in range
+  file_tree:map("v", "u", self:index_add_reset_handler(true, false, true), map_options)
 
   ---- Write index
   file_tree:map("n", "w",

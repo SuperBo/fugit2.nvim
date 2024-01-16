@@ -16,6 +16,9 @@ M.LINUX_SIGNALS = {
   SIGTERM = 15,
 }
 
+---@type string
+M.KEY_ESC = vim.api.nvim_replace_termcodes("<esc>", true, false, true)
+
 ---@param str string
 function M.lines_head(str)
   local newline = str:find("\n", 1, true)
@@ -483,6 +486,38 @@ function M.list_reverse(lst)
     lst[i], lst[#lst-i+1] = lst[#lst-i+1], lst[i]
   end
   return lst
+end
+
+
+---Returns true if any component in list is true
+---@generic T
+---@param fun fun(T): any
+---@param lst T[]
+---@return boolean
+function M.list_any(fun, lst)
+  for _, v in ipairs(lst) do
+    if fun(v) then
+      return true
+    end
+  end
+
+  return false
+end
+
+
+---Returns true if all components in list are true
+---@generic T
+---@param fun fun(T): any
+---@param lst T[]
+---@return boolean
+function M.list_all(fun, lst)
+  for _, v in ipairs(lst) do
+    if not fun(v) then
+      return false
+    end
+  end
+
+  return true
 end
 
 

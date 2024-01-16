@@ -296,20 +296,20 @@ end
 ---@return boolean updated Tree is updated or not.
 ---@return boolean refresh Whether needed to do full refresh.
 function GitStatusTree:index_add_reset(repo, index, add, reset, node)
-  local ret
+  local err
   local updated = false
   local inplace = true -- whether can update status inplace
 
   if add and node.alt_path and (node.wstatus == "R" or node.wstatus == "M")  then
     -- rename
-    ret = index:add_bypath(node.alt_path)
-    if ret ~= 0 then
-      error("Git Error when handling rename " .. ret)
+    err = index:add_bypath(node.alt_path)
+    if err ~= 0 then
+      error("Git Error when handling rename " .. err)
     end
 
-    ret = index:remove_bypath(node.id)
-    if ret ~= 0 then
-      error("Git Error when handling rename " .. ret)
+    err = index:remove_bypath(node.id)
+    if err ~= 0 then
+      error("Git Error when handling rename " .. err)
     end
 
     updated = true
@@ -320,34 +320,34 @@ function GitStatusTree:index_add_reset(repo, index, add, reset, node)
   )
   then
     -- add to index if worktree status is in (UNTRACKED, MODIFIED, TYPECHANGE)
-    ret = index:add_bypath(node.id)
-    if ret ~= 0 then
-      error("Git Error when adding to index: " .. ret)
+    err = index:add_bypath(node.id)
+    if err ~= 0 then
+      error("Git Error when adding to index: " .. err)
     end
 
     updated = true
   elseif add and node.wstatus == "D" then
     -- remove from index
-    ret = index:remove_bypath(node.id)
-    if ret ~= 0 then
-      error("Git Error when removing from index: " .. ret)
+    err = index:remove_bypath(node.id)
+    if err ~= 0 then
+      error("Git Error when removing from index: " .. err)
     end
 
     updated = true
   elseif reset and node.alt_path and (node.istatus == "R" or node.istatus == "M") then
-    -- reset both path if rename in index
-    ret = repo:reset_default({node.id, node.alt_path})
-    if ret ~= 0 then
-      error("Git Error when reset rename: " .. ret)
+    -- reset both paths if rename in index
+    err = repo:reset_default({ node.id, node.alt_path })
+    if err ~= 0 then
+      error("Git Error when reset rename: " .. err)
     end
 
     updated = true
     inplace = false -- requires full refresh
   elseif reset and node.istatus ~= "-" and node.istatus ~= "?" then
     -- else reset if index status is not in (UNCHANGED, UNTRACKED, RENAMED)
-    ret = repo:reset_default({node.id})
-    if ret ~= 0 then
-      error("Git Error when unstage from index: " .. ret)
+    err = repo:reset_default({ node.id })
+    if err ~= 0 then
+      error("Git Error when unstage from index: " .. err)
     end
 
     updated = true
@@ -356,7 +356,7 @@ function GitStatusTree:index_add_reset(repo, index, add, reset, node)
   -- inplace update
   if updated and inplace then
     if self:update_single_node(repo, node) ~= 0 then
-      -- try to do full refresh if update failed
+      -- require full refresh if update failed
       inplace = false
     end
   end
@@ -386,7 +386,7 @@ function GitStatusTree:update_single_node(repo, node)
   )
   node.conflicted = worktree_status == git2.GIT_DELTA.CONFLICTED or index_status == git2.GIT_DELTA.CONFLICTED
 
-  -- remove node when status == "--" and not conflicted
+  -- delete node when status == "--" and not conflicted
   if node.wstatus == "-" and node.istatus == "-" and not node.conflicted then
     local parent_id = node:get_parent_id()
     self.tree:remove_node(node:get_id())
