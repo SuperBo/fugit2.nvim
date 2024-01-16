@@ -12,7 +12,6 @@ local async = require "plenary.async"
 local async_utils = require "plenary.async.util"
 local PlenaryJob = require "plenary.job"
 local iterators = require "plenary.iterators"
-local functional = require "plenary.functional"
 
 local UI = require "fugit2.view.components.menus"
 local GitStatusTree = require "fugit2.view.components.file_tree_view"
@@ -102,7 +101,8 @@ local GitStatus = Object("Fugit2GitStatusView")
 ---@param ns_id integer
 ---@param repo GitRepository
 ---@param last_window integer
-function GitStatus:init(ns_id, repo, last_window)
+---@param current_file string
+function GitStatus:init(ns_id, repo, last_window, current_file)
   self.ns_id = -1
   if ns_id then
     self.ns_id = ns_id
@@ -307,9 +307,10 @@ function GitStatus:init(ns_id, repo, last_window)
   ---@field jobs Job[]
   self._states = {
     last_window = last_window,
+    current_file = current_file,
     commit_mode = CommitMode.CREATE,
     side_panel  = SidePanel.NONE,
-    command_queue = {}
+    command_queue = {},
   }
 
   -- keymaps
@@ -317,7 +318,10 @@ function GitStatus:init(ns_id, repo, last_window)
 
   async.run(
     function() self:update() end, -- get git content
-    async_utils.scheduler(function() self:render() end)
+    async_utils.scheduler(function()
+      self:render()
+      self:scroll_to_active_file()
+    end)
   )
 end
 
@@ -947,19 +951,18 @@ function GitStatus:render()
 end
 
 
----Scrolls to active branch
-function GitStatus:scroll_to_active_branch()
-  -- local _, linenr = self._branches_view:get_active_branch()
-  -- local winid = self._branches_view:winid()
-  -- if linenr and vim.api.nvim_win_is_valid(winid) then
-  --   vim.api.nvim_win_set_cursor(winid, { linenr, 0 })
-  -- end
+---Scrolls to active file
+function GitStatus:scroll_to_active_file()
+  local current_file = self._states.current_file
+  local _, linenr = self._views.files.tree:get_node("-" .. current_file)
+  if linenr then
+    vim.api.nvim_win_set_cursor(0, { linenr, 1 })
+  end
 end
 
 
 function GitStatus:mount()
   self._layout:mount()
-  self:scroll_to_active_branch()
 end
 
 ---Exit function
