@@ -2375,9 +2375,13 @@ end
 function Repository:commit(index, signature, message)
   -- get head as parent commit
   local head, err = self:head()
-  if err ~= 0 and err ~= libgit2.GIT_ERROR.GIT_ENOTFOUND then
+  if err ~= 0
+    and err ~= libgit2.GIT_ERROR.GIT_ENOTFOUND
+    and err ~= libgit2.GIT_ERROR.GIT_EUNBORNBRANCH
+  then
     return nil, err
   end
+
   local parent = nil
   if head then
     parent, err = head:peel_commit()
