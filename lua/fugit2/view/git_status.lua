@@ -1099,16 +1099,19 @@ function GitStatus:hide_input(back_to_main)
     self.input_popup.bufnr,
     0, -1, true, {}
   )
+
+  local layout = self._layout
+
   if back_to_main or self._states.side_panel == SidePanel.NONE then
-    self._layout:update(self._layout_opts.main, self._boxes.main)
+    self._states.side_panel = SidePanel.NONE
+    layout:update(self._layout_opts.main, self._boxes.main)
   else
-    self._layout:update(NuiLayout.Box(
-      {
-        NuiLayout.Box(self.info_popup, { size = 6 }),
-        NuiLayout.Box(self._boxes.main_row, { dir = "row", grow = 1 }),
-      },
-      { dir = "col" }
-    ))
+    local boxes = vim.list_slice(layout._.box.box)
+
+    if #boxes > 1 then
+      table.remove(boxes, 2)
+      layout:update(NuiLayout.Box(boxes, { dir = "col" }))
+    end
   end
 
   self:focus_file()
