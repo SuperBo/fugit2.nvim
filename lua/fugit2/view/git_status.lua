@@ -1865,13 +1865,7 @@ function GitStatus:quit_command()
     self._states.job:shutdown(-3, utils.LINUX_SIGNALS.SIGTERM)
   end
 
-  self._layout:update(NuiLayout.Box(
-    {
-      NuiLayout.Box(self.info_popup, { size = 6 }),
-      NuiLayout.Box(self._boxes.main_row, { dir = "row", grow = 1 })
-    },
-    { dir = "col" }
-  ))
+  self._layout:update(self._boxes.main)
   self:focus_file()
 end
 
