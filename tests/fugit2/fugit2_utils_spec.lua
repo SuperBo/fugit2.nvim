@@ -1,6 +1,5 @@
-local utils = require "fugit2.utils"
 local NuiTree = require "nui.tree"
-
+local utils = require "fugit2.utils"
 
 describe("make_relative_path", function()
   it("returns same path", function()
@@ -30,26 +29,26 @@ describe("make_relative_path", function()
   it("returns child dir", function()
     assert.equals("c/f.txt", utils.make_relative_path("a/a", "a/a/c/f.txt"))
   end)
-
 end)
-
 
 describe("build_dir_tree/build_nui_tree_nodes", function()
   it("builds directory 1", function()
     local nodes = {
       { path = "a/a.txt", id = 1 },
       { path = "a/b.txt", id = 2 },
-      { path = "c.txt",   id = 3 },
+      { path = "c.txt", id = 3 },
     }
 
-    local tree = utils.build_dir_tree(function(n) return n.path end, nodes)
+    local tree = utils.build_dir_tree(function(n)
+      return n.path
+    end, nodes)
 
     assert(#vim.tbl_keys(tree), 2)
     assert.is_not_nil(tree["."])
     assert.is_not_nil(tree["a"])
     assert.is_not_nil(tree["a"]["."])
     assert.same({
-      { path = "c.txt", id = 3 }
+      { path = "c.txt", id = 3 },
     }, tree["."])
     assert.same({
       { path = "a/a.txt", id = 1 },
@@ -65,7 +64,9 @@ describe("build_dir_tree/build_nui_tree_nodes", function()
       { name = "feature/remove-2", id = 13 },
     }
 
-    local tree = utils.build_dir_tree(function(val) return val.name end, nodes)
+    local tree = utils.build_dir_tree(function(val)
+      return val.name
+    end, nodes)
 
     assert(#vim.tbl_keys(tree), 2)
     assert.is_not_nil(tree["."])
@@ -89,7 +90,7 @@ describe("build_dir_tree/build_nui_tree_nodes", function()
       return v.name
     end
     local node_fn = function(v)
-      return NuiTree.Node({ id = v.id, text = vim.fs.basename(v.name) })
+      return NuiTree.Node { id = v.id, text = vim.fs.basename(v.name) }
     end
 
     local dir_tree = utils.build_dir_tree(path_fn, nodes)
@@ -103,7 +104,6 @@ describe("build_dir_tree/build_nui_tree_nodes", function()
     assert.equals(false, tree[2]:has_children())
   end)
 end)
-
 
 describe("bitarray", function()
   it("returns empty unset indices for empty bitmap", function()
@@ -152,11 +152,11 @@ describe("bitarray", function()
     bitarr:append(true)
     local unset_5 = bitarr:get_unset_indices()
 
-    assert.same({1}, unset_1)
-    assert.same({1}, unset_2)
-    assert.same({1}, unset_3)
-    assert.same({1, 4}, unset_4)
-    assert.same({1, 4}, unset_5)
+    assert.same({ 1 }, unset_1)
+    assert.same({ 1 }, unset_2)
+    assert.same({ 1 }, unset_3)
+    assert.same({ 1, 4 }, unset_4)
+    assert.same({ 1, 4 }, unset_5)
   end)
 
   it("returns correct set indices", function()
@@ -165,7 +165,7 @@ describe("bitarray", function()
     bitarr:append(false)
     bitarr:append(true)
 
-    assert.same({2}, bitarr:get_set_indices())
+    assert.same({ 2 }, bitarr:get_set_indices())
   end)
 
   it("sets unset indices correctly", function()
@@ -183,10 +183,10 @@ describe("bitarray", function()
     bitarr:append(false)
     local unset_4 = bitarr:set_unset_indices()
 
-    assert.same({1}, unset_1)
+    assert.same({ 1 }, unset_1)
     assert.same({}, unset_2)
     assert.same({}, unset_3)
-    assert.same({4}, unset_4)
+    assert.same({ 4 }, unset_4)
   end)
 
   it("sets k unset indices correctly", function()
@@ -204,8 +204,8 @@ describe("bitarray", function()
 
     assert.equals(7, bitarr.n)
     assert.equals(127, bitarr.buf)
-    assert.same({2}, unset_1)
-    assert.same({3, 5, 6, 7}, unset_2)
+    assert.same({ 2 }, unset_1)
+    assert.same({ 3, 5, 6, 7 }, unset_2)
     assert.same({}, unset_3)
   end)
 
@@ -215,25 +215,24 @@ describe("bitarray", function()
     b1:append(true)
     local b2 = b1:copy():unset(2)
 
-    assert.same({2}, b1:get_set_indices())
+    assert.same({ 2 }, b1:get_set_indices())
     assert.same({}, b2:get_set_indices())
   end)
 end)
 
-
 describe("list_utils", function()
   it("reverse list", function()
-    local list = {1, 2, 4, 5}
+    local list = { 1, 2, 4, 5 }
     utils.list_reverse(list)
 
-    assert.same({5, 4, 2, 1}, list)
+    assert.same({ 5, 4, 2, 1 }, list)
   end)
 
   it("reverse list with odd length", function()
-    local list = {4, 5, 6, 7, 8, 9, 10}
+    local list = { 4, 5, 6, 7, 8, 9, 10 }
     utils.list_reverse(list)
 
-    assert.same({ 10, 9, 8, 7, 6, 5 , 4 }, list)
+    assert.same({ 10, 9, 8, 7, 6, 5, 4 }, list)
   end)
 
   it("insert a sorted list", function()
