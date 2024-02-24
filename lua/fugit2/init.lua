@@ -77,4 +77,11 @@ function M.git_graph()
   end
 end
 
+function M.git_diff()
+  local repo = open_repository()
+  if repo then
+    ui.new_fugit2_diff_view(M.namespace, repo):mount()
+  end
+end
+
 return M

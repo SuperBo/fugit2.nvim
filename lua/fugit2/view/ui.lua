@@ -2,6 +2,7 @@ local NuiPopup = require "nui.popup"
 
 local GitStatus = require "fugit2.view.git_status"
 local GitGraph = require "fugit2.view.git_graph"
+local GitDiff = require "fugit2.view.git_diff"
 
 
 ---@classs Fugit2UIModule
@@ -33,67 +34,20 @@ end
 ---@param repo GitRepository
 ---@return NuiLayout
 function M.new_fugit2_graph_window(namespace, repo)
-  local branch_popup = NuiPopup {
-    enter = false,
-    focusable = true,
-    border = {
-      style = "rounded",
-      padding = {
-        top = 0,
-        bottom = 0,
-        left = 1,
-        right = 1,
-      },
-      text = {
-        top = " Branches ",
-        top_align = "left",
-      },
-    },
-    win_options = {
-      winblend = 0,
-      winhighlight = "Normal:Normal,FloatBorder:FloatBorder",
-      cursorline = true,
-    },
-    buf_options = {
-      modifiable = true,
-      readonly = false,
-      swapfile = false,
-    },
-  }
-
-  local commit_popup = NuiPopup {
-    enter = true,
-    focusable = true,
-    border = {
-      style = "rounded",
-      padding = {
-        top = 0,
-        bottom = 0,
-        left = 1,
-        right = 1,
-      },
-      text = {
-        top = " Commits ",
-        top_align = "left",
-      },
-    },
-    win_options = {
-      winblend = 0,
-      winhighlight = "Normal:Normal,FloatBorder:FloatBorder",
-      cursorline = true,
-    },
-    buf_options = {
-      -- modifiable = true,
-      -- readonly = false,
-      swapfile = false,
-    },
-  }
-
   -- Status content
   local graph = GitGraph(namespace, repo)
   graph:render()
 
   return graph
+end
+
+
+---Creates Fugit2 DiffView tab.
+---@param namespace integer Nvim namespace
+---@return Fugit2GitDiffView
+function M.new_fugit2_diff_view(namespace, repo)
+  local diffview = GitDiff(namespace, repo)
+  return diffview
 end
 
 

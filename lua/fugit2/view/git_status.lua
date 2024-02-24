@@ -60,6 +60,7 @@ local Menu = {
   PULL   = 5,
   PUSH   = 6,
   REBASE = 7,
+  FORGE  = 8,
 }
 
 -- ===================
@@ -493,6 +494,15 @@ function GitStatus:_init_menus(menu_type)
       { texts = { NuiText("@pushRemote") }, key = "p" },
     }
     menu_items = prepare_pull_push_items(git, menu_items)
+  elseif menu_type == Menu.FORGE then
+    menu_title = NuiText("  Forge ", title_hl)
+    menu_items = {
+      { texts = { NuiText(" List ", head_hl) } },
+      { texts = { NuiText("Issues") }, key = "li" },
+      { texts = { NuiText("Pull Request") }, key = "lp" },
+      { texts = { NuiText(" Create ", head_hl) } },
+      { texts = { NuiText("Pull Request") }, key = "cp" },
+    }
   end
 
   return UI.Menu(self.ns_id, menu_title, menu_items, arg_items)
@@ -1455,6 +1465,32 @@ function GitStatus:hide_patch_view()
   self._states.side_panel = SidePanel.NONE
 end
 
+
+-- ================
+-- |  Forge Menu |
+-- ===============
+
+function GitStatus:_init_forge_menu()
+  local m = self:_init_menus(Menu.FORGE)
+  m:on_submit(function(item_id, _)
+    if item_id == "cp" then
+      require("tinygit").createGitHubPr()
+    elseif item_id == "li" then
+      require("tinygit").issuesAndPrs { type = "issue", state = "all" }
+    elseif item_id == "lp" then
+      require("tinygit").issuesAndPrs { type = "pr", state = "all" }
+    end
+  end)
+  return m
+end
+
+
+
+-- ===============
+-- |  Diff Menu  |
+-- ===============
+
+
 ---GitStatus Diff Menu
 ---@return Fugit2UITransientMenu
 function GitStatus:_init_diff_menu()
@@ -1877,6 +1913,7 @@ local MENU_INITS = {
   [Menu.FETCH]  = GitStatus._init_fetch_menu,
   [Menu.PULL]   = GitStatus._init_pull_menu,
   [Menu.PUSH]   = GitStatus._init_push_menu,
+  [Menu.FORGE]  = GitStatus._init_forge_menu,
 }
 
 ---Menu handlers factory
@@ -2127,6 +2164,9 @@ function GitStatus:setup_handlers()
 
   -- Pull menu
   file_tree:map("n", "p", self:_menu_handlers(Menu.PULL), map_options)
+
+  -- Forge menu
+  file_tree:map("n", "N", self:_menu_handlers(Menu.FORGE), map_options)
 end
 
 
