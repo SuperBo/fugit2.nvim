@@ -8,6 +8,7 @@ local NuiText = require "nui.text"
 local NuiLine = require "nui.line"
 
 local LogView = require "fugit2.view.components.commit_log_view"
+local StatusTreeView = require "fugit2.view.components.file_tree_view"
 
 local git2 = require "fugit2.git2"
 local utils = require "fugit2.utils"
@@ -248,6 +249,8 @@ function RebaseView:update()
     NuiText(tostring(self._git.rebase))
   }
 
+  self._git.signature, _ = self.repo:signature_default()
+
   ---@type Fugit2GitGraphCommitNode[]
   local commits = self._git.commits
   local actions = self._git.actions
@@ -300,11 +303,11 @@ end
 
 
 ---Starts rebase process with given user actions
-function RebaseView:start_rebase()
+function RebaseView:rebase_start()
   local actions = self._git.actions
   local oids = self._git.oids
 
-  -- change git2 rebase
+  -- change git2 rebase action and order
   local n_commits = self._git.rebase:noperations()
   for i = 0,n_commits-1 do
     local op = self._git.rebase:operation_byindex(i)
@@ -325,6 +328,70 @@ function RebaseView:start_rebase()
       op:set_exec(nil)
     end
   end
+
+  -- call initial next
+  self:rebase_next()
+end
+
+
+---Makes the next rebase operation
+function RebaseView:rebase_next()
+  local rebase = self._git.rebase
+  local signature = self._git.signature
+
+  local commit
+  local op, err = rebase:next()
+  if err == 0 then
+    _, err = rebase:commit(nil, signature, nil)
+    self:rebase_next()
+  elseif err == git2.GIT_ERROR.GIT_ECONFLICT then
+    -- conflict
+    print(err)
+  elseif err == git2.GIT_ERROR.GIT_ITEROVER then
+    -- end of iter
+    print("End")
+  else
+    print(err)
+  end
+end
+
+
+---Inits status view.
+---@return Fugit2GitStatusTree
+function RebaseView:init_files_view()
+  local status_view = StatusTreeView(
+    self.ns_id,
+    " 󰙅 Files ",
+    nil, nil
+  )
+  self.views.files = status_view
+
+  return status_view
+end
+
+
+---Shows git status when having conflicts.
+function RebaseView:show_files()
+  local files = self.views.files
+  if not files then
+    files = self:init_files_view()
+  end
+
+  local index
+  if self._git.inmemory then
+    index, _ = self._git.rebase:inmemory_index()
+  else
+    index, _ = self.repo:index()
+  end
+  if index then
+  end
+
+  self.layout:update(
+    NuiLayout.Box({
+      NuiLayout.Box(self.views.status, { size = 4 }),
+      NuiLayout.Box(files.popup, { grow = 1 }),
+    }, {dir = "col"})
+  )
 end
 
 
@@ -460,7 +527,7 @@ function RebaseView:setup_handlers()
   commit_view:map("n", "k", "2k", opts)
 
   commit_view:map("n", "<cr>", function()
-    self:start_rebase()
+    self:rebase_start()
   end, opts)
 end
 
