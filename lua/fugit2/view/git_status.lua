@@ -4,23 +4,22 @@ local uv = vim.loop
 
 local NuiLayout = require "nui.layout"
 local NuiLine = require "nui.line"
-local NuiText = require "nui.text"
 local NuiPopup = require "nui.popup"
+local NuiText = require "nui.text"
 local Object = require "nui.object"
-local event = require "nui.utils.autocmd".event
+local event = require("nui.utils.autocmd").event
+local PlenaryJob = require "plenary.job"
 local async = require "plenary.async"
 local async_utils = require "plenary.async.util"
-local PlenaryJob = require "plenary.job"
 local iterators = require "plenary.iterators"
 
-local UI = require "fugit2.view.components.menus"
 local GitStatusTree = require "fugit2.view.components.file_tree_view"
+local UI = require "fugit2.view.components.menus"
 -- local GitBranchTree = require "fugit2.view.components.branch_tree_view"
-local PatchView = require "fugit2.view.components.patch_view"
 local LogView = require "fugit2.view.components.commit_log_view"
+local PatchView = require "fugit2.view.components.patch_view"
 local git2 = require "fugit2.git2"
 local utils = require "fugit2.utils"
-
 
 -- ===================
 -- | Libgit2 options |
@@ -34,7 +33,6 @@ local COMMAND_QUEUE_MAX = 8
 git2.set_opts(git2.GIT_OPT.SET_SERVER_CONNECT_TIMEOUT, SERVER_CONNECT_TIMEOUT)
 git2.set_opts(git2.GIT_OPT.SET_SERVER_TIMEOUT, SERVER_TIMEOUT)
 
-
 local FILE_WINDOW_WIDTH = 58
 local GIT_LOG_MAX_COMMITS = 8
 
@@ -47,20 +45,19 @@ local CommitMode = {
   CREATE = 1,
   REWORD = 2,
   EXTEND = 3,
-  AMEND  = 4,
+  AMEND = 4,
 }
-
 
 ---@enum Fugit2GitStatusMenu
 local Menu = {
   BRANCH = 1,
   COMMIT = 2,
-  DIFF   = 3,
-  FETCH  = 4,
-  PULL   = 5,
-  PUSH   = 6,
+  DIFF = 3,
+  FETCH = 4,
+  PULL = 5,
+  PUSH = 6,
   REBASE = 7,
-  FORGE  = 8,
+  FORGE = 8,
 }
 
 -- ===================
@@ -82,21 +79,18 @@ local LOADING_CHARS = {
   " ",
 }
 
-
 ---@enum Fugit2GitStatusSidePanel
 local SidePanel = {
-  NONE       = 0,
+  NONE = 0,
   PATCH_VIEW = 1,
 }
-
 
 ---@class Fugit2GitStatusView
 ---@field info_popup NuiPopup
 ---@field input_popup NuiPopup
 ---@field repo GitRepository
 ---@field closed boolean
-local GitStatus = Object("Fugit2GitStatusView")
-
+local GitStatus = Object "Fugit2GitStatusView"
 
 ---Inits GitStatus.
 ---@param ns_id integer
@@ -125,9 +119,12 @@ function GitStatus:init(ns_id, repo, last_window, current_file)
   ---@field signature GitSignature?
   ---@field walker GitRevisionWalker?
   self._git = {
-    head = nil, ahead = 0, behind = 0,
+    head = nil,
+    ahead = 0,
+    behind = 0,
     index_updated = false,
-    unstaged_diff = {}, staged_diff = {},
+    unstaged_diff = {},
+    staged_diff = {},
   }
 
   if repo ~= nil then
@@ -150,7 +147,7 @@ function GitStatus:init(ns_id, repo, last_window, current_file)
       self._git.walker = walker
     end
   else
-    error("[Fugit2] Null repo")
+    error "[Fugit2] Null repo"
   end
 
   local default_padding = {
@@ -162,11 +159,11 @@ function GitStatus:init(ns_id, repo, last_window, current_file)
 
   local win_hl = "Normal:Normal,FloatBorder:FloatBorder"
   local buf_readonly_opts = {
-      modifiable = false,
-      readonly = true,
-      swapfile = false,
-      buftype  = "nofile",
-    }
+    modifiable = false,
+    readonly = true,
+    swapfile = false,
+    buftype = "nofile",
+  }
 
   -- create popups/views
   self._views = {}
@@ -200,7 +197,7 @@ function GitStatus:init(ns_id, repo, last_window, current_file)
         top_align = "left",
         bottom = NuiText("[Ctrl-c][󱊷 ][q]uit, [Ctrl 󰌑 ][󰌑 ]", "FloatFooter"),
         bottom_align = "right",
-      }
+      },
     },
     win_options = {
       winhighlight = win_hl,
@@ -208,7 +205,7 @@ function GitStatus:init(ns_id, repo, last_window, current_file)
     buf_options = {
       modifiable = true,
       filetype = "gitcommit",
-    }
+    },
   }
 
   self.command_popup = NuiPopup {
@@ -223,7 +220,7 @@ function GitStatus:init(ns_id, repo, last_window, current_file)
         top_align = "left",
         bottom = NuiText("[esc][q]uit", "FloatFooter"),
         bottom_align = "right",
-      }
+      },
     },
     win_options = {
       winhighlight = win_hl,
@@ -234,14 +231,12 @@ function GitStatus:init(ns_id, repo, last_window, current_file)
   ---@type Fugit2CommitLogView
   self._views.commits = LogView(self.ns_id, "  Commits ", false)
   ---@type Fugit2GitStatusTree
-  self._views.files = GitStatusTree(
-    self.ns_id, " 󰙅 Files ", "[b]ranches [c]ommits [d]iff", "FloatFooter"
-  )
+  self._views.files = GitStatusTree(self.ns_id, " 󰙅 Files ", "[b]ranches [c]ommits [d]iff", "FloatFooter")
 
   -- menus
   local amend_confirm = UI.Confirm(
     self.ns_id,
-    NuiLine { NuiText("This commit has already been pushed to upstream, do you really want to modify it?") }
+    NuiLine { NuiText "This commit has already been pushed to upstream, do you really want to modify it?" }
   )
   self._prompts = {
     amend_confirm = amend_confirm,
@@ -255,7 +250,7 @@ function GitStatus:init(ns_id, repo, last_window, current_file)
     id = 1,
     end_row = 0,
     virt_text = {
-      {"commit message", "Comment"}
+      { "commit message", "Comment" },
     },
     virt_text_pos = "right_align",
     virt_text_hide = true,
@@ -268,29 +263,24 @@ function GitStatus:init(ns_id, repo, last_window, current_file)
   ---@type { [string]: NuiLayout.Box }
   self._boxes = {
     main = NuiLayout.Box({
-        NuiLayout.Box(self.info_popup, { size = 6 }),
-        NuiLayout.Box(self._views.files.popup, { grow = 1 }),
-        NuiLayout.Box(self._views.commits.popup, { size = 10 }),
-      }, { dir = "col" }
-    ),
-    main_row = NuiLayout.Box(self._views.files.popup, { grow = 1 })
+      NuiLayout.Box(self.info_popup, { size = 6 }),
+      NuiLayout.Box(self._views.files.popup, { grow = 1 }),
+      NuiLayout.Box(self._views.commits.popup, { size = 10 }),
+    }, { dir = "col" }),
+    main_row = NuiLayout.Box(self._views.files.popup, { grow = 1 }),
   }
   self._layout_opts = {
     main = {
       relative = "editor",
       position = "50%",
-      size = { width = 100, height = "60%" }
+      size = { width = 100, height = "60%" },
     },
     diff = {
       position = "50%",
-      size = { width = "80%", height = "60%" }
-    }
+      size = { width = "80%", height = "60%" },
+    },
   }
-  self._layout = NuiLayout(
-    self._layout_opts.main,
-    self._boxes.main
-  )
-
+  self._layout = NuiLayout(self._layout_opts.main, self._boxes.main)
 
   -- state variables for UI
   ---@class Fugit2GitStatusInternal
@@ -310,7 +300,7 @@ function GitStatus:init(ns_id, repo, last_window, current_file)
     last_window = last_window,
     current_file = current_file,
     commit_mode = CommitMode.CREATE,
-    side_panel  = SidePanel.NONE,
+    side_panel = SidePanel.NONE,
     command_queue = {},
   }
 
@@ -318,14 +308,15 @@ function GitStatus:init(ns_id, repo, last_window, current_file)
   self:setup_handlers()
 
   async.run(
-    function() self:update() end, -- get git content
+    function()
+      self:update()
+    end, -- get git content
     async_utils.scheduler(function()
       self:render()
       self:scroll_to_active_file()
     end)
   )
 end
-
 
 ---@param git Fugit2GitStatusGitStates
 ---@param menu_items Fugit2UITransientItem[]
@@ -340,8 +331,8 @@ local function prepare_pull_push_items(git, menu_items)
     if git.push_target.ahead + git.push_target.behind > 0 then
       push_target = {
         NuiText(text, "Fugit2Heading"),
-        NuiText(" "),
-        NuiText(utils.get_ahead_behind_text(git.push_target.ahead, git.push_target.behind), "Fugit2Count")
+        NuiText " ",
+        NuiText(utils.get_ahead_behind_text(git.push_target.ahead, git.push_target.behind), "Fugit2Count"),
       }
     else
       push_target = { NuiText(text, "Fugit2Staged") }
@@ -355,8 +346,8 @@ local function prepare_pull_push_items(git, menu_items)
     if git.upstream.ahead + git.upstream.behind > 0 then
       upstream_target = {
         NuiText(text, "Fugit2Heading"),
-        NuiText(" "),
-        NuiText(utils.get_ahead_behind_text(git.upstream.ahead, git.upstream.behind), "Fugit2Count")
+        NuiText " ",
+        NuiText(utils.get_ahead_behind_text(git.upstream.ahead, git.upstream.behind), "Fugit2Count"),
       }
     else
       upstream_target = { NuiText(text, "Fugit2Staged") }
@@ -382,28 +373,28 @@ function GitStatus:_init_menus(menu_type)
     menu_title = NuiText(" Committing ", title_hl)
     menu_items = {
       { texts = { NuiText("  Create ", head_hl) } },
-      { texts = { NuiText(" Commit ") }, key = "c" },
+      { texts = { NuiText " Commit " }, key = "c" },
       { texts = { NuiText("  Edit ", head_hl), NuiText("HEAD ", "Fugit2Header") } },
-      { texts = { NuiText("󰦒 Extend") }, key = "e" },
-      { texts = { NuiText("󰧭 Reword") }, key = "r" },
-      { texts = { NuiText("󰣪 Amend") },  key = "a" },
+      { texts = { NuiText "󰦒 Extend" }, key = "e" },
+      { texts = { NuiText "󰧭 Reword" }, key = "r" },
+      { texts = { NuiText "󰣪 Amend" }, key = "a" },
       { texts = { NuiText(" 󰽜 Edit ", head_hl) } },
-      { texts = { NuiText("󰇾 Fixup") },  key = "f" },
-      { texts = { NuiText("󰶯 Squash") },  key = "s" },
-      { texts = { NuiText(" Absorb") },  key = "b" },
+      { texts = { NuiText "󰇾 Fixup" }, key = "f" },
+      { texts = { NuiText "󰶯 Squash" }, key = "s" },
+      { texts = { NuiText " Absorb" }, key = "b" },
       { texts = { NuiText("  Log ", head_hl) } },
-      { texts = { NuiText("󱁉 Graph") },  key = "g" },
+      { texts = { NuiText "󱁉 Graph" }, key = "g" },
     }
   elseif menu_type == Menu.DIFF then
     menu_title = NuiText(" Diffing ", title_hl)
     menu_items = {
-      { texts = { NuiText("Diffview") }, key = "d" }
+      { texts = { NuiText "Diffview" }, key = "d" },
     }
   elseif menu_type == Menu.BRANCH then
     menu_title = NuiText(" Branching ", title_hl)
     menu_items = {
       { texts = { NuiText("Checkout", head_hl) } },
-      { texts = { NuiText("Branch/revision") }, key = "b" }
+      { texts = { NuiText "Branch/revision" }, key = "b" },
     }
     --   NuiMenu.separator(NuiText("Checkout", head_hl), menu_item_align),
     --   NuiMenu.item(NuiLine { NuiText("b ", key_hl), NuiText("Branch/revision") }, { id = "b" }),
@@ -421,38 +412,46 @@ function GitStatus:_init_menus(menu_type)
     menu_title = NuiText("  Pushing ", title_hl)
     arg_items = {
       {
-        text = NuiText("Force with lease"),
-        key = "-f", arg = "--force-with-lease",
-        type = UI.INPUT_TYPE.RADIO, model = "force"
+        text = NuiText "Force with lease",
+        key = "-f",
+        arg = "--force-with-lease",
+        type = UI.INPUT_TYPE.RADIO,
+        model = "force",
       },
       {
-        text = NuiText("Force"),
-        key = "-F", arg = "--force",
-        type = UI.INPUT_TYPE.RADIO, model = "force"
+        text = NuiText "Force",
+        key = "-F",
+        arg = "--force",
+        type = UI.INPUT_TYPE.RADIO,
+        model = "force",
       },
     }
     menu_items = {
       { texts = { NuiText("  Push ", head_hl), states.current_text, NuiText(" to ", head_hl) } },
-      { texts = { NuiText("@pushRemote") }, key = "p" }
+      { texts = { NuiText "@pushRemote" }, key = "p" },
     }
     menu_items = prepare_pull_push_items(git, menu_items)
   elseif menu_type == Menu.FETCH then
     menu_title = NuiText("  Fetching ", title_hl)
     arg_items = {
       {
-        text = NuiText("Prune deleted branches"),
-        key = "-p", arg = "--prune",
-        type = UI.INPUT_TYPE.CHECKBOX, model = "args"
+        text = NuiText "Prune deleted branches",
+        key = "-p",
+        arg = "--prune",
+        type = UI.INPUT_TYPE.CHECKBOX,
+        model = "args",
       },
       {
-        text = NuiText("Fetch all tags"),
-        key = "-t", arg = "--tags",
-        type = UI.INPUT_TYPE.CHECKBOX, model = "args"
+        text = NuiText "Fetch all tags",
+        key = "-t",
+        arg = "--tags",
+        type = UI.INPUT_TYPE.CHECKBOX,
+        model = "args",
       },
     }
     menu_items = {
       { texts = { NuiText("  Fetch from ", head_hl) } },
-      { texts = { NuiText("@pushRemote") }, key = "p" },
+      { texts = { NuiText "@pushRemote" }, key = "p" },
     }
 
     if git.remote then
@@ -469,51 +468,58 @@ function GitStatus:_init_menus(menu_type)
     menu_title = NuiText("  Pulling ", title_hl)
     arg_items = {
       {
-        text = NuiText("Fast-forward only"),
-        key = "-f", arg = "--ff-only",
-        type = UI.INPUT_TYPE.CHECKBOX, model = "args"
+        text = NuiText "Fast-forward only",
+        key = "-f",
+        arg = "--ff-only",
+        type = UI.INPUT_TYPE.CHECKBOX,
+        model = "args",
       },
       {
-        text = NuiText("Rebase local commits"),
-        key = "-r", arg = "--rebase",
-        type = UI.INPUT_TYPE.CHECKBOX, model = "args"
+        text = NuiText "Rebase local commits",
+        key = "-r",
+        arg = "--rebase",
+        type = UI.INPUT_TYPE.CHECKBOX,
+        model = "args",
       },
       {
-        text = NuiText("Autostash"),
-        key = "-a", arg = "autostash",
-        type = UI.INPUT_TYPE.CHECKBOX, model = "args"
+        text = NuiText "Autostash",
+        key = "-a",
+        arg = "autostash",
+        type = UI.INPUT_TYPE.CHECKBOX,
+        model = "args",
       },
       {
-        text = NuiText("Fetch all tags"),
-        key = "-t", arg = "--tags",
-        type = UI.INPUT_TYPE.CHECKBOX, model = "args"
-      }
+        text = NuiText "Fetch all tags",
+        key = "-t",
+        arg = "--tags",
+        type = UI.INPUT_TYPE.CHECKBOX,
+        model = "args",
+      },
     }
     menu_items = {
       { texts = { NuiText("  Pull into ", head_hl), states.current_text, NuiText(" from ", head_hl) } },
-      { texts = { NuiText("@pushRemote") }, key = "p" },
+      { texts = { NuiText "@pushRemote" }, key = "p" },
     }
     menu_items = prepare_pull_push_items(git, menu_items)
   elseif menu_type == Menu.FORGE then
     menu_title = NuiText("  Forge ", title_hl)
     menu_items = {
       { texts = { NuiText(" List ", head_hl) } },
-      { texts = { NuiText("Issues") }, key = "li" },
-      { texts = { NuiText("Pull Request") }, key = "lp" },
+      { texts = { NuiText "Issues" }, key = "li" },
+      { texts = { NuiText "Pull Request" }, key = "lp" },
       { texts = { NuiText(" Create ", head_hl) } },
-      { texts = { NuiText("Pull Request") }, key = "cp" },
+      { texts = { NuiText "Pull Request" }, key = "cp" },
     }
   end
 
   return UI.Menu(self.ns_id, menu_title, menu_items, arg_items)
 end
 
-
 ---Inits Patch View popup
 function GitStatus:_init_patch_views()
   local patch_unstaged = PatchView(self.ns_id, "Unstaged", "Fugit2Unstaged")
   local patch_staged = PatchView(self.ns_id, "Staged", "Fugit2Staged")
-  local opts = { noremap = true, nowait= true }
+  local opts = { noremap = true, nowait = true }
   local states = self._states
   local tree = self._views.files
   self._views.patch_unstaged = patch_unstaged
@@ -558,7 +564,7 @@ function GitStatus:_init_patch_views()
     if states.patch_staged_shown then
       patch_staged:focus()
     else
-      vim.cmd("normal! l")
+      vim.cmd "normal! l"
     end
   end, opts)
 
@@ -638,7 +644,7 @@ function GitStatus:_init_patch_views()
 
     local err = 0
     if node.istatus == "A" then
-      err = self.repo:reset_default({ node.id })
+      err = self.repo:reset_default { node.id }
     else
       local diff_str = patch_staged:get_diff_hunk_reversed()
       if not diff_str then
@@ -696,7 +702,6 @@ function GitStatus:_init_patch_views()
   end, opts)
 end
 
-
 ---Updates git status.
 function GitStatus:update()
   utils.list_clear(self._status_lines)
@@ -724,7 +729,7 @@ function GitStatus:update()
     local line = NuiLine { NuiText("HEAD  ", "Fugit2Header") }
 
     -- Get status head only
-    local head, _ = self.repo:reference_lookup("HEAD")
+    local head, _ = self.repo:reference_lookup "HEAD"
     local head_ref_name = head and head:symbolic_target()
     if head_ref_name then
       local head_namespace = git2.reference_name_namespace(head_ref_name)
@@ -752,7 +757,7 @@ function GitStatus:update()
       self._git.remote = {
         name = remote.name,
         url = remote.url,
-        push_url = remote.push_url
+        push_url = remote.push_url,
       }
     end
 
@@ -772,7 +777,7 @@ function GitStatus:update()
     if status_head.is_detached then
       head_line:append(" (detached)", "Fugit2Heading")
     else
-      head_line:append("     ")
+      head_line:append "     "
     end
 
     local ahead, behind = 0, 0
@@ -789,29 +794,18 @@ function GitStatus:update()
     )
     local branch_format = "%s%-" .. branch_width .. "s"
 
-    local author_width = math.max(
-      status_head.author:len(),
-      status_upstream and status_upstream.author:len() or 0
-    )
+    local author_width = math.max(status_head.author:len(), status_upstream and status_upstream.author:len() or 0)
     local author_format = " %-" .. author_width .. "s"
 
     local head_icon = utils.get_git_namespace_icon(status_head.namespace)
 
-    self._states.current_text = NuiText( head_icon .. status_head.name, "Fugit2BranchHead")
+    self._states.current_text = NuiText(head_icon .. status_head.name, "Fugit2BranchHead")
 
     if ahead_behind == 0 then
-      head_line:append(
-        string.format(branch_format, head_icon, status_head.name),
-        "Fugit2BranchHead"
-      )
+      head_line:append(string.format(branch_format, head_icon, status_head.name), "Fugit2BranchHead")
     else
       head_line:append(head_icon .. status_head.name, "Fugit2BranchHead")
-      local padding = (
-        branch_width
-        - status_head.name:len()
-        - (ahead > 0 and 2 or 0)
-        - (behind > 0 and 2 or 0)
-      )
+      local padding = (branch_width - status_head.name:len() - (ahead > 0 and 2 or 0) - (behind > 0 and 2 or 0))
       if padding > 0 then
         head_line:append(string.rep(" ", padding))
       end
@@ -828,9 +822,9 @@ function GitStatus:update()
     local upstream_line = NuiLine { NuiText("Upstream ", "Fugit2Header") }
     if status_upstream then
       self._prompts.amend_confirm:set_text(NuiLine {
-        NuiText("This commit has already been pushed to "),
+        NuiText "This commit has already been pushed to ",
         NuiText(status_upstream.name, "Fugit2SymbolicRef"),
-        NuiText(", do you really want to modify it?")
+        NuiText ", do you really want to modify it?",
       })
 
       local remote_icon = utils.get_git_icon(status_upstream.remote_url)
@@ -866,17 +860,17 @@ function GitStatus:update()
             name = push_name,
             oid = status_upstream.oid and tostring(status_upstream.oid) or "",
             ahead = status_upstream.ahead,
-            behind = status_upstream.behind
+            behind = status_upstream.behind,
           }
         else
           local push_target_id, _ = self.repo:reference_name_to_id(push_ref)
           if push_target_id and status_head.oid then
             local ahead1, behind1 = self.repo:ahead_behind(status_head.oid, push_target_id)
             self._git.push_target = {
-              name   = push_name,
-              oid    = tostring(push_target_id),
-              ahead  = ahead1 or 0,
-              behind = behind1 or 0
+              name = push_name,
+              oid = tostring(push_target_id),
+              ahead = ahead1 or 0,
+              behind = behind1 or 0,
             }
           end
         end
@@ -904,10 +898,9 @@ function GitStatus:update()
 
       local commits = {}
       for oid, commit in self._git.walker:iter() do
-        local parents = vim.tbl_map(
-          function(p) return p:tostring(id_len) end,
-          commit:parent_oids()
-        )
+        local parents = vim.tbl_map(function(p)
+          return p:tostring(id_len)
+        end, commit:parent_oids())
 
         local id_str = oid:tostring(id_len)
         local refs = {}
@@ -915,16 +908,10 @@ function GitStatus:update()
           refs[1] = status_head.refname
         end
         if status_upstream and oid == status_upstream.oid then
-          refs[#refs+1] = "refs/remotes/" .. status_upstream.name
+          refs[#refs + 1] = "refs/remotes/" .. status_upstream.name
         end
 
-        commits[#commits+1] = LogView.CommitNode(
-          id_str,
-          commit:message(),
-          commit:author(),
-          parents,
-          refs
-        )
+        commits[#commits + 1] = LogView.CommitNode(id_str, commit:message(), commit:author(), parents, refs)
 
         if #commits > GIT_LOG_MAX_COMMITS then
           break
@@ -941,7 +928,6 @@ function GitStatus:update()
     self._views.files:update(status_files)
   end
 end
-
 
 -- Renders git status
 function GitStatus:render()
@@ -960,7 +946,6 @@ function GitStatus:render()
   vim.api.nvim_buf_set_option(self.info_popup.bufnr, "modifiable", false)
 end
 
-
 ---Scrolls to active file
 function GitStatus:scroll_to_active_file()
   local current_file = self._states.current_file
@@ -969,7 +954,6 @@ function GitStatus:scroll_to_active_file()
     vim.api.nvim_win_set_cursor(0, { linenr, 1 })
   end
 end
-
 
 function GitStatus:mount()
   self._layout:mount()
@@ -996,7 +980,6 @@ function GitStatus:unmount()
   vim.api.nvim_set_current_win(self._states.last_window)
 end
 
-
 function GitStatus:write_index()
   if self._git.index_updated then
     if self.index:write() == 0 then
@@ -1004,7 +987,6 @@ function GitStatus:write_index()
     end
   end
 end
-
 
 ---Add/reset file entries handler.
 ---@param is_visual_mode boolean whether this handler is called in visual mode.
@@ -1021,7 +1003,7 @@ function GitStatus:index_add_reset_handler(is_visual_mode, add, reset)
 
     if not is_visual_mode then
       local node, _ = tree.tree:get_node()
-      nodes = iterators.iter({node})
+      nodes = iterators.iter { node }
     else
       local cursor_start = vim.fn.getpos("v")[2]
       local cursor_end = vim.fn.getpos(".")[2]
@@ -1029,9 +1011,7 @@ function GitStatus:index_add_reset_handler(is_visual_mode, add, reset)
         cursor_start, cursor_end = cursor_end, cursor_start
       end
 
-      nodes = iterators.range(
-        cursor_start, cursor_end, 1
-      ):map(function(linenr)
+      nodes = iterators.range(cursor_start, cursor_end, 1):map(function(linenr)
         local node = tree.tree:get_node(linenr)
         return node
       end)
@@ -1039,22 +1019,30 @@ function GitStatus:index_add_reset_handler(is_visual_mode, add, reset)
       vim.api.nvim_feedkeys(utils.KEY_ESC, "n", false)
     end
 
-    nodes = nodes:filter(function(node) return not node:has_children() end)
+    nodes = nodes:filter(function(node)
+      return not node:has_children()
+    end)
 
-    local results = nodes:map(function(node)
-      local is_updated, is_refresh = tree:index_add_reset(self.repo, self.index, add, reset, node)
+    local results = nodes
+      :map(function(node)
+        local is_updated, is_refresh = tree:index_add_reset(self.repo, self.index, add, reset, node)
 
-      if is_updated then
-        -- remove cached diff
-        git.staged_diff[node.id] = nil
-        git.unstaged_diff[node.id] = nil
-      end
+        if is_updated then
+          -- remove cached diff
+          git.staged_diff[node.id] = nil
+          git.unstaged_diff[node.id] = nil
+        end
 
-      return { is_updated, is_refresh }
-    end):tolist()
+        return { is_updated, is_refresh }
+      end)
+      :tolist()
 
-    local updated = utils.list_any(function(r) return r[1] end, results)
-    local refresh = utils.list_any(function(r) return r[2] end, results)
+    local updated = utils.list_any(function(r)
+      return r[1]
+    end, results)
+    local refresh = utils.list_any(function(r)
+      return r[2]
+    end, results)
 
     if not updated then
       return
@@ -1086,14 +1074,11 @@ function GitStatus:index_add_reset_handler(is_visual_mode, add, reset)
 end
 
 function GitStatus:focus_input()
-  self._layout:update(NuiLayout.Box(
-    {
-      NuiLayout.Box(self.info_popup, { size = 6 }),
-      NuiLayout.Box(self.input_popup, { size = 6 }),
-      NuiLayout.Box(self._boxes.main_row, { dir = "row", grow = 1 }),
-    },
-    { dir = "col" }
-  ))
+  self._layout:update(NuiLayout.Box({
+    NuiLayout.Box(self.info_popup, { size = 6 }),
+    NuiLayout.Box(self.input_popup, { size = 6 }),
+    NuiLayout.Box(self._boxes.main_row, { dir = "row", grow = 1 }),
+  }, { dir = "col" }))
   vim.api.nvim_set_current_win(self.input_popup.winid)
 end
 
@@ -1101,14 +1086,10 @@ function GitStatus:focus_file()
   self._views.files:focus()
 end
 
-
 ---Hides input popup
 ---@param back_to_main boolean Reset back to main layout
 function GitStatus:hide_input(back_to_main)
-  vim.api.nvim_buf_set_lines(
-    self.input_popup.bufnr,
-    0, -1, true, {}
-  )
+  vim.api.nvim_buf_set_lines(self.input_popup.bufnr, 0, -1, true, {})
 
   local layout = self._layout
 
@@ -1129,11 +1110,13 @@ end
 
 function GitStatus:insert_head_message_to_input()
   vim.api.nvim_buf_set_lines(
-    self.input_popup.bufnr, 0, -1, true,
+    self.input_popup.bufnr,
+    0,
+    -1,
+    true,
     vim.split(self._git.head.message, "\n", { plain = true, trimempty = true })
   )
 end
-
 
 ---@param signature GitSignature
 ---@param message string
@@ -1158,7 +1141,6 @@ local function check_signature_message(signature, message)
   return prettified
 end
 
-
 ---Creates a commit
 ---@param message string
 function GitStatus:_git_create_commit(message)
@@ -1178,7 +1160,6 @@ function GitStatus:_git_create_commit(message)
   end
 end
 
-
 ---Extends HEAD commit
 ---add files in index to HEAD commit
 function GitStatus:_git_extend_commit()
@@ -1192,7 +1173,6 @@ function GitStatus:_git_extend_commit()
     vim.notify("Failed to extend HEAD, code: " .. err, vim.log.levels.ERROR)
   end
 end
-
 
 ---Reword HEAD commit
 ---change commit message of HEAD commit
@@ -1232,7 +1212,6 @@ function GitStatus:_git_amend_commit(message)
   end
 end
 
-
 ---@param init_str string
 ---@param include_changes boolean
 ---@param notify_empty boolean
@@ -1255,18 +1234,14 @@ function GitStatus:_set_input_popup_commit_title(init_str, include_changes, noti
 
   local title = string.format(
     " %s -  %s %s%s%s",
-    init_str, tostring(self._git.signature),
+    init_str,
+    tostring(self._git.signature),
     file_changed > 0 and string.format("%d 󰈙", file_changed) or "",
     insertions > 0 and string.format(" +%d", insertions) or "",
     deletions > 0 and string.format(" -%d", deletions) or ""
   )
-  self.input_popup.border:set_text(
-    "top",
-    NuiText(title, "Fugit2MessageHeading"),
-    "left"
-  )
+  self.input_popup.border:set_text("top", NuiText(title, "Fugit2MessageHeading"), "left")
 end
-
 
 function GitStatus:commit_create()
   self._states.commit_mode = CommitMode.CREATE
@@ -1276,7 +1251,6 @@ function GitStatus:commit_create()
   self:focus_input()
   vim.cmd.startinsert()
 end
-
 
 function GitStatus:commit_extend()
   self._states.commit_mode = CommitMode.EXTEND
@@ -1288,7 +1262,6 @@ function GitStatus:commit_extend()
 
   self:_git_extend_commit()
 end
-
 
 ---@param is_reword boolean reword only mode
 function GitStatus:commit_amend(is_reword)
@@ -1327,7 +1300,6 @@ function GitStatus:amend_confirm_yes_handler()
   end
 end
 
-
 function GitStatus:_init_commit_menu()
   local m = self:_init_menus(Menu.COMMIT)
   m:on_submit(function(item_id, _)
@@ -1347,7 +1319,6 @@ function GitStatus:_init_commit_menu()
   end)
   return m
 end
-
 
 ---Updates patch info based on node
 ---@param node NuiTree.Node
@@ -1427,7 +1398,7 @@ function GitStatus:show_patch_view(unstaged, staged)
       row = utils.update_table(self._boxes, "patch_unstaged_staged", {
         NuiLayout.Box(self._views.files.popup, { size = FILE_WINDOW_WIDTH }),
         NuiLayout.Box(self._views.patch_unstaged.popup, { grow = 1 }),
-        NuiLayout.Box(self._views.patch_staged.popup, { grow = 1 })
+        NuiLayout.Box(self._views.patch_staged.popup, { grow = 1 }),
       })
     end
   elseif unstaged then
@@ -1443,19 +1414,19 @@ function GitStatus:show_patch_view(unstaged, staged)
     if not row then
       row = utils.update_table(self._boxes, "patch_staged", {
         NuiLayout.Box(self._views.files.popup, { size = FILE_WINDOW_WIDTH }),
-        NuiLayout.Box(self._views.patch_staged.popup, { grow = 1 })
+        NuiLayout.Box(self._views.patch_staged.popup, { grow = 1 }),
       })
     end
   end
 
   self._boxes.main_row = row
-  self._layout:update(self._layout_opts.diff, NuiLayout.Box(
-    {
+  self._layout:update(
+    self._layout_opts.diff,
+    NuiLayout.Box({
       NuiLayout.Box(self.info_popup, { size = 6 }),
       NuiLayout.Box(row, { dir = "row", grow = 1 }),
-    },
-    { dir = "col" }
-  ))
+    }, { dir = "col" })
+  )
   self._states.side_panel = SidePanel.PATCH_VIEW
 end
 
@@ -1464,7 +1435,6 @@ function GitStatus:hide_patch_view()
   self._boxes.main_row = NuiLayout.Box(self._views.files.popup, { grow = 1 })
   self._states.side_panel = SidePanel.NONE
 end
-
 
 -- ================
 -- |  Forge Menu |
@@ -1484,12 +1454,9 @@ function GitStatus:_init_forge_menu()
   return m
 end
 
-
-
 -- ===============
 -- |  Diff Menu  |
 -- ===============
-
 
 ---GitStatus Diff Menu
 ---@return Fugit2UITransientMenu
@@ -1498,9 +1465,9 @@ function GitStatus:_init_diff_menu()
   m:on_submit(function(item_id, _)
     if item_id == "d" then
       local node, _ = self._views.files:get_child_node_linenr()
-      if node and vim.fn.exists(":DiffviewOpen") > 0 then
+      if node and vim.fn.exists ":DiffviewOpen" > 0 then
         self:unmount()
-        vim.cmd({ cmd = "DiffviewOpen", args = { "--selected-file=" .. vim.fn.fnameescape(node.id) } })
+        vim.cmd { cmd = "DiffviewOpen", args = { "--selected-file=" .. vim.fn.fnameescape(node.id) } }
       end
     end
   end)
@@ -1513,11 +1480,11 @@ function GitStatus:_init_branch_menu()
   local m = self:_init_menus(Menu.BRANCH)
   m:on_submit(function(item_id, _)
     if item_id == "b" then
-      if vim.fn.exists(":Telescope") then
+      if vim.fn.exists ":Telescope" then
         self:unmount()
-        vim.cmd({ cmd = "Telescope", args = { "git_branches"} })
+        vim.cmd { cmd = "Telescope", args = { "git_branches" } }
       else
-        vim.notify("[Fugit2] No telescope")
+        vim.notify "[Fugit2] No telescope"
       end
     end
   end)
@@ -1548,11 +1515,11 @@ function GitStatus:push_current_to_pushremote(args)
 
   if not git.upstream then
     -- set upstream if there are no upstream
-    git_args[#git_args+1] = "-u"
+    git_args[#git_args + 1] = "-u"
   end
 
   if args[1] == "--force" then
-    git_args[#git_args+1] = args[1]
+    git_args[#git_args + 1] = args[1]
   elseif args[1] == "--force-with-lease" then
     --force with lease
     local lease = args[1]
@@ -1563,14 +1530,14 @@ function GitStatus:push_current_to_pushremote(args)
         lease = lease .. ":" .. git.push_target.oid
       end
     end
-    git_args[#git_args+1] = lease
+    git_args[#git_args + 1] = lease
   end
 
   if remote then
-    git_args[#git_args+1] = remote.name
+    git_args[#git_args + 1] = remote.name
   end
   if current then
-    git_args[#git_args+1] = current.name .. ":" .. current.name
+    git_args[#git_args + 1] = current.name .. ":" .. current.name
   end
 
   self:run_command("git", git_args, true)
@@ -1585,26 +1552,26 @@ function GitStatus:push_current_to_upstream(args)
   local upstream = git.upstream
 
   if not current or not upstream then
-    error("[Fugit2] Upstream Not Found")
+    error "[Fugit2] Upstream Not Found"
     return
   end
 
   local upstream_names = vim.split(upstream.name, "/", { plain = true })
   if #upstream_names < 2 then
-    error("[Fugit2] Invalid upstream name")
+    error "[Fugit2] Invalid upstream name"
     return
   end
 
   if args[1] == "--force" then
-    git_args[#git_args+1] = args[1]
+    git_args[#git_args + 1] = args[1]
   elseif args[1] == "--force-with-lease" then
     -- force with lease
-    git_args[#git_args+1] = string.format("--force-with-lease=%s:%s", upstream_names[2], upstream.oid)
+    git_args[#git_args + 1] = string.format("--force-with-lease=%s:%s", upstream_names[2], upstream.oid)
   end
 
-  git_args[#git_args+1] = upstream.remote
+  git_args[#git_args + 1] = upstream.remote
 
-  git_args[#git_args+1] = current.name .. ":" .. upstream_names[2]
+  git_args[#git_args + 1] = current.name .. ":" .. upstream_names[2]
 
   self:run_command("git", git_args, true)
 end
@@ -1623,7 +1590,6 @@ function GitStatus:_init_fetch_menu()
   return m
 end
 
-
 ---@param args string[]
 function GitStatus:fetch_from_pushremote(args)
   ---@type string[]
@@ -1633,12 +1599,11 @@ function GitStatus:fetch_from_pushremote(args)
   vim.list_extend(git_args, args)
 
   if remote then
-    git_args[#git_args+1] = remote.name
+    git_args[#git_args + 1] = remote.name
   end
 
   self:run_command("git", git_args, true)
 end
-
 
 ---@param args string[]
 function GitStatus:fetch_from_upstream(args)
@@ -1649,11 +1614,11 @@ function GitStatus:fetch_from_upstream(args)
   vim.list_extend(git_args, args)
 
   if not upstream then
-    error("[Fugit2] Upstream Not Found")
+    error "[Fugit2] Upstream Not Found"
     return
   end
 
-  git_args[#git_args+1] = upstream.remote
+  git_args[#git_args + 1] = upstream.remote
 
   self:run_command("git", git_args, true)
 end
@@ -1680,7 +1645,7 @@ function GitStatus:pull_from_pushremote(args)
   vim.list_extend(git_args, args)
 
   if remote then
-    git_args[#git_args+1] = remote.name
+    git_args[#git_args + 1] = remote.name
   end
 
   self:run_command("git", git_args, true)
@@ -1695,15 +1660,14 @@ function GitStatus:pull_from_upstream(args)
   vim.list_extend(git_args, args)
 
   if not upstream then
-    error("[Fugit2] Upstream Not Found")
+    error "[Fugit2] Upstream Not Found"
     return
   end
 
-  git_args[#git_args+1] = upstream.remote
+  git_args[#git_args + 1] = upstream.remote
 
   self:run_command("git", git_args, true)
 end
-
 
 ---Runs command and update git status
 ---@param cmd string
@@ -1718,7 +1682,7 @@ function GitStatus:run_command(cmd, args, refresh)
   end
 
   local command_id = utils.new_pid()
-  queue[#queue+1] = command_id
+  queue[#queue + 1] = command_id
 
   if queue[1] == command_id then
     return self:_run_single_command(cmd, args, refresh)
@@ -1726,7 +1690,7 @@ function GitStatus:run_command(cmd, args, refresh)
 
   local timer = uv.new_timer()
   if not timer then
-    error("[Fugit2] Can't create timer")
+    error "[Fugit2] Can't create timer"
   end
 
   vim.notify(string.format("[Fugit2] Enqueued command %s %s", cmd, args[1] or ""))
@@ -1753,7 +1717,6 @@ function GitStatus:run_command(cmd, args, refresh)
   end)
 end
 
-
 ---Runs single command and update git status
 ---@param cmd string
 ---@param args string[]
@@ -1762,14 +1725,11 @@ function GitStatus:_run_single_command(cmd, args, refresh)
   local bufnr = self.command_popup.bufnr
   local queue = self._states.command_queue
 
-  self._layout:update(NuiLayout.Box(
-    {
-      NuiLayout.Box(self.info_popup, { size = 6 }),
-      NuiLayout.Box(self.command_popup, { size = 6 }),
-      NuiLayout.Box(self._boxes.main_row, { dir = "row", grow = 1 })
-    },
-    { dir = "col" }
-  ))
+  self._layout:update(NuiLayout.Box({
+    NuiLayout.Box(self.info_popup, { size = 6 }),
+    NuiLayout.Box(self.command_popup, { size = 6 }),
+    NuiLayout.Box(self._boxes.main_row, { dir = "row", grow = 1 }),
+  }, { dir = "col" }))
 
   local cmd_line = "❯ " .. cmd .. " " .. table.concat(args, " ")
   local winid = self.command_popup.winid
@@ -1794,11 +1754,11 @@ function GitStatus:_run_single_command(cmd, args, refresh)
 
   local timer, tick = uv.new_timer(), 0
   if not timer then
-    error("[Fugit2] Can't create timer")
+    error "[Fugit2] Can't create timer"
     return
   end
 
-  local job = PlenaryJob:new({
+  local job = PlenaryJob:new {
     command = cmd,
     args = args,
     on_exit = vim.schedule_wrap(function(_, ret)
@@ -1809,10 +1769,7 @@ function GitStatus:_run_single_command(cmd, args, refresh)
       end
 
       if ret == 0 then
-        vim.notify(
-          string.format("[Fugit2] Command %s %s SUCCESS", cmd, args[1] or ""),
-          vim.log.levels.INFO
-        )
+        vim.notify(string.format("[Fugit2] Command %s %s SUCCESS", cmd, args[1] or ""), vim.log.levels.INFO)
         self:quit_command()
         if refresh then
           self:update()
@@ -1820,22 +1777,13 @@ function GitStatus:_run_single_command(cmd, args, refresh)
         end
       elseif ret == -3 then
         vim.api.nvim_buf_set_lines(bufnr, linenr, -1, true, { "CANCELLED" })
-        vim.notify(
-          string.format("[Fugit2] Command %s %s CANCELLED!", cmd, args[1] or ""),
-          vim.log.levels.ERROR
-        )
+        vim.notify(string.format("[Fugit2] Command %s %s CANCELLED!", cmd, args[1] or ""), vim.log.levels.ERROR)
       elseif ret == -5 then
         vim.api.nvim_buf_set_lines(bufnr, linenr, -1, true, { "TIMEOUT" })
-        vim.notify(
-          string.format("[Fugit2] Command %s %s TIMEOUT!", cmd, args[1] or ""),
-          vim.log.levels.ERROR
-        )
+        vim.notify(string.format("[Fugit2] Command %s %s TIMEOUT!", cmd, args[1] or ""), vim.log.levels.ERROR)
       else
         vim.api.nvim_buf_set_lines(bufnr, linenr, -1, true, { "FAILED " .. ret })
-        vim.notify(
-          string.format("[Fugit2] Command %s %s FAILED!", cmd, args[1] or ""),
-          vim.log.levels.ERROR
-        )
+        vim.notify(string.format("[Fugit2] Command %s %s FAILED!", cmd, args[1] or ""), vim.log.levels.ERROR)
       end
     end),
     on_stdout = function(_, data)
@@ -1848,7 +1796,7 @@ function GitStatus:_run_single_command(cmd, args, refresh)
             vim.api.nvim_win_set_cursor(winid, { i + 1, 0 })
           end
         end)
-      linenr = linenr + 1
+        linenr = linenr + 1
       end
     end,
     on_stderr = function(_, data)
@@ -1863,8 +1811,8 @@ function GitStatus:_run_single_command(cmd, args, refresh)
         end)
         linenr = linenr + 1
       end
-    end
-  })
+    end,
+  }
   self._states.job = job
   job:start()
 
@@ -1876,7 +1824,9 @@ function GitStatus:_run_single_command(cmd, args, refresh)
       timer:close()
 
       vim.schedule(function()
-        if not pcall(function() job:co_wait(200) end) then
+        if not pcall(function()
+          job:co_wait(200)
+        end) then
           job:shutdown(-5, utils.LINUX_SIGNALS.SIGTERM)
         end
       end)
@@ -1905,15 +1855,14 @@ function GitStatus:quit_command()
   self:focus_file()
 end
 
-
 local MENU_INITS = {
   [Menu.BRANCH] = GitStatus._init_branch_menu,
   [Menu.COMMIT] = GitStatus._init_commit_menu,
-  [Menu.DIFF]   = GitStatus._init_diff_menu,
-  [Menu.FETCH]  = GitStatus._init_fetch_menu,
-  [Menu.PULL]   = GitStatus._init_pull_menu,
-  [Menu.PUSH]   = GitStatus._init_push_menu,
-  [Menu.FORGE]  = GitStatus._init_forge_menu,
+  [Menu.DIFF] = GitStatus._init_diff_menu,
+  [Menu.FETCH] = GitStatus._init_fetch_menu,
+  [Menu.PULL] = GitStatus._init_pull_menu,
+  [Menu.PUSH] = GitStatus._init_push_menu,
+  [Menu.FORGE] = GitStatus._init_forge_menu,
 }
 
 ---Menu handlers factory
@@ -1934,7 +1883,6 @@ function GitStatus:_menu_handlers(menu_type)
   end
 end
 
-
 -- Setup keymap and event handlers
 function GitStatus:setup_handlers()
   local map_options = { noremap = true, nowait = true }
@@ -1948,16 +1896,16 @@ function GitStatus:setup_handlers()
   end
 
   -- exit
-  file_tree:map("n", {"q", "<esc>"}, exit_fn, map_options)
+  file_tree:map("n", { "q", "<esc>" }, exit_fn, map_options)
   file_tree:map("i", "<c-c>", exit_fn, map_options)
-  commit_log:map("n", {"q", "<esc>"}, exit_fn, map_options)
+  commit_log:map("n", { "q", "<esc>" }, exit_fn, map_options)
   file_tree:on(event.BufUnload, function()
     self.closed = true
   end)
   -- popup:on(event.BufLeave, exit_fn)
 
   -- refresh
-  file_tree:map("n", "r", function ()
+  file_tree:map("n", "r", function()
     self:update()
     self:render()
   end, map_options)
@@ -2067,7 +2015,7 @@ function GitStatus:setup_handlers()
   end, map_options)
 
   ---- Enter: collapse expand toggle, move to file buffer and diff
-  file_tree:map("n", "<cr>", function ()
+  file_tree:map("n", "<cr>", function()
     local node = file_tree.tree:get_node()
     if node and node:has_children() then
       if node:is_expanded() then
@@ -2107,14 +2055,11 @@ function GitStatus:setup_handlers()
   file_tree:map("v", "u", self:index_add_reset_handler(true, false, true), map_options)
 
   ---- Write index
-  file_tree:map("n", "w",
-    function ()
-      if self.index:write() == 0 then
-        vim.notify("[Fugit2] Index saved", vim.log.levels.INFO)
-      end
-    end,
-    map_options
-  )
+  file_tree:map("n", "w", function()
+    if self.index:write() == 0 then
+      vim.notify("[Fugit2] Index saved", vim.log.levels.INFO)
+    end
+  end, map_options)
 
   -- Commit Menu
   file_tree:map("n", "c", self:_menu_handlers(Menu.COMMIT), map_options)
@@ -2130,10 +2075,7 @@ function GitStatus:setup_handlers()
   self.input_popup:map("i", "<c-c>", "<esc>q", { nowait = true })
 
   local input_enter_fn = function()
-    local message = vim.trim(table.concat(
-      vim.api.nvim_buf_get_lines(self.input_popup.bufnr, 0, -1, true),
-      "\n"
-    ))
+    local message = vim.trim(table.concat(vim.api.nvim_buf_get_lines(self.input_popup.bufnr, 0, -1, true), "\n"))
     if states.commit_mode == CommitMode.CREATE then
       self:_git_create_commit(message)
     elseif states.commit_mode == CommitMode.REWORD then
@@ -2168,6 +2110,5 @@ function GitStatus:setup_handlers()
   -- Forge menu
   file_tree:map("n", "N", self:_menu_handlers(Menu.FORGE), map_options)
 end
-
 
 return GitStatus

@@ -9,7 +9,6 @@ local config = {
   opt = "Hello!",
 }
 
-
 ---@class Fugit2Module
 local M = {}
 
@@ -18,7 +17,6 @@ M.namespace = 0
 
 ---@type Config
 M.config = config
-
 
 ---@param args Config?
 -- Usually configurations can be merged, accepting outside params and
@@ -29,7 +27,7 @@ M.setup = function(args)
   -- Validate
 
   if M.namespace == 0 then
-    M.namespace = vim.api.nvim_create_namespace("Fugit2")
+    M.namespace = vim.api.nvim_create_namespace "Fugit2"
     colors.set_hl(0)
   end
 end
@@ -52,10 +50,7 @@ local function open_repository()
         repos[repo:repo_path()] = repo
       end
     else
-      vim.notify(
-        string.format("Can't open git directory at %s, error code: %d", cwd, err),
-        vim.log.levels.WARN
-      )
+      vim.notify(string.format("Can't open git directory at %s, error code: %d", cwd, err), vim.log.levels.WARN)
       return nil
     end
   end

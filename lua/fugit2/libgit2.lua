@@ -5,7 +5,7 @@ local ffi = require "ffi"
 -- =====================
 
 --- Load libgit2 via ffi
-ffi.cdef[[
+ffi.cdef [[
   typedef uint64_t git_object_size_t;
   typedef int64_t git_off_t;
   typedef int64_t git_time_t;
@@ -520,168 +520,165 @@ ffi.cdef[[
   void git_rebase_free(git_rebase *rebase);
 ]]
 
-
 ---@class Libgit2Module
 ---@field C ffi.namespace*
 local M = {
   C = ffi.load "libgit2",
 }
 
-M.char_pointer = ffi.typeof("char*")
-M.char_array = ffi.typeof("char[?]")
-M.const_char_pointer_array = ffi.typeof("const char *[?]")
-M.unsigned_int_array = ffi.typeof("unsigned int[?]")
-M.size_t_array = ffi.typeof("size_t[?]")
-M.int64_array = ffi.typeof("int64_t[?]")
-M.int_array = ffi.typeof("int[?]")
-
+M.char_pointer = ffi.typeof "char*"
+M.char_array = ffi.typeof "char[?]"
+M.const_char_pointer_array = ffi.typeof "const char *[?]"
+M.unsigned_int_array = ffi.typeof "unsigned int[?]"
+M.size_t_array = ffi.typeof "size_t[?]"
+M.int64_array = ffi.typeof "int64_t[?]"
+M.int_array = ffi.typeof "int[?]"
 
 ---@type ffi.ctype* git_buf[1]
-M.git_buf = ffi.typeof("git_buf[1]")
+M.git_buf = ffi.typeof "git_buf[1]"
 
 ---@type ffi.ctype* git_config*[1]
-M.git_config_double_pointer = ffi.typeof("git_config*[1]")
+M.git_config_double_pointer = ffi.typeof "git_config*[1]"
 ---@type ffi.ctype* git_config* pointer
-M.git_config_pointer = ffi.typeof("git_config*")
+M.git_config_pointer = ffi.typeof "git_config*"
 
 ---@type ffi.ctype* git_config_entry*[1]
-M.git_config_entry_double_pointer = ffi.typeof("git_config_entry*[1]")
+M.git_config_entry_double_pointer = ffi.typeof "git_config_entry*[1]"
 
 ---@type ffi.ctype* git_config_iterator*[1]
-M.git_config_iterator_double_pointer = ffi.typeof("git_config_iterator*[1]")
+M.git_config_iterator_double_pointer = ffi.typeof "git_config_iterator*[1]"
 
 ---@type ffi.ctype* git_oid[1]
-M.git_oid = ffi.typeof("git_oid[1]")
+M.git_oid = ffi.typeof "git_oid[1]"
 ---@type ffi.ctype* git_oid*
-M.git_oid_pointer = ffi.typeof("git_oid*")
+M.git_oid_pointer = ffi.typeof "git_oid*"
 
 ---@type ffi.ctype* git_strarray_readonly[1]
-M.git_strarray_readonly = ffi.typeof("git_strarray_readonly[1]")
+M.git_strarray_readonly = ffi.typeof "git_strarray_readonly[1]"
 ---@type ffi.ctype* git_strarray[1]
-M.git_strarray = ffi.typeof("git_strarray[1]")
+M.git_strarray = ffi.typeof "git_strarray[1]"
 
 ---@type ffi.ctype* git_annotated_commit **
-M.git_annotated_commit_double_pointer = ffi.typeof("git_annotated_commit*[1]")
+M.git_annotated_commit_double_pointer = ffi.typeof "git_annotated_commit*[1]"
 ---@type ffi.ctype* git_annotated_commit *
-M.git_annotated_commit_pointer = ffi.typeof("git_annotated_commit*")
+M.git_annotated_commit_pointer = ffi.typeof "git_annotated_commit*"
 
 ---@type ffi.ctype* git_object **
-M.git_object_double_pointer = ffi.typeof("git_object*[1]")
+M.git_object_double_pointer = ffi.typeof "git_object*[1]"
 ---@type ffi.ctype* git_object *
-M.git_object_pointer = ffi.typeof("git_object*")
+M.git_object_pointer = ffi.typeof "git_object*"
 
 ---@type ffi.ctype* git_commit **
-M.git_commit_double_pointer = ffi.typeof("git_commit*[1]")
+M.git_commit_double_pointer = ffi.typeof "git_commit*[1]"
 ---@type ffi.ctype* git_commit *
-M.git_commit_pointer = ffi.typeof("git_commit*")
+M.git_commit_pointer = ffi.typeof "git_commit*"
 
 ---@type ffi.ctype* git_blob **
-M.git_blob_double_pointer = ffi.typeof("git_blob*[1]")
+M.git_blob_double_pointer = ffi.typeof "git_blob*[1]"
 ---@type ffi.ctype* git_blob *
-M.git_blob_pointer = ffi.typeof("git_blob*")
+M.git_blob_pointer = ffi.typeof "git_blob*"
 
 ---@type ffi.ctype* git_tree **
-M.git_tree_double_pointer = ffi.typeof("git_tree*[1]")
+M.git_tree_double_pointer = ffi.typeof "git_tree*[1]"
 ---@type ffi.ctype* git_tree *
-M.git_tree_pointer = ffi.typeof("git_tree*")
+M.git_tree_pointer = ffi.typeof "git_tree*"
 
 ---@type ffi.ctype* git_tree_entry*[1]
-M.git_tree_entry_double_pointer = ffi.typeof("git_tree_entry*[1]")
+M.git_tree_entry_double_pointer = ffi.typeof "git_tree_entry*[1]"
 ---@type ffi.ctype* git_tree_entry*
-M.git_tree_entry_pointer = ffi.typeof("git_tree_entry*")
+M.git_tree_entry_pointer = ffi.typeof "git_tree_entry*"
 
 ---@type ffi.ctype* git_rebase_options[1]
-M.git_rebase_options = ffi.typeof("git_rebase_options[1]")
+M.git_rebase_options = ffi.typeof "git_rebase_options[1]"
 
 ---@type ffi.ctype* git_apply_options[1]
-M.git_apply_options = ffi.typeof("git_apply_options[1]")
+M.git_apply_options = ffi.typeof "git_apply_options[1]"
 
 ---@type ffi.ctype* struct git_diff **
-M.git_diff_double_pointer = ffi.typeof("git_diff*[1]")
+M.git_diff_double_pointer = ffi.typeof "git_diff*[1]"
 ---@type ffi.ctype* struct git_diff *
-M.git_diff_pointer = ffi.typeof("git_diff*")
+M.git_diff_pointer = ffi.typeof "git_diff*"
 
 ---@type ffi.ctype* struct git_diff_options [1]
-M.git_diff_options = ffi.typeof("git_diff_options[1]")
+M.git_diff_options = ffi.typeof "git_diff_options[1]"
 
 ---@type ffi.ctype* struct git_diff_find_options [1]
-M.git_diff_find_options = ffi.typeof("git_diff_find_options[1]")
+M.git_diff_find_options = ffi.typeof "git_diff_find_options[1]"
 
 ---@type ffi.ctype* struct git_diff_hunk *[1]
-M.git_diff_hunk_double_pointer = ffi.typeof("const git_diff_hunk*[1]")
+M.git_diff_hunk_double_pointer = ffi.typeof "const git_diff_hunk*[1]"
 
 ---@type ffi.ctype* const struct git_diff_line **out
-M.git_diff_line_double_pointer = ffi.typeof("const git_diff_line*[1]")
+M.git_diff_line_double_pointer = ffi.typeof "const git_diff_line*[1]"
 
 ---@type ffi.ctype* struct git_diff_stats *[1]
-M.git_diff_stats_double_pointer = ffi.typeof("git_diff_stats*[1]")
+M.git_diff_stats_double_pointer = ffi.typeof "git_diff_stats*[1]"
 
 ---@type ffi.ctype* struct git_patch **
-M.git_patch_double_pointer = ffi.typeof("git_patch*[1]")
+M.git_patch_double_pointer = ffi.typeof "git_patch*[1]"
 ---@type ffi.ctype* struct git_patch *
-M.git_patch_pointer = ffi.typeof("git_patch*")
+M.git_patch_pointer = ffi.typeof "git_patch*"
 
 ---@type ffi.ctype* git_rebase **
-M.git_rebase_double_pointer = ffi.typeof("git_rebase*[1]")
+M.git_rebase_double_pointer = ffi.typeof "git_rebase*[1]"
 ---@type ffi.ctype* git_rebase *
-M.git_rebase_pointer = ffi.typeof("git_rebase*")
+M.git_rebase_pointer = ffi.typeof "git_rebase*"
 
 ---@type ffi.ctype* git_rebase_operation_double_pointer
-M.git_rebase_operation_double_pointer = ffi.typeof("git_rebase_operation*[1]")
+M.git_rebase_operation_double_pointer = ffi.typeof "git_rebase_operation*[1]"
 ---@type ffi.ctype* git_rebase_operation struct pointer
-M.git_rebase_operation_pointer = ffi.typeof("git_rebase_operation*")
+M.git_rebase_operation_pointer = ffi.typeof "git_rebase_operation*"
 
 ---@type ffi.ctype* struct git_repository**
-M.git_repository_double_pointer = ffi.typeof("git_repository*[1]")
+M.git_repository_double_pointer = ffi.typeof "git_repository*[1]"
 ---@type ffi.ctype* struct git_repository*
-M.git_repository_pointer = ffi.typeof("git_repository*")
+M.git_repository_pointer = ffi.typeof "git_repository*"
 
 ---@type ffi.ctype* struct git_reference*[1]
-M.git_reference_double_pointer = ffi.typeof("git_reference*[1]")
+M.git_reference_double_pointer = ffi.typeof "git_reference*[1]"
 
 ---@type ffi.ctype* struct git_reference*
-M.git_reference_pointer = ffi.typeof("git_reference*")
+M.git_reference_pointer = ffi.typeof "git_reference*"
 
 ---@type ffi.ctype* struct git_remote**
-M.git_remote_double_pointer = ffi.typeof("git_remote*[1]")
+M.git_remote_double_pointer = ffi.typeof "git_remote*[1]"
 ---@type ffi.ctype* struct git_remote*
-M.git_remote_pointer = ffi.typeof("git_remote*")
+M.git_remote_pointer = ffi.typeof "git_remote*"
 
 ---@type ffi.ctype* struct git_revwalk**
-M.git_revwalk_double_pointer = ffi.typeof("git_revwalk*[1]")
+M.git_revwalk_double_pointer = ffi.typeof "git_revwalk*[1]"
 
 ---@type ffi.ctype* struct git_revwalk*
-M.git_revwalk_pointer = ffi.typeof("git_revwalk*")
+M.git_revwalk_pointer = ffi.typeof "git_revwalk*"
 
 ---@type ffi.ctype* git_signature **
-M.git_signature_double_pointer = ffi.typeof("git_signature*[1]")
+M.git_signature_double_pointer = ffi.typeof "git_signature*[1]"
 ---@type ffi.ctype* git_signature *
-M.git_signature_pointer = ffi.typeof("git_signature*")
+M.git_signature_pointer = ffi.typeof "git_signature*"
 
 ---@type ffi.ctype* git_status_options[1]
-M.git_status_options = ffi.typeof("git_status_options[1]")
+M.git_status_options = ffi.typeof "git_status_options[1]"
 
 ---@type ffi.ctype* struct git_status_list*[1]
-M.git_status_list_double_pointer = ffi.typeof("git_status_list*[1]")
+M.git_status_list_double_pointer = ffi.typeof "git_status_list*[1]"
 
 ---@type ffi.ctype* git_tag*[1]
-M.git_tag_double_pointer = ffi.typeof("git_tag*[1]")
+M.git_tag_double_pointer = ffi.typeof "git_tag*[1]"
 ---@type ffi.ctype* git_tag*
-M.git_tag_pointer = ffi.typeof("git_tag*")
+M.git_tag_pointer = ffi.typeof "git_tag*"
 
 ---@type ffi.ctype* git_index**
-M.git_index_double_pointer = ffi.typeof("git_index*[1]")
+M.git_index_double_pointer = ffi.typeof "git_index*[1]"
 ---@type ffi.ctype* git_index*
-M.git_index_pointer = ffi.typeof("git_index*")
+M.git_index_pointer = ffi.typeof "git_index*"
 
 ---@type ffi.ctype* git_index_iterator**
-M.git_index_iterator_double_pointer = ffi.typeof("git_index_iterator*[1]")
+M.git_index_iterator_double_pointer = ffi.typeof "git_index_iterator*[1]"
 ---@type ffi.ctype* git_index_entry**
-M.git_index_entry_double_pointer = ffi.typeof("git_index_entry*[1]")
+M.git_index_entry_double_pointer = ffi.typeof "git_index_entry*[1]"
 
 ---@type ffi.ctype* struct git_branch_iterator *[1]
-M.git_branch_iterator_double_pointer = ffi.typeof("git_branch_iterator *[1]")
-
+M.git_branch_iterator_double_pointer = ffi.typeof "git_branch_iterator *[1]"
 
 -- ==========================
 -- | libgit2 struct version |
@@ -706,11 +703,10 @@ M.GIT_REBASE_NO_OPERATION = _UI64_MAX
 -- | libgit2 enum |
 -- ================
 
-
 local POW = {
-  2,  -- 1 << 1
-  4,  -- 1 << 2
-  8,  -- 1 << 3
+  2, -- 1 << 1
+  4, -- 1 << 2
+  8, -- 1 << 3
   16, -- 1 << 4
   32, -- 1 << 5
   64, -- 1 << 6
@@ -742,66 +738,65 @@ local POW = {
   0x100000000, -- 1 << 32
 }
 
-
 ---@enum GIT_OPT
 M.GIT_OPT = {
-	GET_MWINDOW_SIZE                    = 0,
-	SET_MWINDOW_SIZE                    = 1,
-	GET_MWINDOW_MAPPED_LIMIT            = 2,
-	SET_MWINDOW_MAPPED_LIMIT            = 3,
-	GET_SEARCH_PATH                     = 4,
-	SET_SEARCH_PATH                     = 5,
-	SET_CACHE_OBJECT_LIMIT              = 6,
-	SET_CACHE_MAX_SIZE                  = 7,
-	ENABLE_CACHING                      = 8,
-	GET_CACHED_MEMORY                   = 9,
-	GET_TEMPLATE_PATH                   = 10,
-	SET_TEMPLATE_PATH                   = 11,
-	SET_SSL_CERT_LOCATIONS              = 12,
-	SET_USER_AGENT                      = 13,
-	ENABLE_STRICT_OBJECT_CREATION       = 14,
-	ENABLE_STRICT_SYMBOLIC_REF_CREATION = 15,
-	SET_SSL_CIPHERS                     = 16,
-	GET_USER_AGENT                      = 17,
-	ENABLE_OFS_DELTA                    = 18,
-	ENABLE_FSYNC_GITDIR                 = 19,
-	GET_WINDOWS_SHAREMODE               = 20,
-	SET_WINDOWS_SHAREMODE               = 21,
-	ENABLE_STRICT_HASH_VERIFICATION     = 22,
-	SET_ALLOCATOR                       = 23,
-	ENABLE_UNSAVED_INDEX_SAFETY         = 24,
-	GET_PACK_MAX_OBJECTS                = 25,
-	SET_PACK_MAX_OBJECTS                = 26,
-	DISABLE_PACK_KEEP_FILE_CHECKS       = 27,
-	ENABLE_HTTP_EXPECT_CONTINUE         = 28,
-	GET_MWINDOW_FILE_LIMIT              = 29,
-	SET_MWINDOW_FILE_LIMIT              = 30,
-	SET_ODB_PACKED_PRIORITY             = 31,
-	SET_ODB_LOOSE_PRIORITY              = 32,
-	GET_EXTENSIONS                      = 33,
-	SET_EXTENSIONS                      = 34,
-	GET_OWNER_VALIDATION                = 35,
-	SET_OWNER_VALIDATION                = 36,
-	GET_HOMEDIR                         = 37,
-	SET_HOMEDIR                         = 38,
-	SET_SERVER_CONNECT_TIMEOUT          = 39,
-	GET_SERVER_CONNECT_TIMEOUT          = 40,
-	SET_SERVER_TIMEOUT                  = 41,
-	GET_SERVER_TIMEOUT                  = 42,
+  GET_MWINDOW_SIZE = 0,
+  SET_MWINDOW_SIZE = 1,
+  GET_MWINDOW_MAPPED_LIMIT = 2,
+  SET_MWINDOW_MAPPED_LIMIT = 3,
+  GET_SEARCH_PATH = 4,
+  SET_SEARCH_PATH = 5,
+  SET_CACHE_OBJECT_LIMIT = 6,
+  SET_CACHE_MAX_SIZE = 7,
+  ENABLE_CACHING = 8,
+  GET_CACHED_MEMORY = 9,
+  GET_TEMPLATE_PATH = 10,
+  SET_TEMPLATE_PATH = 11,
+  SET_SSL_CERT_LOCATIONS = 12,
+  SET_USER_AGENT = 13,
+  ENABLE_STRICT_OBJECT_CREATION = 14,
+  ENABLE_STRICT_SYMBOLIC_REF_CREATION = 15,
+  SET_SSL_CIPHERS = 16,
+  GET_USER_AGENT = 17,
+  ENABLE_OFS_DELTA = 18,
+  ENABLE_FSYNC_GITDIR = 19,
+  GET_WINDOWS_SHAREMODE = 20,
+  SET_WINDOWS_SHAREMODE = 21,
+  ENABLE_STRICT_HASH_VERIFICATION = 22,
+  SET_ALLOCATOR = 23,
+  ENABLE_UNSAVED_INDEX_SAFETY = 24,
+  GET_PACK_MAX_OBJECTS = 25,
+  SET_PACK_MAX_OBJECTS = 26,
+  DISABLE_PACK_KEEP_FILE_CHECKS = 27,
+  ENABLE_HTTP_EXPECT_CONTINUE = 28,
+  GET_MWINDOW_FILE_LIMIT = 29,
+  SET_MWINDOW_FILE_LIMIT = 30,
+  SET_ODB_PACKED_PRIORITY = 31,
+  SET_ODB_LOOSE_PRIORITY = 32,
+  GET_EXTENSIONS = 33,
+  SET_EXTENSIONS = 34,
+  GET_OWNER_VALIDATION = 35,
+  SET_OWNER_VALIDATION = 36,
+  GET_HOMEDIR = 37,
+  SET_HOMEDIR = 38,
+  SET_SERVER_CONNECT_TIMEOUT = 39,
+  GET_SERVER_CONNECT_TIMEOUT = 40,
+  SET_SERVER_TIMEOUT = 41,
+  GET_SERVER_TIMEOUT = 42,
 }
 
 ---@enum GIT_APPLY_LOCATION
 M.GIT_APPLY_LOCATION = {
   WORKDIR = 0,
-  INDEX   = 1,
-  BOTH    = 2,
+  INDEX = 1,
+  BOTH = 2,
 }
 
 ---@enum GIT_BRANCH
 M.GIT_BRANCH = {
-  LOCAL  = 1,
+  LOCAL = 1,
   REMOTE = 2,
-  ALL    = 3, -- GIT_BRANCH_LOCAL|GIT_BRANCH_REMOTE,
+  ALL = 3, -- GIT_BRANCH_LOCAL|GIT_BRANCH_REMOTE,
 }
 
 ---@enum GIT_CONFIG_LEVEL
@@ -822,374 +817,388 @@ M.GIT_CONFIG_LEVEL = {
   APP = 6,
   -- Represents the highest level available config file (i.e. the most
   -- specific config file available that actually is loaded)
-  HIGHEST_LEVEL = -1
+  HIGHEST_LEVEL = -1,
 }
 ---@enum GIT_ERROR
 M.GIT_ERROR = {
-  GIT_OK              =  0, -- No error
+  GIT_OK = 0, -- No error
 
-  GIT_ERROR           = -1, -- Generic error
-  GIT_ENOTFOUND       = -3, -- Requested object could not be found
-  GIT_EEXISTS         = -4, -- Object exists preventing operation
-  GIT_EAMBIGUOUS      = -5, -- More than one object matches
-  GIT_EBUFS           = -6, -- Output buffer too short to hold data
+  GIT_ERROR = -1, -- Generic error
+  GIT_ENOTFOUND = -3, -- Requested object could not be found
+  GIT_EEXISTS = -4, -- Object exists preventing operation
+  GIT_EAMBIGUOUS = -5, -- More than one object matches
+  GIT_EBUFS = -6, -- Output buffer too short to hold data
   --[[
   GIT_EUSER is a special error that is never generated by libgit2
   code.  You can return it from a callback (e.g to stop an iteration)
   to know that it was generated by the callback and not by libgit2.
-  ]]--
-  GIT_EUSER           = -7,
+  ]]
+  --
+  GIT_EUSER = -7,
 
-  GIT_EBAREREPO       =  -8, -- Operation not allowed on bare repository
-  GIT_EUNBORNBRANCH   =  -9, -- HEAD refers to branch with no commits
-  GIT_EUNMERGED       = -10, -- Merge in progress prevented operation
+  GIT_EBAREREPO = -8, -- Operation not allowed on bare repository
+  GIT_EUNBORNBRANCH = -9, -- HEAD refers to branch with no commits
+  GIT_EUNMERGED = -10, -- Merge in progress prevented operation
   GIT_ENONFASTFORWARD = -11, -- Reference was not fast-forwardable
-  GIT_EINVALIDSPEC    = -12, -- Name/ref spec was not in a valid format
-  GIT_ECONFLICT       = -13, -- Checkout conflicts prevented operation
-  GIT_ELOCKED         = -14, -- Lock file prevented operation
-  GIT_EMODIFIED       = -15, -- Reference value does not match expected
-  GIT_EAUTH           = -16, -- Authentication error
-  GIT_ECERTIFICATE    = -17, -- Server certificate is invalid
-  GIT_EAPPLIED        = -18, -- Patch/merge has already been applied
-  GIT_EPEEL           = -19, -- The requested peel operation is not possible
-  GIT_EEOF            = -20, -- Unexpected EOF
-  GIT_EINVALID        = -21, -- Invalid operation or input
-  GIT_EUNCOMMITTED    = -22, -- Uncommitted changes in index prevented operation
-  GIT_EDIRECTORY      = -23, -- The operation is not valid for a directory
-  GIT_EMERGECONFLICT  = -24, -- A merge conflict exists and cannot continue
-  GIT_PASSTHROUGH     = -30, -- A user-configured callback refused to act
-  GIT_ITEROVER        = -31, -- Signals end of iteration with iterator
-  GIT_RETRY           = -32, -- Internal only
-  GIT_EMISMATCH       = -33, -- Hashsum mismatch in object
-  GIT_EINDEXDIRTY     = -34, -- Unsaved changes in the index would be overwritten
-  GIT_EAPPLYFAIL      = -35, -- Patch application failed
-  GIT_EOWNER          = -36, -- The object is not owned by the current user
-  GIT_TIMEOUT         = -37	 -- The operation timed out
+  GIT_EINVALIDSPEC = -12, -- Name/ref spec was not in a valid format
+  GIT_ECONFLICT = -13, -- Checkout conflicts prevented operation
+  GIT_ELOCKED = -14, -- Lock file prevented operation
+  GIT_EMODIFIED = -15, -- Reference value does not match expected
+  GIT_EAUTH = -16, -- Authentication error
+  GIT_ECERTIFICATE = -17, -- Server certificate is invalid
+  GIT_EAPPLIED = -18, -- Patch/merge has already been applied
+  GIT_EPEEL = -19, -- The requested peel operation is not possible
+  GIT_EEOF = -20, -- Unexpected EOF
+  GIT_EINVALID = -21, -- Invalid operation or input
+  GIT_EUNCOMMITTED = -22, -- Uncommitted changes in index prevented operation
+  GIT_EDIRECTORY = -23, -- The operation is not valid for a directory
+  GIT_EMERGECONFLICT = -24, -- A merge conflict exists and cannot continue
+  GIT_PASSTHROUGH = -30, -- A user-configured callback refused to act
+  GIT_ITEROVER = -31, -- Signals end of iteration with iterator
+  GIT_RETRY = -32, -- Internal only
+  GIT_EMISMATCH = -33, -- Hashsum mismatch in object
+  GIT_EINDEXDIRTY = -34, -- Unsaved changes in the index would be overwritten
+  GIT_EAPPLYFAIL = -35, -- Patch application failed
+  GIT_EOWNER = -36, -- The object is not owned by the current user
+  GIT_TIMEOUT = -37, -- The operation timed out
 }
 
 ---@enum GIT_INDEX_STAGE
 M.GIT_INDEX_STAGE = {
-  ANY      = -1,-- Match any index stage.
-  NORMAL   = 0, -- A normal staged file in the index.
+  ANY = -1, -- Match any index stage.
+  NORMAL = 0, -- A normal staged file in the index.
   ANCESTOR = 1, -- The ancestor side of a conflict.
-  OURS     = 2, -- The "ours" side of a conflict.
-  THEIRS   = 3, -- The "theirs" side of a conflict.
+  OURS = 2, -- The "ours" side of a conflict.
+  THEIRS = 3, -- The "theirs" side of a conflict.
 }
 
 ---@enum GIT_REFERENCE
 M.GIT_REFERENCE = {
-  INVALID  = 0, -- Invalid reference
-  DIRECT   = 1, -- A reference that points at an object id
+  INVALID = 0, -- Invalid reference
+  DIRECT = 1, -- A reference that points at an object id
   SYMBOLIC = 2, -- A reference that points at another reference
-  ALL      = 3, -- Both GIT_REFERENCE_DIRECT | GIT_REFERENCE_SYMBOLIC
+  ALL = 3, -- Both GIT_REFERENCE_DIRECT | GIT_REFERENCE_SYMBOLIC
 }
 
 ---@enum GIT_OBJECT
 M.GIT_OBJECT = {
-	ANY       = -2, -- Object can be any of the following.
-	INVALID   = -1, -- Object is invalid.
-	COMMIT    = 1, -- A commit object.
-	TREE      = 2, -- A tree (directory listing) object.
-	BLOB      = 3, -- A file revision object.
-	TAG       = 4, -- An annotated tag object.
-	OFS_DELTA = 6, -- A delta, base is given by an offset.
-	REF_DELTA = 7  -- A delta, base is given by object id.
+  ANY = -2, -- Object can be any of the following.
+  INVALID = -1, -- Object is invalid.
+  COMMIT = 1, -- A commit object.
+  TREE = 2, -- A tree (directory listing) object.
+  BLOB = 3, -- A file revision object.
+  TAG = 4, -- An annotated tag object.
+  OFS_DELTA = 6, -- A delta, base is given by an offset.
+  REF_DELTA = 7, -- A delta, base is given by object id.
 }
 
 ---@enum GIT_SORT
 M.GIT_SORT = {
-  NONE        = 0, -- 0, default method from `git`: reverse chronological order
+  NONE = 0, -- 0, default method from `git`: reverse chronological order
   TOPOLOGICAL = 1, -- 1 << 0, Sort the repository contents in topological order
-  TIME        = 2, -- 1 << 1, Sort the repository contents by commit time.
-  REVERSE     = 4, -- 1 << 2, Iterate through the repository contents in reverse order.
+  TIME = 2, -- 1 << 1, Sort the repository contents by commit time.
+  REVERSE = 4, -- 1 << 2, Iterate through the repository contents in reverse order.
 }
 
 ---@enum GIT_STATUS
 M.GIT_STATUS = {
-  CURRENT          = 0,
+  CURRENT = 0,
 
-  INDEX_NEW        = 1,      -- 1u << 0
-  INDEX_MODIFIED   = POW[1], -- 1u << 1
-  INDEX_DELETED    = POW[2], -- 1u << 2
-  INDEX_RENAMED    = POW[3], -- 1u << 3
+  INDEX_NEW = 1, -- 1u << 0
+  INDEX_MODIFIED = POW[1], -- 1u << 1
+  INDEX_DELETED = POW[2], -- 1u << 2
+  INDEX_RENAMED = POW[3], -- 1u << 3
   INDEX_TYPECHANGE = POW[4], -- 1u << 4
 
-  WT_NEW           = POW[7],  -- 1u << 7
-  WT_MODIFIED      = POW[8],  -- 1u << 8
-  WT_DELETED       = POW[9],  -- 1u << 9
-  WT_TYPECHANGE    = POW[10], -- 1u << 10
-  WT_RENAMED       = POW[11], -- 1u << 11
-  WT_UNREADABLE    = POW[12], -- 1u << 12
+  WT_NEW = POW[7], -- 1u << 7
+  WT_MODIFIED = POW[8], -- 1u << 8
+  WT_DELETED = POW[9], -- 1u << 9
+  WT_TYPECHANGE = POW[10], -- 1u << 10
+  WT_RENAMED = POW[11], -- 1u << 11
+  WT_UNREADABLE = POW[12], -- 1u << 12
 
-  IGNORED          = POW[14], -- 1u << 14
-  CONFLICTED       = POW[15], -- 1u << 15
+  IGNORED = POW[14], -- 1u << 14
+  CONFLICTED = POW[15], -- 1u << 15
 }
 
 ---@enum GIT_STATUS_SHOW
 M.GIT_STATUS_SHOW = {
   INDEX_AND_WORKDIR = 0,
-	INDEX_ONLY        = 1,
-	WORKDIR_ONLY      = 2
+  INDEX_ONLY = 1,
+  WORKDIR_ONLY = 2,
 }
 
 ---@enum GIT_STATUS_OPT
 M.GIT_STATUS_OPT = {
-	INCLUDE_UNTRACKED               = 1,       -- (1u << 0),
-	INCLUDE_IGNORED                 = POW[1],  -- (1u << 1),
-	INCLUDE_UNMODIFIED              = POW[2],  -- (1u << 2),
-	EXCLUDE_SUBMODULES              = POW[3],  -- (1u << 3),
-	RECURSE_UNTRACKED_DIRS          = POW[4],  -- (1u << 4),
-	DISABLE_PATHSPEC_MATCH          = POW[5],  -- (1u << 5),
-	RECURSE_IGNORED_DIRS            = POW[6],  -- (1u << 6),
-	RENAMES_HEAD_TO_INDEX           = POW[7],  -- (1u << 7),
-	RENAMES_INDEX_TO_WORKDIR        = POW[8],  -- (1u << 8),
-	SORT_CASE_SENSITIVELY           = POW[9],  -- (1u << 9),
-	SORT_CASE_INSENSITIVELY         = POW[10], -- (1u << 10),
-	RENAMES_FROM_REWRITES           = POW[11], -- (1u << 11),
-	NO_REFRESH                      = POW[12], -- (1u << 12),
-	UPDATE_INDEX                    = POW[13], -- (1u << 13),
-	INCLUDE_UNREADABLE              = POW[14], -- (1u << 14),
-	INCLUDE_UNREADABLE_AS_UNTRACKED = POW[15], -- (1u << 15)
+  INCLUDE_UNTRACKED = 1, -- (1u << 0),
+  INCLUDE_IGNORED = POW[1], -- (1u << 1),
+  INCLUDE_UNMODIFIED = POW[2], -- (1u << 2),
+  EXCLUDE_SUBMODULES = POW[3], -- (1u << 3),
+  RECURSE_UNTRACKED_DIRS = POW[4], -- (1u << 4),
+  DISABLE_PATHSPEC_MATCH = POW[5], -- (1u << 5),
+  RECURSE_IGNORED_DIRS = POW[6], -- (1u << 6),
+  RENAMES_HEAD_TO_INDEX = POW[7], -- (1u << 7),
+  RENAMES_INDEX_TO_WORKDIR = POW[8], -- (1u << 8),
+  SORT_CASE_SENSITIVELY = POW[9], -- (1u << 9),
+  SORT_CASE_INSENSITIVELY = POW[10], -- (1u << 10),
+  RENAMES_FROM_REWRITES = POW[11], -- (1u << 11),
+  NO_REFRESH = POW[12], -- (1u << 12),
+  UPDATE_INDEX = POW[13], -- (1u << 13),
+  INCLUDE_UNREADABLE = POW[14], -- (1u << 14),
+  INCLUDE_UNREADABLE_AS_UNTRACKED = POW[15], -- (1u << 15)
 }
 
 ---@enum GIT_DELTA
 M.GIT_DELTA = {
-  UNMODIFIED = 0,  -- no changes
-	ADDED      = 1,	 -- entry does not exist in old version
-	DELETED    = 2,	 -- entry does not exist in new version
-	MODIFIED   = 3,  -- entry content changed between old and new
-	RENAMED    = 4,  -- entry was renamed between old and new
-	COPIED     = 5,  -- entry was copied from another old entry
-	IGNORED    = 6,  -- entry is ignored item in workdir
-	UNTRACKED  = 7,  -- entry is untracked item in workdir
-	TYPECHANGE = 8,  -- type of entry changed between old and new
-	UNREADABLE = 9,  -- entry is unreadable
-	CONFLICTED = 10  -- entry in the index is conflicted
+  UNMODIFIED = 0, -- no changes
+  ADDED = 1, -- entry does not exist in old version
+  DELETED = 2, -- entry does not exist in new version
+  MODIFIED = 3, -- entry content changed between old and new
+  RENAMED = 4, -- entry was renamed between old and new
+  COPIED = 5, -- entry was copied from another old entry
+  IGNORED = 6, -- entry is ignored item in workdir
+  UNTRACKED = 7, -- entry is untracked item in workdir
+  TYPECHANGE = 8, -- type of entry changed between old and new
+  UNREADABLE = 9, -- entry is unreadable
+  CONFLICTED = 10, -- entry in the index is conflicted
 }
 
 ---@enum GIT_REPOSITORY_OPEN
 M.GIT_REPOSITORY_OPEN = {
   NO_SEARCH = 1,
 
-	--  Unless this flag is set, open will not continue searching across
-	-- filesystem boundaries (i.e. when `st_dev` changes from the `stat`
-	-- system call).  For example, searching in a user's home directory at
-	-- "/home/user/source/" will not return "/.git/" as the found repo if
-	-- "/" is a different filesystem than "/home".
-  CROSS_FS  = 2,
+  --  Unless this flag is set, open will not continue searching across
+  -- filesystem boundaries (i.e. when `st_dev` changes from the `stat`
+  -- system call).  For example, searching in a user's home directory at
+  -- "/home/user/source/" will not return "/.git/" as the found repo if
+  -- "/" is a different filesystem than "/home".
+  CROSS_FS = 2,
 
-	-- Open repository as a bare repo regardless of core.bare config, and
-	-- defer loading config file for faster setup.
-	-- Unlike `git_repository_open_bare`, this can follow gitlinks.
-  BARE      = 4,
+  -- Open repository as a bare repo regardless of core.bare config, and
+  -- defer loading config file for faster setup.
+  -- Unlike `git_repository_open_bare`, this can follow gitlinks.
+  BARE = 4,
 
   NO_DOTGIT = 8,
-  FROM_ENV  = 16,
+  FROM_ENV = 16,
 }
 
 ---@enum GIT_DIFF_FORMAT
 M.GIT_DIFF_FORMAT = {
-  PATCH        = 1, -- full git diff
+  PATCH = 1, -- full git diff
   PATCH_HEADER = 2, -- just the file headers of patch
-  RAW          = 3, -- like git diff --raw
-  NAME_ONLY    = 4, -- like git diff --name-only
-  NAME_STATUS  = 5, -- like git diff --name-status
-  PATCH_ID     = 6, -- git diff as used by git patch-id
+  RAW = 3, -- like git diff --raw
+  NAME_ONLY = 4, -- like git diff --name-only
+  NAME_STATUS = 5, -- like git diff --name-status
+  PATCH_ID = 6, -- git diff as used by git patch-id
 }
 
 ---@enum GIT_DIFF
 M.GIT_DIFF = {
-  NORMAL                 = 0,    --0: Normal diff, the default
-  REVERSE                = 1,    --(1 << 0): Reverse the sides of the diff
-  INCLUDE_IGNORED        = 2,    --(1 << 1): Include ignored files in the diff
-  RECURSE_IGNORED_DIRS   = 4,    --(1 << 2): adds files under the ignored directory as IGNORED entries
-  INCLUDE_UNTRACKED      = 8,    --(1 << 3): Include untracked files in the diff
+  NORMAL = 0, --0: Normal diff, the default
+  REVERSE = 1, --(1 << 0): Reverse the sides of the diff
+  INCLUDE_IGNORED = 2, --(1 << 1): Include ignored files in the diff
+  RECURSE_IGNORED_DIRS = 4, --(1 << 2): adds files under the ignored directory as IGNORED entries
+  INCLUDE_UNTRACKED = 8, --(1 << 3): Include untracked files in the diff
   RECURSE_UNTRACKED_DIRS = 0x10, --(1 << 4): adds files under untracked directories as UNTRACKED entries
-	INCLUDE_UNMODIFIED     = 0x20, --(1 << 5): include unmodified files in the diff
+  INCLUDE_UNMODIFIED = 0x20, --(1 << 5): include unmodified files in the diff
   -- a type change between files will be converted into a
   -- DELETED record for the old and an ADDED record for the new; this
   -- options enabled the generation of TYPECHANGE delta records
-  INCLUDE_TYPECHANGE     = 0x40, --(1 << 6)
+  INCLUDE_TYPECHANGE = 0x40, --(1 << 6)
   -- Even with GIT_DIFF_INCLUDE_TYPECHANGE, blob->tree changes still
-	-- generally show as a DELETED blob.  This flag tries to correctly
-	-- label blob->tree transitions as TYPECHANGE records with new_file's
-	-- mode set to tree.  Note: the tree SHA will not be available.
-  INCLUDE_TYPECHANGE_TREES = 0x80,  --(1 << 7)
-  IGNORE_FILEMODE          = 0x100, --(1u << 8): Ignore file mode changes
-	IGNORE_SUBMODULES        = 0x200, --(1u << 9): Treat all submodules as unmodified
-  IGNORE_CASE              = 0x400, --(1u << 10): case insensitive for filename comparisons
-  INCLUDE_CASECHANGE       = 0x800, --(1u << 11): combined with `IGNORE_CASE` to specify that a file that has changed case will be returned as an add/delete pair.
+  -- generally show as a DELETED blob.  This flag tries to correctly
+  -- label blob->tree transitions as TYPECHANGE records with new_file's
+  -- mode set to tree.  Note: the tree SHA will not be available.
+  INCLUDE_TYPECHANGE_TREES = 0x80, --(1 << 7)
+  IGNORE_FILEMODE = 0x100, --(1u << 8): Ignore file mode changes
+  IGNORE_SUBMODULES = 0x200, --(1u << 9): Treat all submodules as unmodified
+  IGNORE_CASE = 0x400, --(1u << 10): case insensitive for filename comparisons
+  INCLUDE_CASECHANGE = 0x800, --(1u << 11): combined with `IGNORE_CASE` to specify that a file that has changed case will be returned as an add/delete pair.
 
   -- If the pathspec is set in the diff options, this flags indicates
-	-- that the paths will be treated as literal paths instead of fnmatch patterns.
+  -- that the paths will be treated as literal paths instead of fnmatch patterns.
   -- Each path in the list must either be a full path to a file or a directory.
   -- (A trailing slash indicates that the path will _only_ match a directory).
   -- If a directory is specified, all children will be included.
   DISABLE_PATHSPEC_MATCH = 0x1000, --(1u << 12)
 
-	-- Disable updating of the `binary` flag in delta records.  This is
-	-- useful when iterating over a diff if you don't need hunk and data
-	-- callbacks and want to avoid having to load file completely.
-	SKIP_BINARY_CHECK = 0x2000, --(1u << 13)
+  -- Disable updating of the `binary` flag in delta records.  This is
+  -- useful when iterating over a diff if you don't need hunk and data
+  -- callbacks and want to avoid having to load file completely.
+  SKIP_BINARY_CHECK = 0x2000, --(1u << 13)
 
-	-- When diff finds an untracked directory, to match the behavior of
-	-- core Git, it scans the contents for IGNORED and UNTRACKED files.
-	-- If *all* contents are IGNORED, then the directory is IGNORED; if
-	-- any contents are not IGNORED, then the directory is UNTRACKED.
-	-- This is extra work that may not matter in many cases. This flag
-	-- turns off that scan and immediately labels an untracked directory
-	-- as UNTRACKED (changing the behavior to not match core Git).
-	ENABLE_FAST_UNTRACKED_DIRS = 0x4000, --(1u << 14)
+  -- When diff finds an untracked directory, to match the behavior of
+  -- core Git, it scans the contents for IGNORED and UNTRACKED files.
+  -- If *all* contents are IGNORED, then the directory is IGNORED; if
+  -- any contents are not IGNORED, then the directory is UNTRACKED.
+  -- This is extra work that may not matter in many cases. This flag
+  -- turns off that scan and immediately labels an untracked directory
+  -- as UNTRACKED (changing the behavior to not match core Git).
+  ENABLE_FAST_UNTRACKED_DIRS = 0x4000, --(1u << 14)
 
-	-- When diff finds a file in the working directory with stat
-	-- information different from the index, but the OID ends up being the
-	-- same, write the correct stat information into the index.
+  -- When diff finds a file in the working directory with stat
+  -- information different from the index, but the OID ends up being the
+  -- same, write the correct stat information into the index.
   -- Note: without this flag, diff will always leave the index untouched.
-	UPDATE_INDEX                    = 0x8000,  --(1u << 15)
-	INCLUDE_UNREADABLE              = 0x10000, -- 1u << 16): Include unreadable files in the diff
+  UPDATE_INDEX = 0x8000, --(1u << 15)
+  INCLUDE_UNREADABLE = 0x10000, -- 1u << 16): Include unreadable files in the diff
   INCLUDE_UNREADABLE_AS_UNTRACKED = 0x20000, --(1u << 17): Include unreadable files as UNTRACKED
 
   -- Options controlling how output will be generated
 
-	-- Use a heuristic that takes indentation and whitespace into account
-	-- which generally can produce better diffs when dealing with ambiguous
-	-- diff hunks.
-	INDENT_HEURISTIC         = 0x40000,   --(1u << 18)
-	IGNORE_BLANK_LINES       = 0x80000,   --(1u << 19): Ignore blank lines
-  FORCE_TEXT               = 0x100000,  --(1u << 20): Treat all files as text, disabling binary attributes & detection
-  FORCE_BINARY             = 0x200000,  --(1u << 21): Treat all files as binary, disabling text diffs
-  IGNORE_WHITESPACE        = 0x400000,  --(1u << 22): Ignore all whitespaces
-  IGNORE_WHITESPACE_CHANGE = 0x800000,  --(1u << 23): Ignore changes in amount of whitespace
-	IGNORE_WHITESPACE_EOL    = 0x1000000, --(1u << 24): Ignore whitespace at end of line
+  -- Use a heuristic that takes indentation and whitespace into account
+  -- which generally can produce better diffs when dealing with ambiguous
+  -- diff hunks.
+  INDENT_HEURISTIC = 0x40000, --(1u << 18)
+  IGNORE_BLANK_LINES = 0x80000, --(1u << 19): Ignore blank lines
+  FORCE_TEXT = 0x100000, --(1u << 20): Treat all files as text, disabling binary attributes & detection
+  FORCE_BINARY = 0x200000, --(1u << 21): Treat all files as binary, disabling text diffs
+  IGNORE_WHITESPACE = 0x400000, --(1u << 22): Ignore all whitespaces
+  IGNORE_WHITESPACE_CHANGE = 0x800000, --(1u << 23): Ignore changes in amount of whitespace
+  IGNORE_WHITESPACE_EOL = 0x1000000, --(1u << 24): Ignore whitespace at end of line
 
-	-- When generating patch text, include the content of untracked files.
+  -- When generating patch text, include the content of untracked files.
   -- This automatically turns on GIT_DIFF_INCLUDE_UNTRACKED but
-	-- it does not turn on GIT_DIFF_RECURSE_UNTRACKED_DIRS.
+  -- it does not turn on GIT_DIFF_RECURSE_UNTRACKED_DIRS.
   -- Add that flag if you want the content of every single UNTRACKED file.
-	SHOW_UNTRACKED_CONTENT = 0x2000000,  --(1u << 25)
+  SHOW_UNTRACKED_CONTENT = 0x2000000, --(1u << 25)
 
-	-- When generating output, include the names of unmodified files if
-	-- they are included in the git_diff. Normally these are skipped in
-	-- the formats that list files (e.g. name-only, name-status, raw).
-	-- Even with this, these will not be included in patch format.
-	SHOW_UNMODIFIED = 0x4000000,  --(1u << 26)
+  -- When generating output, include the names of unmodified files if
+  -- they are included in the git_diff. Normally these are skipped in
+  -- the formats that list files (e.g. name-only, name-status, raw).
+  -- Even with this, these will not be included in patch format.
+  SHOW_UNMODIFIED = 0x4000000, --(1u << 26)
 
-	PATIENCE        = 0x10000000, --(1u << 28): Use the "patience diff" algorithm
-	MINIMAL         = 0x20000000, --(1u << 29): Take extra time to find minimal diff
-	-- Include the necessary deflate / delta information so that `git-apply`
-	-- can apply given diff information to binary files.
-	SHOW_BINARY     = 0x40000000, --(1u << 30)
+  PATIENCE = 0x10000000, --(1u << 28): Use the "patience diff" algorithm
+  MINIMAL = 0x20000000, --(1u << 29): Take extra time to find minimal diff
+  -- Include the necessary deflate / delta information so that `git-apply`
+  -- can apply given diff information to binary files.
+  SHOW_BINARY = 0x40000000, --(1u << 30)
 }
 
 ---@enum GIT_DIFF_FIND
 M.GIT_DIFF_FIND = {
-  FIND_BY_CONFIG                  = 0,      -- Obey `diff.renames
-	FIND_RENAMES                    = 1,      -- (1u << 0): Look for renames? (`--find-renames`)
-  FIND_RENAMES_FROM_REWRITES      = 2,      -- (1u << 1)
-  FIND_COPIES                     = 4,      -- (1u << 2)
-  FIND_COPIES_FROM_UNMODIFIED     = 8,      -- (1u << 3)
-  FIND_REWRITES                   = POW[4], -- (1u << 4)
-  BREAK_REWRITES                  = POW[5], -- (1u << 5)
-  FIND_AND_BREAK_REWRITES         = 48,     -- (GIT_DIFF_FIND_REWRITES | GIT_DIFF_BREAK_REWRITES)
-  FIND_FOR_UNTRACKED              = POW[6], -- (1u << 6)
-  FIND_ALL                        = 0xff,   -- (0x0ff) Turn on all finding features.
-  FIND_IGNORE_LEADING_WHITESPACE  = 0,
-  FIND_IGNORE_WHITESPACE          = POW[12], -- (1u << 12),
-  FIND_DONT_IGNORE_WHITESPACE     = POW[13], -- (1u << 13),
-  FIND_EXACT_MATCH_ONLY           = POW[14], -- (1u << 14),
+  FIND_BY_CONFIG = 0, -- Obey `diff.renames
+  FIND_RENAMES = 1, -- (1u << 0): Look for renames? (`--find-renames`)
+  FIND_RENAMES_FROM_REWRITES = 2, -- (1u << 1)
+  FIND_COPIES = 4, -- (1u << 2)
+  FIND_COPIES_FROM_UNMODIFIED = 8, -- (1u << 3)
+  FIND_REWRITES = POW[4], -- (1u << 4)
+  BREAK_REWRITES = POW[5], -- (1u << 5)
+  FIND_AND_BREAK_REWRITES = 48, -- (GIT_DIFF_FIND_REWRITES | GIT_DIFF_BREAK_REWRITES)
+  FIND_FOR_UNTRACKED = POW[6], -- (1u << 6)
+  FIND_ALL = 0xff, -- (0x0ff) Turn on all finding features.
+  FIND_IGNORE_LEADING_WHITESPACE = 0,
+  FIND_IGNORE_WHITESPACE = POW[12], -- (1u << 12),
+  FIND_DONT_IGNORE_WHITESPACE = POW[13], -- (1u << 13),
+  FIND_EXACT_MATCH_ONLY = POW[14], -- (1u << 14),
   BREAK_REWRITES_FOR_RENAMES_ONLY = POW[15], -- (1u << 15),
-  FIND_REMOVE_UNMODIFIED          = POW[16], -- (1u << 16)
+  FIND_REMOVE_UNMODIFIED = POW[16], -- (1u << 16)
 }
 
 ---@enum GIT_SUBMODULE
 M.GIT_SUBMODULE = {
-	IGNORE_UNSPECIFIED = -1, -- use the submodule's configuration
-	IGNORE_NONE        = 1,  -- any change or untracked == dirty
-	IGNORE_UNTRACKED   = 2,  -- dirty if tracked files change
-	IGNORE_DIRTY       = 3,  -- only dirty if HEAD moved
-	IGNORE_ALL         = 4   -- never dirty
+  IGNORE_UNSPECIFIED = -1, -- use the submodule's configuration
+  IGNORE_NONE = 1, -- any change or untracked == dirty
+  IGNORE_UNTRACKED = 2, -- dirty if tracked files change
+  IGNORE_DIRTY = 3, -- only dirty if HEAD moved
+  IGNORE_ALL = 4, -- never dirty
 }
 
 ---@enum GIT_DIFF_LINE
 M.GIT_DIFF_LINE = {
-	CONTEXT       = ' ',
-	ADDITION      = '+',
-	DELETION      = '-',
-	CONTEXT_EOFNL = '=', --Both files have no LF at end
-	ADD_EOFNL     = '>', --Old has no LF at end, new does
-	DEL_EOFNL     = '<', --Old has LF at end, new does not
-	FILE_HDR      = 'F',
-	HUNK_HDR      = 'H',
-	BINARY        = 'B'  -- For "Binary files x and y differ"
+  CONTEXT = " ",
+  ADDITION = "+",
+  DELETION = "-",
+  CONTEXT_EOFNL = "=", --Both files have no LF at end
+  ADD_EOFNL = ">", --Old has no LF at end, new does
+  DEL_EOFNL = "<", --Old has LF at end, new does not
+  FILE_HDR = "F",
+  HUNK_HDR = "H",
+  BINARY = "B", -- For "Binary files x and y differ"
 }
 
 ---@enum GIT_REBASE_OPERATION
 M.GIT_REBASE_OPERATION = {
-  PICK   = 0,
+  PICK = 0,
   REWORD = 1,
-  EDIT   = 2,
+  EDIT = 2,
   SQUASH = 3,
-  FIXUP  = 4,
-  EXEC   = 5,
+  FIXUP = 4,
+  EXEC = 5,
 }
 
 ---@enum GIT_CHECKOUT
 M.GIT_CHECKOUT = {
-  NONE              = 0, -- default is a dry run, no actual updates
-  SAFE              = 1, --(1u << 0): Allow safe updates that cannot overwrite uncommitted data.
-  FORCE             = 2, --(1u << 1): Allow all updates to force working directory to look like index.
-  RECREATE_MISSING  = 4, --(1u << 2): Allow checkout to recreate missing files.
-  ALLOW_CONFLICTS   = POW[4],  --(1u << 4): Allow checkout to make safe updates even if conflicts are found.
-	REMOVE_UNTRACKED  = POW[5],  --(1u << 5): Remove untracked files not in index (that are not ignored.
-	REMOVE_IGNORED    = POW[6], --(1u << 6): Remove ignored files not in index */
-	UPDATE_ONLY       = POW[7],--(1u << 7) Only update existing files, don't create new ones.
-	DONT_UPDATE_INDEX = POW[8],--(1u << 8) Normally checkout updates index entries as it goes; this stops that.
-	NO_REFRESH        = POW[9],--(1u << 9) Don't refresh index/config/etc before doing checkout.
-	SKIP_UNMERGED     = POW[10],-- (1u << 10) Allow checkout to skip unmerged files,
-	USE_OURS          = POW[11],--(1u << 11) For unmerged files, checkout stage 2 from index,
-	USE_THEIRS        = POW[12],-- (1u << 12) For unmerged files, checkout stage 3 from index */
-	DISABLE_PATHSPEC_MATCH  = POW[13],-- (1u << 13) Treat pathspec as simple list of exact match file paths,
-	SKIP_LOCKED_DIRECTORIES = POW[18],--(1u << 18) Ignore directories in use, they will be left empty
-	DONT_OVERWRITE_IGNORED  = POW[19],--(1u << 19) Don't overwrite ignored files that exist in the checkout target
-	CONFLICT_STYLE_MERGE    = POW[20],--(1u << 20) Write normal merge files for conflicts
-	CONFLICT_STYLE_DIFF3    = POW[21],--(1u << 21) Include common ancestor data in diff3 format files for conflicts
-	DONT_REMOVE_EXISTING    = POW[22],--(1u << 22) Don't overwrite existing files or folders
-	DONT_WRITE_INDEX        = POW[23],--(1u << 23) Normally checkout writes the index upon completion; this prevents that.
-	DRY_RUN                 = POW[24],--(1u << 24),
-	CONFLICT_STYLE_ZDIFF3   = POW[25],--(1u << 25) Include common ancestor data in zdiff3 format for conflicts.
-	--(NOT IMPLEMENTED)
-	UPDATE_SUBMODULES            = POW[16], --(1u << 16) Recursively checkout submodules with same options
-	UPDATE_SUBMODULES_IF_CHANGED = POW[17], --(1u << 17) Recursively checkout submodules if HEAD moved in super repo
+  NONE = 0, -- default is a dry run, no actual updates
+  SAFE = 1, --(1u << 0): Allow safe updates that cannot overwrite uncommitted data.
+  FORCE = 2, --(1u << 1): Allow all updates to force working directory to look like index.
+  RECREATE_MISSING = 4, --(1u << 2): Allow checkout to recreate missing files.
+  ALLOW_CONFLICTS = POW[4], --(1u << 4): Allow checkout to make safe updates even if conflicts are found.
+  REMOVE_UNTRACKED = POW[5], --(1u << 5): Remove untracked files not in index (that are not ignored.
+  REMOVE_IGNORED = POW[6], --(1u << 6): Remove ignored files not in index */
+  UPDATE_ONLY = POW[7], --(1u << 7) Only update existing files, don't create new ones.
+  DONT_UPDATE_INDEX = POW[8], --(1u << 8) Normally checkout updates index entries as it goes; this stops that.
+  NO_REFRESH = POW[9], --(1u << 9) Don't refresh index/config/etc before doing checkout.
+  SKIP_UNMERGED = POW[10], -- (1u << 10) Allow checkout to skip unmerged files,
+  USE_OURS = POW[11], --(1u << 11) For unmerged files, checkout stage 2 from index,
+  USE_THEIRS = POW[12], -- (1u << 12) For unmerged files, checkout stage 3 from index */
+  DISABLE_PATHSPEC_MATCH = POW[13], -- (1u << 13) Treat pathspec as simple list of exact match file paths,
+  SKIP_LOCKED_DIRECTORIES = POW[18], --(1u << 18) Ignore directories in use, they will be left empty
+  DONT_OVERWRITE_IGNORED = POW[19], --(1u << 19) Don't overwrite ignored files that exist in the checkout target
+  CONFLICT_STYLE_MERGE = POW[20], --(1u << 20) Write normal merge files for conflicts
+  CONFLICT_STYLE_DIFF3 = POW[21], --(1u << 21) Include common ancestor data in diff3 format files for conflicts
+  DONT_REMOVE_EXISTING = POW[22], --(1u << 22) Don't overwrite existing files or folders
+  DONT_WRITE_INDEX = POW[23], --(1u << 23) Normally checkout writes the index upon completion; this prevents that.
+  DRY_RUN = POW[24], --(1u << 24),
+  CONFLICT_STYLE_ZDIFF3 = POW[25], --(1u << 25) Include common ancestor data in zdiff3 format for conflicts.
+  --(NOT IMPLEMENTED)
+  UPDATE_SUBMODULES = POW[16], --(1u << 16) Recursively checkout submodules with same options
+  UPDATE_SUBMODULES_IF_CHANGED = POW[17], --(1u << 17) Recursively checkout submodules if HEAD moved in super repo
 }
 
 ---@enum GIT_MERGE
 M.GIT_MERGE = {
-  FIND_RENAMES     = 1, --(1 << 0): Detect renames that occur between the common ancestor and the "ours"
+  FIND_RENAMES = 1, --(1 << 0): Detect renames that occur between the common ancestor and the "ours"
   FAIL_ON_CONFLICT = POW[1], --(1 << 1): If a conflict occurs, exit immediately
-  SKIP_REUC        = POW[2], --(1 << 2): Do not write the REUC extension on the generated index
-  NO_RECURSIVE     = POW[3], --(1 << 3): This flag provides a similar merge base to `git-merge-resolve`.
-  VIRTUAL_BASE     = POW[4], --(1 << 4): Treat this merge as if it is to produce the virtual base of recursive.
+  SKIP_REUC = POW[2], --(1 << 2): Do not write the REUC extension on the generated index
+  NO_RECURSIVE = POW[3], --(1 << 3): This flag provides a similar merge base to `git-merge-resolve`.
+  VIRTUAL_BASE = POW[4], --(1 << 4): Treat this merge as if it is to produce the virtual base of recursive.
 }
 
 -- Inits helper
 
 local NULL = ffi.cast("void*", nil)
 
-M.GIT_APPLY_OPTIONS_INIT = {{  M.GIT_APPLY_OPTIONS_VERSION }}
+M.GIT_APPLY_OPTIONS_INIT = { { M.GIT_APPLY_OPTIONS_VERSION } }
 M.GIT_STATUS_OPTIONS_INIT = { { M.GIT_STATUS_OPTIONS_VERSION } }
-M.GIT_DIFF_OPTIONS_INIT = {{
-  M.GIT_STATUS_OPTIONS_VERSION, 0, M.GIT_SUBMODULE.IGNORE_UNSPECIFIED,
-  { NULL, 0 }, NULL, NULL, NULL, 3
-}}
-M.GIT_DIFF_FIND_OPTIONS_INIT = {{ M.GIT_DIFF_FIND_OPTIONS_VERSION }}
-M.GIT_CHECKOUT_OPTIONS_INIT = {{ M.GIT_CHECKOUT_OPTIONS_VERSION, M.GIT_CHECKOUT.SAFE }}
-M.GIT_MERGE_OPTIONS_INIT = {{ M.GIT_MERGE_OPTIONS_VERSION, M.GIT_MERGE.FIND_RENAMES }}
-M.GIT_REBASE_OPTIONS_INIT = {{
-  M.GIT_REBASE_OPTIONS_VERSION, 0, 0, NULL,
-  M.GIT_MERGE_OPTIONS_INIT[1],
-	M.GIT_CHECKOUT_OPTIONS_INIT[1],
-  NULL, NULL
-}}
-
+M.GIT_DIFF_OPTIONS_INIT = {
+  {
+    M.GIT_STATUS_OPTIONS_VERSION,
+    0,
+    M.GIT_SUBMODULE.IGNORE_UNSPECIFIED,
+    { NULL, 0 },
+    NULL,
+    NULL,
+    NULL,
+    3,
+  },
+}
+M.GIT_DIFF_FIND_OPTIONS_INIT = { { M.GIT_DIFF_FIND_OPTIONS_VERSION } }
+M.GIT_CHECKOUT_OPTIONS_INIT = { { M.GIT_CHECKOUT_OPTIONS_VERSION, M.GIT_CHECKOUT.SAFE } }
+M.GIT_MERGE_OPTIONS_INIT = { { M.GIT_MERGE_OPTIONS_VERSION, M.GIT_MERGE.FIND_RENAMES } }
+M.GIT_REBASE_OPTIONS_INIT = {
+  {
+    M.GIT_REBASE_OPTIONS_VERSION,
+    0,
+    0,
+    NULL,
+    M.GIT_MERGE_OPTIONS_INIT[1],
+    M.GIT_CHECKOUT_OPTIONS_INIT[1],
+    NULL,
+    NULL,
+  },
+}
 
 return M

@@ -1,13 +1,11 @@
 local NuiPopup = require "nui.popup"
 
-local GitStatus = require "fugit2.view.git_status"
-local GitGraph = require "fugit2.view.git_graph"
 local GitDiff = require "fugit2.view.git_diff"
-
+local GitGraph = require "fugit2.view.git_graph"
+local GitStatus = require "fugit2.view.git_status"
 
 ---@classs Fugit2UIModule
 local M = {}
-
 
 local last_status_window = nil
 
@@ -28,7 +26,6 @@ function M.new_fugit2_status_window(namespace, repo)
   return status
 end
 
-
 -- Creates Fugit2 Graph floating window.
 ---@param namespace integer Nvim namespace
 ---@param repo GitRepository
@@ -41,7 +38,6 @@ function M.new_fugit2_graph_window(namespace, repo)
   return graph
 end
 
-
 ---Creates Fugit2 DiffView tab.
 ---@param namespace integer Nvim namespace
 ---@return Fugit2GitDiffView
@@ -49,6 +45,5 @@ function M.new_fugit2_diff_view(namespace, repo)
   local diffview = GitDiff(namespace, repo)
   return diffview
 end
-
 
 return M

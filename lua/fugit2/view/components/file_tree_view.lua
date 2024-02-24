@@ -1,23 +1,20 @@
 ---Fugit2 Git status file tree
 
-local Object = require "nui.object"
 local NuiLine = require "nui.line"
+local NuiPopup = require "nui.popup"
 local NuiText = require "nui.text"
 local NuiTree = require "nui.tree"
-local NuiPopup = require "nui.popup"
+local Object = require "nui.object"
 local WebDevIcons = require "nvim-web-devicons"
 
 local git2 = require "fugit2.git2"
 local utils = require "fugit2.utils"
 
-
 -- =================
 -- |  Status tree  |
 -- =================
 
-
 local FILE_ENTRY_PADDING = 45
-
 
 ---@class Fugit2StatusTreeNodeData
 ---@field id string
@@ -26,7 +23,6 @@ local FILE_ENTRY_PADDING = 45
 ---@field color string Extmark.
 ---@field wstatus string Worktree short status.
 ---@field istatus string Index short status.
-
 
 ---@param dir_tree table
 ---@param prefix string Name to concat to form id
@@ -37,10 +33,7 @@ local function tree_construct_nodes(dir_tree, prefix)
   for k, v in pairs(dir_tree) do
     if k == "." then
       for _, f in ipairs(v) do
-        table.insert(
-          files,
-          NuiTree.Node(f)
-        )
+        table.insert(files, NuiTree.Node(f))
       end
     else
       local id = prefix .. "/" .. k
@@ -54,7 +47,6 @@ local function tree_construct_nodes(dir_tree, prefix)
 
   return files
 end
-
 
 ---@param worktree_status GIT_DELTA
 ---@param index_status GIT_DELTA
@@ -74,8 +66,7 @@ local function tree_node_colors(worktree_status, index_status, modified)
     text_color = "Fugit2Untracked"
     icon_color = "Fugit2Untracked"
     status_icon = " "
-  elseif worktree_status == git2.GIT_DELTA.IGNORED
-    or index_status == git2.GIT_DELTA.IGNORED then
+  elseif worktree_status == git2.GIT_DELTA.IGNORED or index_status == git2.GIT_DELTA.IGNORED then
     text_color = "Fugit2Ignored"
     icon_color = "Fugit2Ignored"
     status_icon = " "
@@ -100,7 +91,6 @@ local function tree_node_colors(worktree_status, index_status, modified)
   return text_color, icon_color, status_icon
 end
 
-
 ---@param item GitStatusItem
 ---@param bufs table
 ---@return Fugit2StatusTreeNodeData
@@ -112,10 +102,10 @@ local function tree_node_data_from_item(item, bufs)
   end
 
   local filename = vim.fs.basename(path)
-  local extension = vim.filetype.match({ filename = filename })
+  local extension = vim.filetype.match { filename = filename }
   local modified = bufs[path] and bufs[path].modified or false
-  local conflicted = (item.worktree_status == git2.GIT_DELTA.CONFLICTED
-    or item.index_status == git2.GIT_DELTA.CONFLICTED
+  local conflicted = (
+    item.worktree_status == git2.GIT_DELTA.CONFLICTED or item.index_status == git2.GIT_DELTA.CONFLICTED
   )
 
   local icon = WebDevIcons.get_icon(filename, extension, { default = true })
@@ -146,10 +136,9 @@ local function tree_node_data_from_item(item, bufs)
     stage_icon = stage_icon,
     stage_color = icon_color,
     modified = modified,
-    conflicted = conflicted
+    conflicted = conflicted,
   }
 end
-
 
 ---@param node NuiTree.Node
 ---@return NuiLine
@@ -175,8 +164,7 @@ end
 ---@field ns_id integer
 ---@field tree NuiTree
 ---@field popup NuiPopup
-local GitStatusTree = Object("Fugit2GitStatusTree")
-
+local GitStatusTree = Object "Fugit2GitStatusTree"
 
 ---@param ns_id integer
 ---@param top_title string
@@ -207,7 +195,7 @@ function GitStatusTree:init(ns_id, top_title, bottom_title)
       modifiable = false,
       readonly = true,
       swapfile = false,
-      buftype  = "nofile",
+      buftype = "nofile",
     },
   }
 
@@ -219,10 +207,9 @@ function GitStatusTree:init(ns_id, top_title, bottom_title)
       swapfile = false,
     },
     prepare_node = tree_prepare_node,
-    nodes = {}
+    nodes = {},
   }
 end
-
 
 ---@return NuiTree.Node?
 ---@return integer? linenr
@@ -238,7 +225,6 @@ function GitStatusTree:get_child_node_linenr()
   return node, linenr
 end
 
-
 ---@param status GitStatusItem[]
 function GitStatusTree:update(status)
   -- get all bufs modified info
@@ -248,7 +234,7 @@ function GitStatusTree:update(status)
     if b and b.modified then
       local path = vim.fn.fnamemodify(vim.api.nvim_buf_get_name(bufnr), ":t")
       bufs[path] = {
-        modified = b.modified
+        modified = b.modified,
       }
     end
   end
@@ -286,7 +272,6 @@ function GitStatusTree:update(status)
   self.tree:set_nodes(tree_construct_nodes(dir_tree, ""))
 end
 
-
 ---Add or unstage a node from index.
 ---@param repo GitRepository
 ---@param index GitIndex
@@ -300,7 +285,7 @@ function GitStatusTree:index_add_reset(repo, index, add, reset, node)
   local updated = false
   local inplace = true -- whether can update status inplace
 
-  if add and node.alt_path and (node.wstatus == "R" or node.wstatus == "M")  then
+  if add and node.alt_path and (node.wstatus == "R" or node.wstatus == "M") then
     -- rename
     err = index:add_bypath(node.alt_path)
     if err ~= 0 then
@@ -314,11 +299,7 @@ function GitStatusTree:index_add_reset(repo, index, add, reset, node)
 
     updated = true
     inplace = false -- requires full refresh
-  elseif add and (
-    node.wstatus == "?" or node.wstatus == "T" or node.wstatus == "M"
-    or node.conflicted
-  )
-  then
+  elseif add and (node.wstatus == "?" or node.wstatus == "T" or node.wstatus == "M" or node.conflicted) then
     -- add to index if worktree status is in (UNTRACKED, MODIFIED, TYPECHANGE)
     err = index:add_bypath(node.id)
     if err ~= 0 then
@@ -336,7 +317,7 @@ function GitStatusTree:index_add_reset(repo, index, add, reset, node)
     updated = true
   elseif reset and node.alt_path and (node.istatus == "R" or node.istatus == "M") then
     -- reset both paths if rename in index
-    err = repo:reset_default({ node.id, node.alt_path })
+    err = repo:reset_default { node.id, node.alt_path }
     if err ~= 0 then
       error("Git Error when reset rename: " .. err)
     end
@@ -345,7 +326,7 @@ function GitStatusTree:index_add_reset(repo, index, add, reset, node)
     inplace = false -- requires full refresh
   elseif reset and node.istatus ~= "-" and node.istatus ~= "?" then
     -- else reset if index status is not in (UNCHANGED, UNTRACKED, RENAMED)
-    err = repo:reset_default({ node.id })
+    err = repo:reset_default { node.id }
     if err == git2.GIT_ERROR.GIT_EUNBORNBRANCH then
       err = index:remove_bypath(node.id)
     end
@@ -367,7 +348,6 @@ function GitStatusTree:index_add_reset(repo, index, add, reset, node)
   return updated, not inplace
 end
 
-
 ---Updates file node status info, usually called after stage/unstage
 ---@param repo GitRepository
 ---@param node NuiTree.Node
@@ -384,9 +364,8 @@ function GitStatusTree:update_single_node(repo, node)
 
   node.wstatus = git2.status_char_dash(worktree_status)
   node.istatus = git2.status_char_dash(index_status)
-  node.color, node.stage_color, node.stage_icon = tree_node_colors(
-    worktree_status, index_status, node.modified or false
-  )
+  node.color, node.stage_color, node.stage_icon =
+    tree_node_colors(worktree_status, index_status, node.modified or false)
   node.conflicted = worktree_status == git2.GIT_DELTA.CONFLICTED or index_status == git2.GIT_DELTA.CONFLICTED
 
   -- delete node when status == "--" and not conflicted
@@ -407,13 +386,11 @@ function GitStatusTree:update_single_node(repo, node)
   return 0
 end
 
-
 function GitStatusTree:render()
   vim.api.nvim_buf_set_option(self.popup.bufnr, "readonly", false)
   self.tree:render()
   vim.api.nvim_buf_set_option(self.popup.bufnr, "readonly", true)
 end
-
 
 function GitStatusTree:focus()
   local winid = self.popup.winid
@@ -421,7 +398,6 @@ function GitStatusTree:focus()
     vim.api.nvim_set_current_win(winid)
   end
 end
-
 
 ---@param mode string
 ---@param key string|string[]
@@ -431,12 +407,10 @@ function GitStatusTree:map(mode, key, fn, opts)
   return self.popup:map(mode, key, fn, opts)
 end
 
-
 ---@param event string | string[]
 ---@param handler fun()
 function GitStatusTree:on(event, handler)
   return self.popup:on(event, handler)
 end
-
 
 return GitStatusTree

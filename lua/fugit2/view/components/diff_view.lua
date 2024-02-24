@@ -2,13 +2,13 @@
 
 local NuiPopup = require "nui.popup"
 local Object = require "nui.object"
-local event = require "nui.utils.autocmd".event
+local event = require("nui.utils.autocmd").event
 
 ---@class Fugit2DiffView Diff view panel, used in git status
 ---@field ns_id integer namespace id
 ---@field title string initial tile
 ---@field popup NuiPopup
-local DiffView = Object("Fugit2DiffView")
+local DiffView = Object "Fugit2DiffView"
 
 ---@param ns_id integer
 ---@param title string
@@ -32,7 +32,7 @@ function DiffView:init(ns_id, title, bufnr)
         right = 1,
       },
       style = "rounded",
-      text = { top = {title} }
+      text = { top = { title } },
     },
     buf_options = {
       modifiable = true,
@@ -54,11 +54,10 @@ function DiffView:init(ns_id, title, bufnr)
 
   self.popup:on(event.BufEnter, function()
     -- to avoid conflict with vim-ufo
-    if vim.fn.exists(':UfoDetach') > 0 then
-      vim.cmd("UfoDetach")
+    if vim.fn.exists ":UfoDetach" > 0 then
+      vim.cmd "UfoDetach"
     end
   end, { once = true })
-
 end
 
 function DiffView:mount()

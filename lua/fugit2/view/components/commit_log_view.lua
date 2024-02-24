@@ -1,59 +1,55 @@
 ---Fugit2 Git commit graph/log sub view
 
-local Object = require "nui.object"
+local NuiLine = require "nui.line"
 local NuiPopup = require "nui.popup"
 local NuiText = require "nui.text"
-local NuiLine = require "nui.line"
+local Object = require "nui.object"
 local string_utils = require "plenary.strings"
 
-local utils = require "fugit2.utils"
 local git2 = require "fugit2.git2"
-
+local utils = require "fugit2.utils"
 
 local TAG_PRE_WIDTH = 40
 local TAG_WIDTH = 30
 
-
 local SYMBOLS = {
-  CURRENT_COMMIT        = "●",
-  COMMIT_BRANCH         = "│",
-  COMMIT_BRANCH_JUMP    = "┆",
-  COMMIT_EMPTY          = "",
-  COMPLEX_MERGE_1       = "┬┆",
-  COMPLEX_MERGE_2       = "╰┤",
-  MERGE_COMMIT          = "󰍌 " ,
+  CURRENT_COMMIT = "●",
+  COMMIT_BRANCH = "│",
+  COMMIT_BRANCH_JUMP = "┆",
+  COMMIT_EMPTY = "",
+  COMPLEX_MERGE_1 = "┬┆",
+  COMPLEX_MERGE_2 = "╰┤",
+  MERGE_COMMIT = "󰍌 ",
   --
-  BRANCH_COMMIT_LEFT    = "┤",
-  BRANCH_COMMIT_RIGHT   = "├",
-  BRANCH_COMMIT_LRIGHT  = "┼",
+  BRANCH_COMMIT_LEFT = "┤",
+  BRANCH_COMMIT_RIGHT = "├",
+  BRANCH_COMMIT_LRIGHT = "┼",
 
   -- MERGE_UP_LEFT_RIGHT   = '┴',
   -- MERGE_UP_LEFT         = "╯",
   -- MERGE_UP_RIGHT        = '╰',
   -- MERGE_UP              = " ",
-  MERGE_UP_DOWN         = "┼",
-  MERGE_UP_DOWN_LEFT    = "├",
-  MERGE_UP_DOWN_RIGHT   = "┤",
-  MERGE_DOWN            = "┬",
-  MERGE_DOWN_LEFT       = "╭",
-  MERGE_DOWN_RIGHT      = "╮",
-  MERGE_LEFT_RIGHT      = "─",
-  MERGE_EMPTY           = " ",
+  MERGE_UP_DOWN = "┼",
+  MERGE_UP_DOWN_LEFT = "├",
+  MERGE_UP_DOWN_RIGHT = "┤",
+  MERGE_DOWN = "┬",
+  MERGE_DOWN_LEFT = "╭",
+  MERGE_DOWN_RIGHT = "╮",
+  MERGE_LEFT_RIGHT = "─",
+  MERGE_EMPTY = " ",
   --
-  BRANCH_UP             = "┴",
-  BRANCH_UP_LEFT        = "╰",
-  BRANCH_UP_RIGHT       = "╯",
-  MISSING_PARENT        = "┆ ",
+  BRANCH_UP = "┴",
+  BRANCH_UP_LEFT = "╰",
+  BRANCH_UP_RIGHT = "╯",
+  MISSING_PARENT = "┆ ",
   MISSING_PARENT_BRANCH = "│ ",
-  MISSING_PARENT_EMPTY  = "  ",
+  MISSING_PARENT_EMPTY = "  ",
   -- Commit content
-  MESSAGE_START         = "▊",
+  MESSAGE_START = "▊",
 }
-
 
 ---@alias Fugit2GitGraphActiveBranch { j: integer, out_cols: integer[]? }
 ---@alias Fugit2GitGraphLine { cols: string[] }
-
 
 ---Helper class to store graph vis information
 ---@class Fugit2GitGraphCommitNodeVis
@@ -62,7 +58,6 @@ local SYMBOLS = {
 ---@field active_cols integer[]? current active branch j
 ---@field out_cols integer[]? out branches column j
 ---@field merge_cols integer[]? merge branches column j
-
 
 ---@class Fugit2GitGraphCommitNode
 ---@field oid string commit oid
@@ -73,8 +68,7 @@ local SYMBOLS = {
 ---@field vis Fugit2GitGraphCommitNodeVis?
 ---@field pre_message NuiText? Text used for overriding default pre_message symbol
 ---@field symbol string? Commit symbol used for overriding commit symbol
-local GitGraphCommitNode = Object("Fugit2GitGraphCommitNode")
-
+local GitGraphCommitNode = Object "Fugit2GitGraphCommitNode"
 
 ---Inits Fugit2GitGraphCommitNode
 ---@param oid string
@@ -93,10 +87,8 @@ function GitGraphCommitNode:init(oid, msg, author, parents, refs, symbol, pre_me
   self.pre_message = pre_message
 end
 
-
 ---@class Fugit2GitGraphCommitGraph
-local GitGraphCommitGraph = Object("Fugit2GitGraphCommitGraph")
-
+local GitGraphCommitGraph = Object "Fugit2GitGraphCommitGraph"
 
 ---@class Fugit2CommitLogView
 ---@field popup NuiPopup Commit popup.
@@ -104,8 +96,7 @@ local GitGraphCommitGraph = Object("Fugit2GitGraphCommitGraph")
 ---@field repo GitRepository
 ---
 
-local CommitLogView = Object("Fugit2CommitLogView")
-
+local CommitLogView = Object "Fugit2CommitLogView"
 
 ---Inits Fugit2GitGraph.
 ---@param ns_id integer
@@ -156,7 +147,6 @@ function CommitLogView:init(ns_id, title, enter)
   self._commits = {}
 end
 
-
 ---@param mode string
 ---@param key string|string[]
 ---@param fn fun()|string
@@ -165,12 +155,10 @@ function CommitLogView:map(mode, key, fn, opts)
   return self.popup:map(mode, key, fn, opts)
 end
 
-
 ---@return integer Windid
 function CommitLogView:winid()
   return self.popup.winid
 end
-
 
 ---Updates buffer content with commit log
 ---@param commits Fugit2GitGraphCommitNode[]
@@ -181,7 +169,6 @@ function CommitLogView:update(commits, remote_icons)
   self._commit_lines = self.draw_commit_nodes(self._commits, width, true, remote_icons)
 end
 
-
 ---Draws tag text with icon
 ---@param refname string Full refname
 ---@param remote_icons { [string]: string }?
@@ -189,9 +176,7 @@ end
 local function draw_tag(refname, remote_icons)
   local icon = ""
   local namespace = git2.reference_name_namespace(refname)
-  if namespace == git2.GIT_REFERENCE_NAMESPACE.BRANCH
-    or namespace == git2.GIT_REFERENCE_NAMESPACE.TAG
-  then
+  if namespace == git2.GIT_REFERENCE_NAMESPACE.BRANCH or namespace == git2.GIT_REFERENCE_NAMESPACE.TAG then
     icon = utils.get_git_namespace_icon(namespace)
   elseif namespace == git2.GIT_REFERENCE_NAMESPACE.REMOTE then
     local remote = git2.reference_name_remote(refname)
@@ -205,7 +190,6 @@ local function draw_tag(refname, remote_icons)
   local text = git2.reference_name_shorthand(refname)
   return string_utils.truncate(" " .. icon .. text .. " ", TAG_WIDTH)
 end
-
 
 -- Prepares node visulasation information for each commit
 ---@param nodes Fugit2GitGraphCommitNode[] Commit Node in topo order.
@@ -315,24 +299,21 @@ function CommitLogView.prepare_commit_node_visualisation(nodes)
   return nodes, col_arr.n
 end
 
-
 ---@param j integer
 ---@return string?
 local function col_hl(j)
-  if j >= 1 and j <=8 then
+  if j >= 1 and j <= 8 then
     return "Fugit2Branch" .. j
   end
 end
 
-
 ---@param j integer
 ---@return string?
 local function tag_hl(j)
-  if j >= 1 and j <=8 then
+  if j >= 1 and j <= 8 then
     return "Fugit2Tag" .. j
   end
 end
-
 
 ---Draws graph line based on column of characters
 ---@param cols string[]
@@ -344,7 +325,7 @@ function CommitLogView.draw_graph_line(cols, width, commit_j)
   local space_pad, space_2_pad = "   ", "  "
   local dash_pad, dash_2_pad = "───", "──"
   local dash_empty = "────"
-  local space_empty = NuiText("    ")
+  local space_empty = NuiText "    "
   local last_j
 
   local draw_dash = false
@@ -356,7 +337,7 @@ function CommitLogView.draw_graph_line(cols, width, commit_j)
 
   -- left to j
   last_j = 1
-  for i = 1,j-1 do
+  for i = 1, j - 1 do
     if cols[i] == "" then
       if draw_dash then
         table.insert(graph_line, NuiText(dash_empty, col_hl(last_j)))
@@ -397,7 +378,7 @@ function CommitLogView.draw_graph_line(cols, width, commit_j)
   -- right to j
   last_j = #cols
   draw_dash = false
-  for i = #cols,j+1,-1 do
+  for i = #cols, j + 1, -1 do
     if is_wide_commit and i == j + 1 then
       dash_empty = dash_pad
       space_empty = NuiText(space_pad)
@@ -473,7 +454,6 @@ local function draw_graph_node_pre_line_bare(vis, width)
   return CommitLogView.draw_graph_line(pre_cols, width)
 end
 
-
 ---@param vis Fugit2GitGraphCommitNodeVis
 ---@param width integer
 ---@param symbol string? Symbol override
@@ -512,9 +492,7 @@ local function draw_graph_node_merge_line(vis, width)
 
   if vis.merge_cols then
     for _, i in ipairs(vis.merge_cols) do
-      if commit_cols[i] ~= ""
-        and not (vis.out_cols and vim.tbl_contains(vis.out_cols, i))
-        then
+      if commit_cols[i] ~= "" and not (vis.out_cols and vim.tbl_contains(vis.out_cols, i)) then
         commit_cols[i] = SYMBOLS.MERGE_UP_DOWN
       else
         commit_cols[i] = SYMBOLS.MERGE_DOWN
@@ -526,7 +504,6 @@ local function draw_graph_node_merge_line(vis, width)
 
   return CommitLogView.draw_graph_line(commit_cols, width, vis.j)
 end
-
 
 ---@param vis Fugit2GitGraphCommitNodeVis
 ---@param width integer
@@ -563,7 +540,6 @@ local function draw_graph_node_branch_out_line(vis, width, commit_line_symbol)
   return CommitLogView.draw_graph_line(cols, width, vis.j)
 end
 
-
 ---Draws commit graph similar to flog
 ---@param nodes Fugit2GitGraphCommitNode[]
 ---@param width integer graph part width
@@ -572,7 +548,7 @@ end
 ---@return NuiLine[] lines
 function CommitLogView.draw_commit_nodes(nodes, width, draw_meta, remote_icons)
   local lines = {} -- output lines
-  local pre_line, commit_line  = {}, {}
+  local pre_line, commit_line = {}, {}
   width = width + 1
   local pre_line_width = draw_meta and width or 0
   local pre_line_meta = nil --[[@as NuiLine|NuiText|nil]]
@@ -615,14 +591,12 @@ function CommitLogView.draw_commit_nodes(nodes, width, draw_meta, remote_icons)
         pre_line_meta = NuiText(author_text, "Fugit2ObjectId")
       else
         pre_line_meta = NuiLine()
-        pre_line_meta:append(
-          string_utils.align_str(author_text, TAG_PRE_WIDTH), "Fugit2ObjectId"
-        )
+        pre_line_meta:append(string_utils.align_str(author_text, TAG_PRE_WIDTH), "Fugit2ObjectId")
         local hl = commit.vis and tag_hl(commit.vis.j) or nil
         for k, refname in ipairs(commit.refs) do
           pre_line_meta:append(draw_tag(refname, remote_icons), hl)
           if k ~= #commit.refs then
-            pre_line_meta:append(" ")
+            pre_line_meta:append " "
           end
         end
       end
@@ -630,21 +604,20 @@ function CommitLogView.draw_commit_nodes(nodes, width, draw_meta, remote_icons)
 
     -- add to lines
     if i ~= 1 then
-      lines[#lines+1] = pre_line
+      lines[#lines + 1] = pre_line
     end
-    lines[#lines+1] = commit_line
+    lines[#lines + 1] = commit_line
   end
 
   if draw_meta and pre_line_meta then
     pre_line = NuiLine()
     pre_line:append(string_utils.align_str("", (width - 1) * 4))
     pre_line:append(pre_line_meta)
-    lines[#lines+1] = pre_line
+    lines[#lines + 1] = pre_line
   end
 
   return lines
 end
-
 
 ---Renders content for Fugit2GitGraph.
 function CommitLogView:render()
@@ -654,10 +627,9 @@ function CommitLogView:render()
   vim.api.nvim_buf_set_option(bufnr, "modifiable", true)
   vim.api.nvim_buf_set_option(bufnr, "readonly", false)
 
-  local commit_lines = vim.tbl_map(
-    function(line) return line:content() end,
-    self._commit_lines
-  )
+  local commit_lines = vim.tbl_map(function(line)
+    return line:content()
+  end, self._commit_lines)
   vim.api.nvim_buf_set_lines(bufnr, 0, -1, true, commit_lines)
 
   for i, l in ipairs(self._commit_lines) do
@@ -668,14 +640,12 @@ function CommitLogView:render()
   vim.api.nvim_buf_set_option(bufnr, "modifiable", false)
 end
 
-
 function CommitLogView:focus()
   local winid = self.popup.winid
   if winid and vim.api.nvim_win_is_valid(winid) then
     vim.api.nvim_set_current_win(winid)
   end
 end
-
 
 ---Get current focus commit
 ---@return Fugit2GitGraphCommitNode?
@@ -687,13 +657,11 @@ function CommitLogView:get_commit()
   end
 
   local row = vim.api.nvim_win_get_cursor(winid)[1]
-  local index = math.floor((row+1)/2)
+  local index = math.floor((row + 1) / 2)
   local commit = self._commits[index]
   return commit, index
 end
 
-
 CommitLogView.CommitNode = GitGraphCommitNode
-
 
 return CommitLogView

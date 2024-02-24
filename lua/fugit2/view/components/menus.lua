@@ -1,18 +1,17 @@
 -- Helper UI components for Fugit2
-local Object = require "nui.object"
-local NuiText = require "nui.text"
 local NuiLine = require "nui.line"
 local NuiMenu = require "nui.menu"
 local NuiPopup = require "nui.popup"
-local event = require "nui.utils.autocmd".event
+local NuiText = require "nui.text"
+local Object = require "nui.object"
+local event = require("nui.utils.autocmd").event
 
 --=================
 --| Confirm Popup |
 --=================
 
 ---@class Fugit2UIConfirm
-local Confirm = Object("Fugit2UIConfirm")
-
+local Confirm = Object "Fugit2UIConfirm"
 
 ---@param ns_id integer Namespace id
 ---@param msg_line NuiLine Message for confirm popup
@@ -26,7 +25,7 @@ function Confirm:init(ns_id, msg_line)
     position = "50%",
     size = {
       width = 30,
-      height = 2
+      height = 2,
     },
     zindex = 55,
     border = {
@@ -47,13 +46,13 @@ function Confirm:init(ns_id, msg_line)
       modifiable = true,
       readonly = true,
       swapfile = false,
-      buftype  = "nofile",
+      buftype = "nofile",
     },
   }
 
   self:set_text(msg_line)
 
-    -- handlers
+  -- handlers
   local exit_fn = function()
     self._popup:hide()
   end
@@ -69,15 +68,14 @@ function Confirm:init(ns_id, msg_line)
   end)
 end
 
-
 ---@parm text NuiLine
 function Confirm:set_text(text)
   local width = math.max(text:width(), 30)
 
-  self._popup:update_layout({
+  self._popup:update_layout {
     position = "50%",
-    size = { width = width, height = 2 }
-  })
+    size = { width = width, height = 2 },
+  }
 
   vim.api.nvim_buf_set_option(self._popup.bufnr, "readonly", false)
 
@@ -95,7 +93,7 @@ function Confirm:set_text(text)
     NuiText(string.rep(" ", self._yes_pos)),
     NuiText("󰄬 Yes", "Fugit2Staged"),
     NuiText(string.rep(" ", self._no_pos - self._yes_pos - yes_width - no_width)),
-    NuiText("󰜺 No", "Fugit2Untracked")
+    NuiText("󰜺 No", "Fugit2Untracked"),
   }
   yes_no:render(self._popup.bufnr, self.ns_id, 2)
 
@@ -135,7 +133,6 @@ function Confirm:show()
   vim.api.nvim_win_set_cursor(self._popup.winid, { 2, self._yes_pos })
 end
 
-
 --========================
 --| Transient Menu Popup |
 --=======================
@@ -143,13 +140,13 @@ end
 ---@enum Fugit2UITransientInputType
 local INPUT_TYPE = {
   CHECKBOX = 1,
-  RADIO = 2
+  RADIO = 2,
 }
 
 ---@class Fugit2UITransientMenu
 ---@field _menu NuiMenu
 ---@field ns_id integer
-local Menu = Object("Fugit2UITransientMenu")
+local Menu = Object "Fugit2UITransientMenu"
 
 ---@alias Fugit2UITransientArg { key: string, text: NuiText, arg: string, type: Fugit2UITransientInputType, model: string }
 ---@alias Fugit2UITransientItem { key: string?, texts: NuiText[] }
@@ -181,7 +178,7 @@ function Menu:init(ns_id, title, menu_items, arg_items)
     },
     win_options = {
       winhighlight = "Normal:Normal,FloatBorder:Normal",
-    }
+    },
   }
 
   local menu_lines = vim.tbl_map(function(item)
@@ -216,7 +213,7 @@ function Menu:init(ns_id, title, menu_items, arg_items)
       relative = "win",
       position = {
         row = #menu_items + 2,
-        col = 0
+        col = 0,
       },
       size = {
         width = popup_opts.size.width,
@@ -225,10 +222,10 @@ function Menu:init(ns_id, title, menu_items, arg_items)
       focusable = false,
       border = {
         style = "single",
-        text = { top = NuiText(" Arguments ", key_hl), top_align = "left" }
+        text = { top = NuiText(" Arguments ", key_hl), top_align = "left" },
       },
       zindex = popup_opts.zindex,
-      win_options = popup_opts.win_options
+      win_options = popup_opts.win_options,
     }
     self._args_popup = NuiPopup(arg_popup_opts)
 
@@ -245,13 +242,12 @@ function Menu:init(ns_id, title, menu_items, arg_items)
   end
 
   -- setup hotkey
-  local ids = vim.tbl_filter(
-    function (n) return n.key ~= nil end, menu_items
-  )
-  self._hotkeys = vim.tbl_map(
-    function(n) return n.key end, ids
-  )
-
+  local ids = vim.tbl_filter(function(n)
+    return n.key ~= nil
+  end, menu_items)
+  self._hotkeys = vim.tbl_map(function(n)
+    return n.key
+  end, ids)
 end
 
 ---@param item Fugit2UITransientArg
@@ -292,7 +288,7 @@ local function collect_args(args, arg_models, arg_indices, arg_items)
     if m.type == INPUT_TYPE.CHECKBOX then
       for _, k in ipairs(m.keys) do
         if args[k] then
-          values[#values+1] = arg_items[arg_indices[k]].arg
+          values[#values + 1] = arg_items[arg_indices[k]].arg
         end
       end
     elseif m.type == INPUT_TYPE.RADIO then
@@ -319,7 +315,6 @@ function Menu:on_submit(callback)
   end
 end
 
-
 function Menu:mount()
   self._menu:mount()
   for _, key in ipairs(self._hotkeys) do
@@ -338,12 +333,12 @@ function Menu:mount()
       self._args_popup:unmount()
     end)
 
-    self._args_popup:update_layout({
+    self._args_popup:update_layout {
       relative = {
         type = "win",
         winid = self._menu.winid,
       },
-    })
+    }
     self._args_popup:mount()
     self:render()
 
@@ -376,11 +371,9 @@ function Menu:mount()
   end
 end
 
-
 function Menu:unmount()
   self._menu:unmount()
 end
-
 
 ---@module 'Fugit2UIComponents'
 local M = {

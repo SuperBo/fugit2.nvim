@@ -1,8 +1,8 @@
 ---Fugit2 Git branches tree view
 
 local NuiLine = require "nui.line"
-local NuiText = require "nui.text"
 local NuiPopup = require "nui.popup"
+local NuiText = require "nui.text"
 local NuiTree = require "nui.tree"
 local Object = require "nui.object"
 
@@ -12,15 +12,12 @@ local utils = require "fugit2.utils"
 -- | Branch Tree |
 -- ===============
 
-
 local BRANCH_ENTRY_PADDING = 49
-
 
 ---@class Fugit2GitBranchTree
 ---@field bufnr integer
 ---@field namespace integer
-local GitBranchTree = Object("Fugit2GitBranchTree")
-
+local GitBranchTree = Object "Fugit2GitBranchTree"
 
 ---@param ns_id integer
 ---@param width integer?
@@ -49,7 +46,7 @@ function GitBranchTree:init(ns_id, width)
       modifiable = false,
       readonly = true,
       swapfile = false,
-      buftype  = "nofile",
+      buftype = "nofile",
     },
   }
 
@@ -61,10 +58,9 @@ function GitBranchTree:init(ns_id, width)
       swapfile = false,
     },
     prepare_node = self._prepare_node(self.width - 6),
-    nodes = {}
+    nodes = {},
   }
 end
-
 
 ---@param padding integer
 ---@return fun(node: NuiTree.Node): NuiLine
@@ -88,7 +84,6 @@ function GitBranchTree._prepare_node(padding)
   end
 end
 
-
 function GitBranchTree:winid()
   return self.popup.winid
 end
@@ -101,13 +96,11 @@ function GitBranchTree:map(mode, key, fn, opts)
   return self.popup:map(mode, key, fn, opts)
 end
 
-
 ---@param mode string
 ---@param key string|string[]
 function GitBranchTree:unmap(mode, key)
   return self.popup:unmap(mode, key)
 end
-
 
 ---@param event string | string[]
 ---@param handler fun()
@@ -115,13 +108,11 @@ function GitBranchTree:on(event, handler)
   return self.popup:on(event, handler)
 end
 
-
 ---@param br GitBranch
 ---@return string
 local function branch_path(br)
   return br.shorthand
 end
-
 
 ---@param active_branch string?
 ---@return fun(br: GitBranch): NuiTree.Node
@@ -139,7 +130,6 @@ local function branch_node(active_branch)
   end
 end
 
-
 ---@param branches GitBranch[]
 ---@param active_branch string?
 function GitBranchTree:update(branches, active_branch)
@@ -149,11 +139,9 @@ function GitBranchTree:update(branches, active_branch)
   self.tree:set_nodes(nodes)
 end
 
-
 function GitBranchTree:render()
   self.tree:render()
 end
-
 
 ---@return NuiTree.Node? node
 ---@return integer? linenr
@@ -166,7 +154,6 @@ function GitBranchTree:get_active_branch()
   return node, linenr
 end
 
-
 ---Scrolls to active branch
 ---@return integer?
 function GitBranchTree:scroll_to_active_branch()
@@ -177,7 +164,6 @@ function GitBranchTree:scroll_to_active_branch()
   end
   return linenr
 end
-
 
 ---@return NuiTree.Node?
 ---@return integer? linenr
@@ -192,7 +178,5 @@ function GitBranchTree:get_child_node_linenr()
 
   return node, linenr
 end
-
-
 
 return GitBranchTree

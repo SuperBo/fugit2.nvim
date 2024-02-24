@@ -8,9 +8,9 @@ local M = {}
 
 ---@enum LINUX_SIGNALS
 M.LINUX_SIGNALS = {
-  SIGHUP  = 1,
+  SIGHUP = 1,
   SIGQUIT = 3,
-  SIGINT  = 2,
+  SIGINT = 2,
   SIGABRT = 6,
   SIGKILL = 9,
   SIGTERM = 15,
@@ -28,7 +28,6 @@ function M.lines_head(str)
   return str
 end
 
-
 ---@param str string
 ---@return NuiLine
 function M.message_title_prettify(str)
@@ -38,7 +37,7 @@ function M.message_title_prettify(str)
   if prefix then
     return NuiLine {
       NuiText(title:sub(1, prefix), "bold"),
-      NuiText(title:sub(prefix + 1, -1))
+      NuiText(title:sub(prefix + 1, -1)),
     }
   end
 
@@ -46,13 +45,12 @@ function M.message_title_prettify(str)
   if prefix then
     return NuiLine {
       NuiText(title:sub(1, 5), "bold"),
-      NuiText(title:sub(6, -1))
+      NuiText(title:sub(6, -1)),
     }
   end
 
   return NuiLine { NuiText(title) }
 end
-
 
 -- Return relative path with given base_path
 ---@param base_path string Base dir
@@ -69,7 +67,7 @@ function M.make_relative_path(base_path, path)
   local base_depth, path_depth = 0, 0
   for dir in vim.gsplit(base_path, "/", { plain = true }) do
     if not stop and vim.startswith(relpath, dir .. "/") then
-      relpath = relpath:sub(#dir+2, -1)
+      relpath = relpath:sub(#dir + 2, -1)
       relbase = relbase .. "/" .. dir
       path_depth = path_depth + 1
     else
@@ -85,28 +83,26 @@ function M.make_relative_path(base_path, path)
   return relpath
 end
 
-
 -- Returns git remote icon
 ---@param url string
 ---@return string
 function M.get_git_icon(url)
-  local hostname = url:match("git@([^ /:]+)")
+  local hostname = url:match "git@([^ /:]+)"
   if not hostname then
-    hostname = url:match("https?://([^ /]+)")
+    hostname = url:match "https?://([^ /]+)"
   end
 
   if hostname then
-    if hostname:find("gitlab") then
+    if hostname:find "gitlab" then
       return "󰮠 "
-    elseif hostname:find("github") then
+    elseif hostname:find "github" then
       return "󰊤 "
-    elseif hostname:find("bitbucket") then
+    elseif hostname:find "bitbucket" then
       return "󰂨 "
     end
   end
   return "󰊢 "
 end
-
 
 -- Returns git namespace icon
 ---@param namespace GIT_REFERENCE_NAMESPACE
@@ -123,7 +119,6 @@ function M.get_git_namespace_icon(namespace)
   return ""
 end
 
-
 ---Return ahead behind string
 ---@param ahead integer?
 ---@param behind integer?
@@ -138,7 +133,6 @@ function M.get_ahead_behind_text(ahead, behind)
   end
   return str
 end
-
 
 ---Build directory tree from a list of paths.
 ---@generic T
@@ -175,7 +169,6 @@ function M.build_dir_tree(path_fn, lst)
   return dir_tree
 end
 
-
 ---@generic T
 ---@param node_fn fun(val: T): NuiTree.Node function which returns node from T.
 ---@param dir_tree Fugit2DirectoryNode dir tree built from build_dir_tree
@@ -205,21 +198,16 @@ function M.build_nui_tree_nodes(node_fn, dir_tree)
   return construct_tree_nodes(dir_tree, "")
 end
 
-
 -- Random utils
 local id_counter = 0ULL
 local id_random = math.random(0, 255)
 
 ---@return integer id time-based unique id
 function M.new_pid()
-  local id = bit.bor(
-    bit.lshift(id_counter, 8),
-    id_random
-  )
+  local id = bit.bor(bit.lshift(id_counter, 8), id_random)
   id_counter = id_counter + 1
   return id
 end
-
 
 ---@class BitArray BitArray in big-endian representation
 ---@field n integer length of bitarray
@@ -227,14 +215,12 @@ end
 local BitArray = {}
 BitArray.__index = BitArray
 
-
 ---@return BitArray
 function BitArray.new()
   local arr = { n = 0, buf = 0ULL }
   setmetatable(arr, BitArray)
   return arr
 end
-
 
 ---@param set boolean whether new bit is set or not
 ---@return integer length new lenght of array
@@ -248,7 +234,6 @@ function BitArray:append(set)
 
   return self.n
 end
-
 
 -- Pops last entry in bitarray.
 ---@return boolean?
@@ -293,7 +278,6 @@ function BitArray:unset(i)
   return self
 end
 
-
 ---@param arr BitArray
 ---@param is_set boolean Whether to get set or unset indices in bitarray
 ---@return integer[] indices of set/unset indices (1-based)
@@ -318,20 +302,17 @@ local function _bitarray_get_indices(arr, is_set)
   return indices
 end
 
-
 -- Get set indices in bitmap
 ---@return integer[] set List of set indicies (1-based)
 function BitArray:get_set_indices()
   return _bitarray_get_indices(self, true)
 end
 
-
 -- Gets unset indices in bitmap
 ---@return integer[] unset List of unset indices (1-based)
 function BitArray:get_unset_indices()
   return _bitarray_get_indices(self, false)
 end
-
 
 -- Gets unset indices (1-based) and set it
 ---@return integer[] unset List of unset indices (1-based)
@@ -352,7 +333,6 @@ function BitArray:set_unset_indices()
 
   return unset
 end
-
 
 -- Gets first k unset indices (1-based) and set it
 -- k can be > #number of unset bit in bitarray.
@@ -393,11 +373,9 @@ function BitArray:set_k_unset_indices(k)
   return unset
 end
 
-
 -- ====================
 -- | Table/list utils |
 -- ====================
-
 
 ---Builds a lookup table for a given list.
 ---@generic T
@@ -413,7 +391,6 @@ function M.list_build_lookup(key_fn, lst)
 
   return lookup
 end
-
 
 ---Inserts new element into a sorted list, return a sorted list.
 ---@generic T
@@ -442,7 +419,6 @@ function M.list_init(val, n)
   return list
 end
 
-
 ---@param lst table
 ---@param val any
 ---@param cols integer[]?
@@ -454,17 +430,15 @@ function M.list_fill(lst, val, cols)
   end
 end
 
-
 ---Clear/empty a list
 ---@generic T
 ---@param lst T[]
 function M.list_clear(lst)
-  for i = #lst,1,-1 do
+  for i = #lst, 1, -1 do
     lst[i] = nil
   end
   return lst
 end
-
 
 ---@generic T
 ---@param tbl table
@@ -482,12 +456,11 @@ end
 ---@return T[]
 function M.list_reverse(lst)
   local mid = math.floor(#lst / 2)
-  for i = 1,mid do
-    lst[i], lst[#lst-i+1] = lst[#lst-i+1], lst[i]
+  for i = 1, mid do
+    lst[i], lst[#lst - i + 1] = lst[#lst - i + 1], lst[i]
   end
   return lst
 end
-
 
 ---Returns true if any component in list is true
 ---@generic T
@@ -504,7 +477,6 @@ function M.list_any(fun, lst)
   return false
 end
 
-
 ---Returns true if all components in list are true
 ---@generic T
 ---@param fun fun(T): any
@@ -520,8 +492,6 @@ function M.list_all(fun, lst)
   return true
 end
 
-
 M.BitArray = BitArray
-
 
 return M

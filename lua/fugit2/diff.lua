@@ -2,10 +2,8 @@
 ---@module 'Fugit2DiffHelper'
 local M = {}
 
-
 ---@alias Fugit2HunkLine { c: string, text: string, linenr: integer }
 ---@alias Fugit2HunkItem { header: string, linenr: integer, lines: Fugit2HunkLine[] }
-
 
 ---Parses a patch text to hunks and patch header
 ---@param patch string Patch as as tring
@@ -16,7 +14,7 @@ function M.parse_patch(patch)
   local hunks = {}
   local current_hunk = nil
 
-  for line in vim.gsplit(patch, "\n", { plain=true, trimempty=true }) do
+  for line in vim.gsplit(patch, "\n", { plain = true, trimempty = true }) do
     local c = line:sub(1, 1)
 
     if c ~= "@" then
@@ -27,7 +25,7 @@ function M.parse_patch(patch)
         table.insert(current_hunk.lines, {
           c = c,
           text = line,
-          linenr = i
+          linenr = i,
         })
       end
     else
@@ -49,7 +47,7 @@ function M.parse_patch(patch)
 
   return {
     header = header,
-    hunks  = hunks
+    hunks = hunks,
   }
 end
 
@@ -65,7 +63,7 @@ function M.partial_patch_from_hunk(diff_header, hunk_header, hunk_lines)
     patch_lines[i] = line
   end
 
-  patch_lines[#diff_header+1] = hunk_header
+  patch_lines[#diff_header + 1] = hunk_header
 
   for _, line in ipairs(hunk_lines) do
     table.insert(patch_lines, line)
@@ -85,7 +83,7 @@ local function extract_hunk_header(hunk_header)
   local header_text = ""
   if header_end then
     -- libgit2 header include newline
-    header_text = hunk_header:sub(header_end+1, -2)
+    header_text = hunk_header:sub(header_end + 1, -2)
   end
   return header_text
 end
@@ -95,8 +93,10 @@ end
 local function diff_hunk_header(hunk)
   return string.format(
     HUNK_HEADER_STRING,
-    hunk.old_start, hunk.old_lines,
-    hunk.new_start, hunk.new_lines,
+    hunk.old_start,
+    hunk.old_lines,
+    hunk.new_start,
+    hunk.new_lines,
     extract_hunk_header(hunk.header)
   )
 end
@@ -109,12 +109,12 @@ end
 function M.partial_hunk(hunk, hunk_lines)
   ---@type GitDiffHunk
   local new_hunk = {
-    header    = hunk.header,
+    header = hunk.header,
     num_lines = hunk.num_lines,
     old_start = hunk.old_start,
     old_lines = hunk.old_lines,
     new_start = math.max(hunk.old_start, 1),
-    new_lines = hunk.new_lines
+    new_lines = hunk.new_lines,
   }
 
   local lines = { diff_hunk_header(new_hunk) }
@@ -130,15 +130,15 @@ function M.reverse_hunk(hunk, hunk_lines)
   ---@type GitDiffHunk
   local new_hunk = {
     num_lines = hunk.num_lines,
-    header    = hunk.header,
+    header = hunk.header,
     old_start = hunk.new_start,
     old_lines = hunk.new_lines,
     new_start = hunk.old_start > 0 and hunk.new_start or 0,
-    new_lines = hunk.old_lines
+    new_lines = hunk.old_lines,
   }
 
   local lines = { diff_hunk_header(new_hunk) }
-  for i=2,#hunk_lines do
+  for i = 2, #hunk_lines do
     local line = hunk_lines[i]
     local char = line:sub(1, 1)
     if char == "+" then
@@ -162,46 +162,41 @@ end
 ---@return GitDiffHunk? new_hunk
 ---@return string[]?
 function M.partial_hunk_selected(hunk, hunk_lines, start_hunk_line, end_hunk_line, line_add_as_context)
-  if start_hunk_line > end_hunk_line
-    or start_hunk_line > #hunk_lines
-    or end_hunk_line < 1
-  then
+  if start_hunk_line > end_hunk_line or start_hunk_line > #hunk_lines or end_hunk_line < 1 then
     return nil, nil
   end
 
   local old_lines, new_lines = 0, 0
   local lines = {}
 
-  for i = 2,start_hunk_line-1 do
+  for i = 2, start_hunk_line - 1 do
     local line = hunk_lines[i]
     local char = line:sub(1, 1)
-    if char == " "
-      or (line_add_as_context and char == "+" or char == "-")
-    then
+    if char == " " or (line_add_as_context and char == "+" or char == "-") then
       old_lines = old_lines + 1
       new_lines = new_lines + 1
       if char == " " then
-        lines[#lines+1] = line
+        lines[#lines + 1] = line
       else
-        lines[#lines+1] = " " .. line:sub(2)
+        lines[#lines + 1] = " " .. line:sub(2)
       end
     end
   end
 
   local num_add, num_minus = 0, 0
-  for i = start_hunk_line,end_hunk_line do
+  for i = start_hunk_line, end_hunk_line do
     local line = hunk_lines[i]
     local char = line:sub(1, 1)
     if char == " " then
       old_lines = old_lines + 1
       new_lines = new_lines + 1
-      lines[#lines+1] = line
+      lines[#lines + 1] = line
     elseif char == "+" then
       num_add = num_add + 1
-      lines[#lines+1] = line
+      lines[#lines + 1] = line
     elseif char == "-" then
       num_minus = num_minus + 1
-      lines[#lines+1] = line
+      lines[#lines + 1] = line
     end
   end
 
@@ -214,20 +209,18 @@ function M.partial_hunk_selected(hunk, hunk_lines, start_hunk_line, end_hunk_lin
   old_lines = old_lines + num_minus
 
   local num_context = 0
-  for i = end_hunk_line+1,#hunk_lines do
+  for i = end_hunk_line + 1, #hunk_lines do
     local line = hunk_lines[i]
     local char = line:sub(1, 1)
-    if char == " "
-      or (line_add_as_context and char == "+" or char == "-")
-    then
+    if char == " " or (line_add_as_context and char == "+" or char == "-") then
       num_context = num_context + 1
       old_lines = old_lines + 1
       new_lines = new_lines + 1
 
       if char == " " then
-        lines[#lines+1] = line
+        lines[#lines + 1] = line
       else
-        lines[#lines+1] = " " .. line:sub(2)
+        lines[#lines + 1] = " " .. line:sub(2)
       end
 
       if num_context == 3 then
@@ -238,12 +231,12 @@ function M.partial_hunk_selected(hunk, hunk_lines, start_hunk_line, end_hunk_lin
 
   ---@type GitDiffHunk
   local new_hunk = {
-    header    = hunk.header,
+    header = hunk.header,
     old_start = hunk.old_start,
     old_lines = old_lines,
     new_start = math.max(hunk.old_start, 1),
     new_lines = new_lines,
-    num_lines = #lines + 1
+    num_lines = #lines + 1,
   }
   table.insert(lines, 1, diff_hunk_header(new_hunk))
 
@@ -256,13 +249,13 @@ end
 function M.merge_hunks(hunk_diffs, hunk_segments)
   local lines = {}
   local line_delta = 0
-  for i = 1,#hunk_diffs do
+  for i = 1, #hunk_diffs do
     local hunk = hunk_diffs[i]
     local hunk_lines = hunk_segments[i]
     ---@type GitDiffHunk
     local new_hunk = {
       num_lines = hunk.num_lines,
-      header    = hunk.header,
+      header = hunk.header,
       old_start = hunk.old_start,
       old_lines = hunk.old_lines,
       new_start = hunk.new_start + line_delta,
@@ -270,12 +263,11 @@ function M.merge_hunks(hunk_diffs, hunk_segments)
     }
     line_delta = line_delta + hunk.new_lines - hunk.old_lines
 
-    lines[#lines+1] = diff_hunk_header(new_hunk)
+    lines[#lines + 1] = diff_hunk_header(new_hunk)
     vim.list_extend(lines, hunk_lines, 2, #hunk_lines)
   end
 
   return lines
 end
-
 
 return M

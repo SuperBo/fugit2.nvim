@@ -6,18 +6,15 @@
 ---@field lines string[]
 ---@field trailing_newline boolean
 
-
 ---@class GitAbsorbHunk
 ---@field added GitAbsorbBlock
 ---@field deleted GitAbsorbBlock
 local GitAbsorbHunk = {}
 GitAbsorbHunk.__index = GitAbsorbHunk
 
-
 -- =========
 -- | Hunk  |
 -- =========
-
 
 ---@param patch GitPatch
 ---@param idx integer
@@ -34,15 +31,15 @@ function GitAbsorbHunk.from_patch(patch, idx)
   local added_trailing_newline = true
   local deleted_trailing_newline = true
 
-  for j = 0,patch:nhunks()-1 do
+  for j = 0, patch:nhunks() - 1 do
     local line = patch:hunk_line(idx, j)
     if not line then
       break
     end
     if line.origin == "+" then
-      added_lines[#added_lines+1] = line.content
+      added_lines[#added_lines + 1] = line.content
     elseif line.origin == "-" then
-      deleted_lines[#deleted_lines+1] = line.content
+      deleted_lines[#deleted_lines + 1] = line.content
     elseif line.origin == ">" then
       deleted_trailing_newline = false
     elseif line.origin == "<" then
@@ -62,18 +59,17 @@ function GitAbsorbHunk.from_patch(patch, idx)
     added = {
       start = hunk.new_start,
       lines = added_lines,
-      trailing_newline = added_trailing_newline
+      trailing_newline = added_trailing_newline,
     },
     deleted = {
       start = hunk.old_start,
       lines = deleted_lines,
-      trailing_newline = deleted_trailing_newline
-    }
+      trailing_newline = deleted_trailing_newline,
+    },
   }
   setmetatable(absorb_hunk, GitAbsorbHunk)
   return absorb_hunk, 0
 end
-
 
 -- Returns the unchanged lines around this hunk.
 -- Any given hunk has four anchor points:
@@ -94,32 +90,29 @@ function GitAbsorbHunk:anchors()
     return 0, 1, 0, 1
   elseif added_len == 0 then
     local d_start = self.deleted.start
-    return d_start-1, d_start+deleted_len, d_start-1, d_start
+    return d_start - 1, d_start + deleted_len, d_start - 1, d_start
   elseif deleted_len == 0 then
     local a_start = self.added.start
-    return a_start-1, a_start, a_start-1, a_start+added_len
+    return a_start - 1, a_start, a_start - 1, a_start + added_len
   end
 
   local d_start, a_start = self.deleted.start, self.added.start
-  return d_start-1, d_start+deleted_len, a_start, a_start+added_len
+  return d_start - 1, d_start + deleted_len, a_start, a_start + added_len
 end
-
 
 ---Hunk clone
 function GitAbsorbHunk:clone()
   local hunk = {
     added = vim.tbl_extend("keep", self.added),
-    deleted = vim.tbl_extend("keep", self.deleted)
+    deleted = vim.tbl_extend("keep", self.deleted),
   }
   setmetatable(hunk, GitAbsorbHunk)
   return hunk
 end
 
-
 -- ===========
 -- | Commute |
 -- ===========
-
 
 ---Tests if all elements of the list are equal to each other.
 ---@param first_lines string[]
@@ -131,13 +124,13 @@ local function uniform(first_lines, second_lines)
     return true
   end
 
-  for i =2,#first_lines do
+  for i = 2, #first_lines do
     if first_lines[i] ~= head then
       return false
     end
   end
 
-  for i = 1,#second_lines do
+  for i = 1, #second_lines do
     if second_lines[i] ~= head then
       return false
     end
@@ -145,7 +138,6 @@ local function uniform(first_lines, second_lines)
 
   return true
 end
-
 
 ---@param first GitAbsorbHunk
 ---@param second GitAbsorbHunk
@@ -167,15 +159,9 @@ local function commute(first, second)
     -- repeated, then they commute no matter what their
     -- offsets are, because they can be interleaved in any
     -- order without changing the final result
-    if (
-      #first.added.lines == 0
-      and #second.added.lines == 0
-      and uniform(first.deleted.lines, second.deleted.lines)
-    )
-    or (
-      #first.deleted.lines == 0 and #second.deleted.lines == 0
-      and uniform(first.added.lines, second.added.lines)
-    )
+    if
+      (#first.added.lines == 0 and #second.added.lines == 0 and uniform(first.deleted.lines, second.deleted.lines))
+      or (#first.deleted.lines == 0 and #second.deleted.lines == 0 and uniform(first.added.lines, second.added.lines))
     then
       return second:clone(), first:clone()
     end
@@ -194,7 +180,6 @@ local function commute(first, second)
     return above:clone(), new_below
   end
 end
-
 
 local M = {}
 M.commute = commute

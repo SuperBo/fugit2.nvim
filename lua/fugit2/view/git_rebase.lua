@@ -1,11 +1,11 @@
 ---Main UI for Git Rebasing]
 ---Designated for in-memory rebasing with libgit2
 
-local Object = require "nui.object"
-local NuiPopup = require "nui.popup"
 local NuiLayout = require "nui.layout"
-local NuiText = require "nui.text"
 local NuiLine = require "nui.line"
+local NuiPopup = require "nui.popup"
+local NuiText = require "nui.text"
+local Object = require "nui.object"
 
 local LogView = require "fugit2.view.components.commit_log_view"
 local StatusTreeView = require "fugit2.view.components.file_tree_view"
@@ -13,38 +13,33 @@ local StatusTreeView = require "fugit2.view.components.file_tree_view"
 local git2 = require "fugit2.git2"
 local utils = require "fugit2.utils"
 
-
 -- ===========
 -- | Classes |
 -- ===========
 
-
 local SYMBOLS = {
   SQUASH_COMMIT = "󰛀",
-  FIXUP_COMMIT  = "󰳛",
-  DROP_COMMIT = "│"
+  FIXUP_COMMIT = "󰳛",
+  DROP_COMMIT = "│",
 }
-
 
 ---@class Fugit2UIGitRebaseView
 ---@field layout NuiLayout
 ---@field rebase GitRebase
-local RebaseView = Object("Fugit2UIGitRebaseView")
-
+local RebaseView = Object "Fugit2UIGitRebaseView"
 
 ---@enum Fugit2UIGitRebaseAction
 local RebaseAction = {
-  PICK   = git2.GIT_REBASE_OPERATION.PICK,
+  PICK = git2.GIT_REBASE_OPERATION.PICK,
   REWORD = git2.GIT_REBASE_OPERATION.REWORD,
-  EDIT   = git2.GIT_REBASE_OPERATION.EDIT,
+  EDIT = git2.GIT_REBASE_OPERATION.EDIT,
   SQUASH = git2.GIT_REBASE_OPERATION.SQUASH,
-  FIXUP  = git2.GIT_REBASE_OPERATION.FIXUP,
-  EXEC   = git2.GIT_REBASE_OPERATION.EXEC,
-  BASE   = 7,
-  DROP   = 8,
-  BREAK  = 9,
+  FIXUP = git2.GIT_REBASE_OPERATION.FIXUP,
+  EXEC = git2.GIT_REBASE_OPERATION.EXEC,
+  BASE = 7,
+  DROP = 8,
+  BREAK = 9,
 }
-
 
 -- =================
 -- | GitRebaseView |
@@ -73,7 +68,7 @@ local function _init_rebase_ref(repo, branch, upstream, onto)
 
   local rebase
   rebase, err = repo:rebase_init(branch_commit, upstream_commit, onto_commit, {
-    inmemory = true
+    inmemory = true,
   })
   if err ~= 0 then
     return nil, err
@@ -81,7 +76,6 @@ local function _init_rebase_ref(repo, branch, upstream, onto)
 
   return rebase, 0
 end
-
 
 ---@param repo GitRepository
 ---@param branch string? rebase branch revspec
@@ -113,7 +107,7 @@ local function _init_rebase_revspec(repo, branch, upstream, onto)
 
   local rebase
   rebase, err = repo:rebase_init(branch_commit, upstream_commit, onto_commit, {
-    inmemory = true
+    inmemory = true,
   })
   if err ~= 0 then
     return nil, err
@@ -121,7 +115,6 @@ local function _init_rebase_revspec(repo, branch, upstream, onto)
 
   return rebase, 0
 end
-
 
 ---@param ns_id integer
 ---@param repo GitRepository
@@ -134,14 +127,10 @@ function RebaseView:init(ns_id, repo, ref_config, revspec_config)
 
   local rebase, err
   if ref_config then
-    rebase, err = _init_rebase_ref(
-      repo, ref_config.branch, ref_config.upstream, ref_config.onto
-    )
+    rebase, err = _init_rebase_ref(repo, ref_config.branch, ref_config.upstream, ref_config.onto)
     self._git.inmemory = true
   elseif revspec_config then
-    rebase, err = _init_rebase_revspec(
-      repo, revspec_config.branch, revspec_config.upstream, revspec_config.onto
-    )
+    rebase, err = _init_rebase_revspec(repo, revspec_config.branch, revspec_config.upstream, revspec_config.onto)
     self._git.inmemory = true
   else
     rebase, err = repo:rebase_open()
@@ -187,19 +176,19 @@ function RebaseView:init(ns_id, repo, ref_config, revspec_config)
       modifiable = false,
       readonly = true,
       swapfile = false,
-      buftype  = "nofile",
+      buftype = "nofile",
     },
   }
   self.layout = NuiLayout(
     {
       relative = "editor",
       position = "50%",
-      size = { width = 100, height = "60%" }
+      size = { width = 100, height = "60%" },
     },
     NuiLayout.Box({
       NuiLayout.Box(self.views.status, { size = 4 }),
       NuiLayout.Box(self.views.commits.popup, { grow = 1 }),
-    }, {dir = "col"})
+    }, { dir = "col" })
   )
 
   self._states = {
@@ -207,8 +196,8 @@ function RebaseView:init(ns_id, repo, ref_config, revspec_config)
       NuiText(
         "Actions: [p]ick, [r]e[w]ord, [s]quash, [f]ixup, [d]rop, [b]reak, [gj][C-j], [gk][C-k], []",
         "Fugit2ObjectId"
-      )
-    }
+      ),
+    },
   }
 
   self:setup_handlers()
@@ -216,7 +205,6 @@ function RebaseView:init(ns_id, repo, ref_config, revspec_config)
   self:update()
   self:render()
 end
-
 
 ---@param action Fugit2UIGitRebaseAction
 ---@return NuiText pre_msg text of pre message
@@ -239,14 +227,13 @@ local function rebase_action_text(action)
   elseif action == RebaseAction.BREAK then
     return NuiText("󰜉 BREAK   ", "Fugit2RebaseDrop"), SYMBOLS.DROP_COMMIT
   end
-  return NuiText("󰜉 NONE  ")
+  return NuiText "󰜉 NONE  "
 end
-
 
 ---Updates buffer contents based on status of libgit2 git_rebase
 function RebaseView:update()
   self._states.status_line = NuiLine {
-    NuiText(tostring(self._git.rebase))
+    NuiText(tostring(self._git.rebase)),
   }
 
   self._git.signature, _ = self.repo:signature_default()
@@ -257,7 +244,7 @@ function RebaseView:update()
   local oids = self._git.oids
   local n_commits = self._git.rebase:noperations()
 
-  for i = n_commits-1,0,-1 do
+  for i = n_commits - 1, 0, -1 do
     local op = self._git.rebase:operation_byindex(i)
     if not op then
       break
@@ -274,25 +261,17 @@ function RebaseView:update()
 
     local rebase_text, symbol = rebase_action_text(op_type)
 
-    local node = LogView.CommitNode(
-      op_id:tostring(16),
-      message, author,
-      {},
-      {},
-      symbol,
-      rebase_text
-    )
-    commits[n_commits-i] = node
-    actions[n_commits-i] = op_type
-    oids[n_commits-i] = op_id:clone()
+    local node = LogView.CommitNode(op_id:tostring(16), message, author, {}, {}, symbol, rebase_text)
+    commits[n_commits - i] = node
+    actions[n_commits - i] = op_type
+    oids[n_commits - i] = op_id:clone()
   end
-  for i = 1,#commits-1 do
-    commits[i].parents[1] = commits[i+1].oid
+  for i = 1, #commits - 1 do
+    commits[i].parents[1] = commits[i + 1].oid
   end
 
   self.views.commits:update(commits, {})
 end
-
 
 function RebaseView:render()
   self._states.status_line:render(self.views.status.bufnr, self.ns_id, 1)
@@ -301,7 +280,6 @@ function RebaseView:render()
   self.views.commits:render()
 end
 
-
 ---Starts rebase process with given user actions
 function RebaseView:rebase_start()
   local actions = self._git.actions
@@ -309,18 +287,18 @@ function RebaseView:rebase_start()
 
   -- change git2 rebase action and order
   local n_commits = self._git.rebase:noperations()
-  for i = 0,n_commits-1 do
+  for i = 0, n_commits - 1 do
     local op = self._git.rebase:operation_byindex(i)
     if not op then
       break
     end
 
-    local oid = oids[n_commits-i]
+    local oid = oids[n_commits - i]
     if oid ~= op:id() then
       op:set_id(oid)
     end
 
-    local action = actions[n_commits-i]
+    local action = actions[n_commits - i]
     if action >= 0 and action <= 5 then
       op:set_type(action)
     elseif action == RebaseAction.DROP then
@@ -332,7 +310,6 @@ function RebaseView:rebase_start()
   -- call initial next
   self:rebase_next()
 end
-
 
 ---Makes the next rebase operation
 function RebaseView:rebase_next()
@@ -349,26 +326,20 @@ function RebaseView:rebase_next()
     print(err)
   elseif err == git2.GIT_ERROR.GIT_ITEROVER then
     -- end of iter
-    print("End")
+    print "End"
   else
     print(err)
   end
 end
 
-
 ---Inits status view.
 ---@return Fugit2GitStatusTree
 function RebaseView:init_files_view()
-  local status_view = StatusTreeView(
-    self.ns_id,
-    " 󰙅 Files ",
-    nil, nil
-  )
+  local status_view = StatusTreeView(self.ns_id, " 󰙅 Files ", nil, nil)
   self.views.files = status_view
 
   return status_view
 end
-
 
 ---Shows git status when having conflicts.
 function RebaseView:show_files()
@@ -386,14 +357,11 @@ function RebaseView:show_files()
   if index then
   end
 
-  self.layout:update(
-    NuiLayout.Box({
-      NuiLayout.Box(self.views.status, { size = 4 }),
-      NuiLayout.Box(files.popup, { grow = 1 }),
-    }, {dir = "col"})
-  )
+  self.layout:update(NuiLayout.Box({
+    NuiLayout.Box(self.views.status, { size = 4 }),
+    NuiLayout.Box(files.popup, { grow = 1 }),
+  }, { dir = "col" }))
 end
-
 
 function RebaseView:setup_handlers()
   local opts = { noremap = true, nowait = true }
@@ -468,18 +436,15 @@ function RebaseView:setup_handlers()
   -- Reorder actions
   local reorder_fn = function(is_down)
     local _, commit_idx = commit_view:get_commit()
-    if not commit_idx
-      or (is_down and commit_idx == #commits)
-      or (not is_down and commit_idx == 1)
-    then
+    if not commit_idx or (is_down and commit_idx == #commits) or (not is_down and commit_idx == 1) then
       return
     end
 
     local i, j -- index, i < j
     if is_down then
-      i, j = commit_idx, commit_idx+1
+      i, j = commit_idx, commit_idx + 1
     else
-      i, j = commit_idx-1, commit_idx
+      i, j = commit_idx - 1, commit_idx
     end
 
     -- swap actions
@@ -492,10 +457,10 @@ function RebaseView:setup_handlers()
     local ci, cj = commits[i], commits[j]
     if i > 1 then
       -- change pre i parents
-      local c_pre = commits[i-1]
+      local c_pre = commits[i - 1]
       c_pre.parents, ci.parents = ci.parents, c_pre.parents
     else
-      ci.parents = {ci.oid}
+      ci.parents = { ci.oid }
     end
     ci.parents, cj.parents = cj.parents, ci.parents
     commits[i], commits[j] = cj, ci
@@ -504,9 +469,9 @@ function RebaseView:setup_handlers()
     local winid = commit_view:winid()
     local position = vim.api.nvim_win_get_cursor(winid)
     if is_down then
-      vim.api.nvim_win_set_cursor(winid, {position[1] + 2, position[2]})
+      vim.api.nvim_win_set_cursor(winid, { position[1] + 2, position[2] })
     else
-      vim.api.nvim_win_set_cursor(winid, {position[1] - 2, position[2]})
+      vim.api.nvim_win_set_cursor(winid, { position[1] - 2, position[2] })
     end
 
     -- rerender
@@ -531,16 +496,13 @@ function RebaseView:setup_handlers()
   end, opts)
 end
 
-
 function RebaseView:mount()
   self.layout:mount()
 end
-
 
 function RebaseView:unmount()
   self._git = nil
   self.layout:unmount()
 end
-
 
 return RebaseView

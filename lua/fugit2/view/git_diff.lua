@@ -2,29 +2,26 @@
 
 local LogLevel = vim.log.levels
 
-local NuiSplit = require "nui.split"
 local NuiLayout = require "nui.layout"
+local NuiSplit = require "nui.split"
 local Object = require "nui.object"
 
 local SourceTree = require "fugit2.view.components.source_tree_view"
 
-
 ---@enum Fugit2GitDiffViewPane
 local Pane = {
   INVALID = 0, -- Pane have been invalid
-  SINGLE  = 1, -- Pane in single mode, usually at start
-  TWO     = 2, -- Pane in two side mode
-  THREE   = 3, -- Pane in three way compare
+  SINGLE = 1, -- Pane in single mode, usually at start
+  TWO = 2, -- Pane in two side mode
+  THREE = 3, -- Pane in three way compare
 }
-
 
 ---@class Fugit2GitDiffView
 ---@field repo GitRepository
 ---@field index GitIndex
 ---@field ns_id integer
 ---@field tabpage integer
-local GitDiff = Object("Fugit2GitDiffView")
-
+local GitDiff = Object "Fugit2GitDiffView"
 
 ---Initializes GitDiffView
 ---@param ns_id integer Namespace id
@@ -50,7 +47,6 @@ function GitDiff:init(ns_id, repo, index)
   self._pane = Pane.SINGLE
 end
 
-
 ---Creates new tab
 function GitDiff:mount()
   if self.tabpage and vim.api.nvim_tabpage_is_valid(self.tabpage) then
@@ -62,7 +58,6 @@ function GitDiff:mount()
   end
 end
 
-
 ---Update info based on index
 function GitDiff:update()
   -- Clears status
@@ -73,11 +68,9 @@ function GitDiff:update()
   end
 end
 
-
 function GitDiff:render()
   self._views.files:render()
 end
-
 
 function GitDiff:_post_mount()
   self._windows[1] = vim.api.nvim_get_current_win()
@@ -86,7 +79,7 @@ function GitDiff:_post_mount()
   self._views.files = source_tree
   source_tree:mount()
 
-  vim.cmd("rightbelow vsplit")
+  vim.cmd "rightbelow vsplit"
   self._windows[2] = vim.api.nvim_get_current_win()
 
   self._pane = Pane.TWO
@@ -96,15 +89,10 @@ function GitDiff:_post_mount()
   self:render()
 end
 
-
 ---Switches to two main panes layout
-function GitDiff:_two_panes_layout()
-end
-
+function GitDiff:_two_panes_layout() end
 
 ---Switches to three main panes layout
-function GitDiff:_three_panes_layout()
-end
-
+function GitDiff:_three_panes_layout() end
 
 return GitDiff

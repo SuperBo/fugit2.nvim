@@ -2,38 +2,35 @@
 
 local NuiLayout = require "nui.layout"
 local Object = require "nui.object"
-local event = require "nui.utils.autocmd".event
+local event = require("nui.utils.autocmd").event
 local iter = require "plenary.iterators"
 
 local BranchView = require "fugit2.view.components.branch_tree_view"
 local LogView = require "fugit2.view.components.commit_log_view"
-local utils = require "fugit2.utils"
 local git2 = require "fugit2.git2"
-
+local utils = require "fugit2.utils"
 
 local BRANCH_WINDOW_WIDTH = 36
 local GIT_OID_LENGTH = 16
-
 
 ---@class Fugit2GitGraphView
 ---@field branch_popup NuiPopup Branch popup.
 ---@field commit_popup NuiPopup Commit popup.
 ---@field ns_id integer Namespace id.
 ---@field repo GitRepository
-local GitGraph = Object("Fugit2GitGraphView")
-
+local GitGraph = Object "Fugit2GitGraphView"
 
 ---Inits NuiGitGraph.
 ---@param ns_id integer
 ---@param repo GitRepository
 function GitGraph:init(ns_id, repo)
   if not repo then
-    error("[Fugit2] Null repo")
+    error "[Fugit2] Null repo"
   end
 
   self.views = {
     branch = BranchView(ns_id, BRANCH_WINDOW_WIDTH),
-    log = LogView(ns_id, " 󱁉 Commits Log ", true)
+    log = LogView(ns_id, " 󱁉 Commits Log ", true),
   }
 
   self.repo = repo
@@ -62,20 +59,16 @@ function GitGraph:init(ns_id, repo)
       position = "50%",
       size = { width = "80%", height = "80%" },
     },
-    NuiLayout.Box(
-      {
-        NuiLayout.Box(self.views.branch.popup, { size = BRANCH_WINDOW_WIDTH }),
-        NuiLayout.Box(self.views.log.popup, { grow = 1 }),
-      },
-      { dir = "row" }
-    )
+    NuiLayout.Box({
+      NuiLayout.Box(self.views.branch.popup, { size = BRANCH_WINDOW_WIDTH }),
+      NuiLayout.Box(self.views.log.popup, { grow = 1 }),
+    }, { dir = "row" })
   )
   self._last_branch_linenr = -1
 
   self:setup_handlers()
   self:update()
 end
-
 
 ---Updates git branch and commits.
 function GitGraph:update()
@@ -132,7 +125,6 @@ function GitGraph:update()
   end
 end
 
-
 ---Updates log commits
 ---@param refname string
 function GitGraph:update_log(refname)
@@ -169,8 +161,8 @@ function GitGraph:update_log(refname)
   -- Get upstream if refname is not default and is branch
   if refname == git.default_branch and git.default_remote_branch then
     walker:push_ref(git.default_remote_branch)
-  elseif refname ~= git.default_branch
-    and git2.reference_name_namespace(refname) == git2.GIT_REFERENCE_NAMESPACE.BRANCH
+  elseif
+    refname ~= git.default_branch and git2.reference_name_namespace(refname) == git2.GIT_REFERENCE_NAMESPACE.BRANCH
   then
     upstream, _ = self.repo:branch_upstream_name(refname)
     if upstream then
@@ -182,20 +174,16 @@ function GitGraph:update_log(refname)
 
   err = walker:push_ref(refname)
   if err ~= 0 then
-    vim.notify(
-      string.format("[Fugit2] Failed to get revision for %s!", refname),
-      vim.log.levels.ERROR
-    )
+    vim.notify(string.format("[Fugit2] Failed to get revision for %s!", refname), vim.log.levels.ERROR)
     return
   end
 
   commit_list = {}
   local i = 0
   for id, commit in walker:iter() do
-    local parents = vim.tbl_map(
-      function(p) return p:tostring(GIT_OID_LENGTH) end,
-      commit:parent_oids()
-    )
+    local parents = vim.tbl_map(function(p)
+      return p:tostring(GIT_OID_LENGTH)
+    end, commit:parent_oids())
 
     --Retrieve tag and branches
     local refs = {}
@@ -207,26 +195,21 @@ function GitGraph:update_log(refname)
     local id_str = id:tostring(GIT_OID_LENGTH)
 
     if git.default_branch and id_str == git.default_branch_oid then
-      refs[#refs+1] = git.default_branch
+      refs[#refs + 1] = git.default_branch
     end
     if git.default_remote_branch and id_str == git.default_remote_branch_oid then
-      refs[#refs+1] = git.default_remote_branch
+      refs[#refs + 1] = git.default_remote_branch
     end
     if refname ~= git.default_branch and id_str == tip then
-      refs[#refs+1] = refname
+      refs[#refs + 1] = refname
     end
     if upstream and id_str == upstream_id then
-      refs[#refs+1] = upstream
+      refs[#refs + 1] = upstream
     end
 
     ---@type Fugit2GitGraphCommitNode
-    local commit_node = LogView.CommitNode(
-      id:tostring(GIT_OID_LENGTH),
-      commit:message(),
-      commit:author(),
-      parents,
-      refs
-    )
+    local commit_node =
+      LogView.CommitNode(id:tostring(GIT_OID_LENGTH), commit:message(), commit:author(), parents, refs)
 
     i = i + 1
     commit_list[i] = commit_node
@@ -242,13 +225,11 @@ function GitGraph:update_log(refname)
   self.views.log:update(commit_list, self._git.remote_icons)
 end
 
-
 -- Renders content for NuiGitGraph.
 function GitGraph:render()
   self.views.branch:render()
   self.views.log:render()
 end
-
 
 function GitGraph:mount()
   self._layout:mount()
@@ -258,11 +239,9 @@ function GitGraph:mount()
   end
 end
 
-
 function GitGraph:unmount()
   self._layout:unmount()
 end
-
 
 ---Set callback to be called when user select commit
 ---@param callback fun(commit: Fugit2GitGraphCommitNode)
@@ -280,7 +259,6 @@ function GitGraph:on_commit_select(callback)
   end, { noremap = true, nowait = true })
 end
 
-
 ---Set call be called when user select branch
 ---@param callback fun(branch: string)
 function GitGraph:on_branch_select(callback)
@@ -297,7 +275,6 @@ function GitGraph:on_branch_select(callback)
     end
   end, { noremap = true, nowait = true })
 end
-
 
 -- Setups keymap handlers
 function GitGraph:setup_handlers()
@@ -328,14 +305,12 @@ function GitGraph:setup_handlers()
   --movement
   log_view:map("n", "j", "2j", map_options)
   log_view:map("n", "k", "2k", map_options)
-  log_view:map("n", "h",
-    function() vim.api.nvim_set_current_win(branch_view:winid()) end,
-    map_options
-  )
-  branch_view:map("n", { "l", "<cr>", "<space>" },
-    function() vim.api.nvim_set_current_win(log_view:winid()) end,
-    map_options
-  )
+  log_view:map("n", "h", function()
+    vim.api.nvim_set_current_win(branch_view:winid())
+  end, map_options)
+  branch_view:map("n", { "l", "<cr>", "<space>" }, function()
+    vim.api.nvim_set_current_win(log_view:winid())
+  end, map_options)
 
   -- move cursor
   branch_view:on(event.CursorMoved, function()
@@ -346,8 +321,6 @@ function GitGraph:setup_handlers()
       self:render()
     end
   end)
-
 end
-
 
 return GitGraph
