@@ -7,22 +7,22 @@ jobs:
     name: stylua
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       - uses: JohnnyMorganz/stylua-action@v3
         with:
           version: latest
           token: ${{ secrets.GITHUB_TOKEN }}
           args: --color always --check lua
 
-  test:
+  test-linux:
     runs-on: ubuntu-latest
     strategy:
       matrix:
         nvim-versions: ['stable', 'nightly']
-    name: test
+    name: test-linux
     steps:
       - name: checkout
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - uses: rhysd/action-setup-vim@v1
         with:
@@ -30,4 +30,30 @@ jobs:
           version: ${{ matrix.nvim-versions }}
 
       - name: run tests
-        run: make test
+        run: |
+          sudo apt-get install -y libgit2-1.1
+          sudo ln -s /usr/lib/x86_64-linux-gnu/libgit2.so.1.1 /usr/local/lib/libgit2.so
+          sudo ldconfig
+          nvim --version
+          nvim --headless -u tests/minimal_init.lua -c "PlenaryBustedDirectory tests/ {minimal_init = 'tests/minimal_init.lua', sequential = true}"
+
+  test-macos:
+    runs-on: macos-latest
+    strategy:
+      matrix:
+        nvim-versions: ['stable', 'nightly']
+    name: test-macos
+    steps:
+      - name: checkout
+        uses: actions/checkout@v4
+
+      - uses: rhysd/action-setup-vim@v1
+        with:
+          neovim: true
+          version: ${{ matrix.nvim-versions }}
+
+      - name: run tests
+        run: |
+          brew install libgit2
+          nvim --version
+          nvim --headless -u tests/minimal_init.lua -c "PlenaryBustedDirectory tests/ {minimal_init = 'tests/minimal_init.lua', sequential = true}"

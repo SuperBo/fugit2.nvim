@@ -1,0 +1,15 @@
+00merge merge 00initial 002c
+002c 2-c 002b
+002b 2-b 002a
+002a 2-a 00initial
+00initial initial
+---
+󰍌 ──╮       ▊ merge
+│   │
+│   ●       ▊ 2-c
+│   │
+│   ●       ▊ 2-b
+│   │
+│   ●       ▊ 2-a
+│   │
+●───╯       ▊ initial
