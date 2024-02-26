@@ -149,6 +149,7 @@ describe("prepare_commit_node_visualisation", function()
   end)
 end)
 
+
 describe("draw_graph_line", function()
   it("draws single commit at col 1", function()
     local cols = { "x" }
@@ -239,6 +240,7 @@ describe("draw_graph_line", function()
   end)
 end)
 
+
 ---@param lines NuiLine[]
 ---@return string[]
 local function render_graph_lines(lines)
@@ -246,6 +248,7 @@ local function render_graph_lines(lines)
     return line:content()
   end, lines)
 end
+
 
 describe("draw_commit_nodes", function()
   it("draws linear graph", function()
