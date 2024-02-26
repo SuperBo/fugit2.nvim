@@ -223,7 +223,7 @@ function BitArray.new()
 end
 
 ---@param set boolean whether new bit is set or not
----@return integer length new lenght of array
+---@return integer length new length of array
 function BitArray:append(set)
   local buf = bit.lshift(self.buf, 1)
   if set then
@@ -262,7 +262,7 @@ end
 ---@return BitArray
 function BitArray:set(i)
   if i > 0 and i <= self.n then
-    self.buf = bit.bor(self.buf, bit.lshift(1, self.n - i))
+    self.buf = bit.bor(self.buf, bit.lshift(1ULL, self.n - i))
   end
   return self
 end
@@ -272,7 +272,7 @@ end
 ---@return BitArray
 function BitArray:unset(i)
   if i > 0 and i <= self.n then
-    local mask = bit.bnot(bit.lshift(1, self.n - i))
+    local mask = bit.bnot(bit.lshift(1ULL, self.n - i))
     self.buf = bit.band(self.buf, mask)
   end
   return self
@@ -283,7 +283,7 @@ end
 ---@return integer[] indices of set/unset indices (1-based)
 local function _bitarray_get_indices(arr, is_set)
   ---@type integer
-  local i, mask = 1, bit.lshift(1, arr.n - 1)
+  local i, mask = 1, bit.lshift(1ULL, arr.n - 1)
   ---@type boolean
   local b
   local indices = {}
@@ -318,7 +318,7 @@ end
 ---@return integer[] unset List of unset indices (1-based)
 function BitArray:set_unset_indices()
   ---@type integer
-  local i, mask = self.n, 1
+  local i, mask = self.n, 1ULL
   local unset = {}
 
   while i > 0 do
@@ -343,7 +343,7 @@ function BitArray:set_k_unset_indices(k)
   ---@type integer
   local i, n = 1, 0
   ---@type integer
-  local mask = bit.lshift(1, self.n - 1)
+  local mask = bit.lshift(1ULL, self.n - 1)
   local unset = {}
 
   while i <= self.n and n < k do
@@ -359,7 +359,7 @@ function BitArray:set_k_unset_indices(k)
 
   if n < k then
     local delta = k - n
-    local b_append = bit.lshift(1, delta) - 1
+    local b_append = bit.lshift(1ULL, delta) - 1
     self.buf = bit.bor(bit.lshift(self.buf, delta), b_append)
     self.n = self.n + delta
 

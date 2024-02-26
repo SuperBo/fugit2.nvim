@@ -38,7 +38,7 @@ jobs:
           nvim --headless -u tests/minimal_init.lua -c "PlenaryBustedDirectory tests/ {minimal_init = 'tests/minimal_init.lua', sequential = true}"
 
   test-macos:
-    runs-on: macos-latest
+    runs-on: macos-14
     strategy:
       matrix:
         nvim-versions: ['stable', 'nightly']
