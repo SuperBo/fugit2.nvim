@@ -14,10 +14,9 @@ local async_utils = require "plenary.async.util"
 local iterators = require "plenary.iterators"
 
 local GitStatusTree = require "fugit2.view.components.file_tree_view"
-local UI = require "fugit2.view.components.menus"
--- local GitBranchTree = require "fugit2.view.components.branch_tree_view"
 local LogView = require "fugit2.view.components.commit_log_view"
 local PatchView = require "fugit2.view.components.patch_view"
+local UI = require "fugit2.view.components.menus"
 local git2 = require "fugit2.git2"
 local utils = require "fugit2.utils"
 
@@ -373,17 +372,17 @@ function GitStatus:_init_menus(menu_type)
     menu_title = NuiText(" Committing ", title_hl)
     menu_items = {
       { texts = { NuiText("  Create ", head_hl) } },
-      { texts = { NuiText " Commit " }, key = "c" },
+      { texts = { NuiText "  Commit " }, key = "c" },
       { texts = { NuiText("  Edit ", head_hl), NuiText("HEAD ", "Fugit2Header") } },
-      { texts = { NuiText "󰦒 Extend" }, key = "e" },
-      { texts = { NuiText "󰧭 Reword" }, key = "r" },
-      { texts = { NuiText "󰣪 Amend" }, key = "a" },
+      { texts = { NuiText "󰦒  Extend" }, key = "e" },
+      { texts = { NuiText "󰧭  Reword" }, key = "r" },
+      { texts = { NuiText "󰣪  Amend" }, key = "a" },
       { texts = { NuiText(" 󰽜 Edit ", head_hl) } },
-      { texts = { NuiText "󰇾 Fixup" }, key = "f" },
-      { texts = { NuiText "󰶯 Squash" }, key = "s" },
-      { texts = { NuiText " Absorb" }, key = "b" },
+      { texts = { NuiText "󰇾  Fixup" }, key = "f" },
+      { texts = { NuiText "󰶯  Squash" }, key = "s" },
+      { texts = { NuiText "  Absorb" }, key = "b" },
       { texts = { NuiText("  Log ", head_hl) } },
-      { texts = { NuiText "󱁉 Graph" }, key = "g" },
+      { texts = { NuiText "󱁉  Graph" }, key = "g" },
     }
   elseif menu_type == Menu.DIFF then
     menu_title = NuiText(" Diffing ", title_hl)

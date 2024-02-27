@@ -5,10 +5,8 @@
 
 Git plugin for Neovim (based on libgit2).
 
+
 ![Fugit2 Main View](https://raw.githubusercontent.com/SuperBo/fugit2.nvim/assets/assets/main_view.png)
-
-![Fugit2 Diff View](https://raw.githubusercontent.com/SuperBo/fugit2.nvim/assets/assets/inline_patch_view.png)
-
 ![Fugit2 Graph View](https://raw.githubusercontent.com/SuperBo/fugit2.nvim/assets/assets/graph_view.png)
 
 ## ✨ Features
@@ -86,6 +84,71 @@ If you are using lazy, you can use this config
 
 TODO: add later
 
-## Default Keybinding and Usage
+## Keyboard and Usage
 
-TODO: add later
+### Main Git Status View
+Trigger this view by ":Fugit2" command or by any shortcut that you assigned to.
+
+Hot keys and usages:
+- `Enter`: Open current file for editting.
+- `Space`: Toggle staged/unstaged of current entry.
+- `-`:  Toggle staged/unstaged of current entry.
+- `s`: Stage current entry.
+- `u`: Unstage current entry.
+- `=`: Toggle patch view of current entry.
+- `j`: Move cursor to next entry.
+- `k`: Move cursor to previous entry.
+- `l`: Move cursor to patch view if visible.
+- `q`: Quit view.
+- `Esc`: Quite view.
+- `c`: Open Commit menu.
+- `b`: Open Branch menu.
+- `d`: Open Diffing menu.
+- `f`: Open Fetching menu.
+- `p`: Open Pull menu.
+- `P`: Open Push menu.
+- `N`: Open Github integration menu.
+
+### Commit Message Pane
+
+![Fugit2 Commit Input](https://raw.githubusercontent.com/SuperBo/fugit2.nvim/assets/assets/commit_message_view.png)
+
+Input your commit message.
+
+Hot keys and usages:
+- `Esc`: Quit current commit action.
+- `q`: Quit current commit action.
+- `Enter`: Finish commit message and complete current commit action.
+- `Ctrl-c`: Quit current commit action while in **insert mode**.
+- `Ctrl-Enter`: Finish commit message and complete current commit action while in **insert mode**.
+
+### Git Status Patch Pane
+
+![Fugit2 Diff View](https://raw.githubusercontent.com/SuperBo/fugit2.nvim/assets/assets/inline_patch_view.png)
+
+Trigger Patch view by pressing "=" in main status view, then use "h", "l" to navigate between them.
+
+Hot keys and usages:
+- `=`: Toggle Patch pane view.
+- `l`: Move cursor to right pane.
+- `h`: Move cursor to left pane.
+- `s`: Stage hunk or visual selection.
+- `u`: Unstage hunk or visual selection.
+- `-`: Stage if you are in Unstaged pane, Unstage if you are in Staged pane.
+- `zc`: Fold current hunk.
+- `zo`: Unfold current folded hunk.
+- `J`: Move to next hunk.
+- `K`: Move to previous hunk.
+
+
+## Credits
+
+- [nvim-tiny](https://github.com/chrisgrieser/nvim-tinygit) for Github integration.
+- [diffview.nvim](https://github.com/sindrets/diffview.nvim) for Diffview integration.
+- [nui.nvim](https://github.com/MunifTanjim/nui.nvim) for his great Nvim UI library.
+- [plenary.nvim](https://github.com/nvim-lua/plenary.nvim) for utilities and testing framework.
+- [libgit2](https://libgit2.org/) for lightweight and performance git library.
+- [lazygit](https://github.com/jesseduffield/lazygit) for Git pane inspirations.
+- [fugitive.vim](https://github.com/tpope/vim-fugitive) for a great vim git client.
+- [magit](https://magit.vc/) for a great Git client.
+- [neogit](https://github.com/NeogitOrg/neogit) for great Neovim git client.
