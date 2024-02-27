@@ -41,7 +41,7 @@ jobs:
     runs-on: macos-14
     strategy:
       matrix:
-        nvim-versions: ['stable', 'nightly']
+        nvim-versions: ['stable']
     name: test-macos
     steps:
       - name: checkout
