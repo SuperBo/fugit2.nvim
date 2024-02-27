@@ -9,6 +9,8 @@ Git plugin for Neovim (based on libgit2).
 
 ![Fugit2 Diff View](https://raw.githubusercontent.com/SuperBo/fugit2.nvim/assets/assets/inline_patch_view.png)
 
+![Fugit2 Graph View](https://raw.githubusercontent.com/SuperBo/fugit2.nvim/assets/assets/graph_view.png)
+
 ## ✨ Features
 
 - ✔ Floating git source window.
