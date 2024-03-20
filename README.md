@@ -54,6 +54,33 @@ sudo pacman -S libgit2
 brew install libgit2
 ```
 
+#### Windows
+
+There are no pre-packaged releases of libgit2 on Windows so the library must be built from source.
+
+##### Install CMake and MinGW (with Chocolatey)
+
+```powershell
+#requires -RunAsAdministrator
+choco install choco install cmake --installargs 'ADD_CMAKE_TO_PATH=User'
+choco install mingw
+```
+
+Make sure to restart your terminal after installing MinGW to ensure that the `gcc` and `g++` commands are available.
+
+##### Clone and build libgit2
+
+```powershell
+git clone https://github.com/libgit2/libgit2
+cd libgit2
+mkdir build
+cd build
+cmake -G "MinGW Makefiles" ..
+cmake --build .
+```
+
+Now you should have a `libgit2.dll` in the `build` directory. This should be copied to a location in your `PATH` or to the same directory as your Neovim executable.
+
 ### Neovim
 
 #### Lazy
