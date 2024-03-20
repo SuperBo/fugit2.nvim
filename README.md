@@ -62,7 +62,7 @@ If you are using lazy, you can use this config
 
 ```lua
 {
-  'SuperBo/fugit2.nvim'
+  'SuperBo/fugit2.nvim',
   opts = {},
   dependencies = {
     'MunifTanjim/nui.nvim',
