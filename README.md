@@ -69,9 +69,10 @@ If you are using lazy, you can use this config
     'nvim-tree/nvim-web-devicons',
     'nvim-lua/plenary.nvim',
     {
-      'chrisgrieser/nvim-tinygit',
+      'chrisgrieser/nvim-tinygit', -- optional: for Github PR view
       dependencies = { 'stevearc/dressing.nvim' }
-    }
+    },
+    'sindrets/diffview.nvim' -- optional: for Diffview
   },
   cmd = { 'Fugit2', 'Fugit2Graph' },
   keys = {
