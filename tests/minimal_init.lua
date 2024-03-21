@@ -1,11 +1,10 @@
-local on_windows = vim.loop.os_uname().version:match 'Windows'
+local on_windows = vim.loop.os_uname().version:match "Windows"
 
 local function join_paths(...)
-  local path_sep = on_windows and '\\' or '/'
+  local path_sep = on_windows and "\\" or "/"
   local result = table.concat({ ... }, path_sep)
   return result
 end
-
 
 local plenary_dir = os.getenv "PLENARY_DIR" or ".venv/plenary.nvim"
 if vim.fn.isdirectory(plenary_dir) ~= 1 then

@@ -23,6 +23,8 @@ local FILE_ENTRY_PADDING = 45
 ---@field color string Extmark.
 ---@field wstatus string Worktree short status.
 ---@field istatus string Index short status.
+---@field modified boolean Buffer is modifed or not
+---@field loaded boolean Buffer is loaded or not
 
 ---@param dir_tree table
 ---@param prefix string Name to concat to form id
@@ -103,7 +105,8 @@ local function tree_node_data_from_item(item, bufs)
 
   local filename = vim.fs.basename(path)
   local extension = vim.filetype.match { filename = filename }
-  local modified = bufs[path] and bufs[path].modified or false
+  local loaded = bufs[path] ~= nil
+  local modified = loaded and bufs[path].modified or false
   local conflicted = (
     item.worktree_status == git2.GIT_DELTA.CONFLICTED or item.index_status == git2.GIT_DELTA.CONFLICTED
   )
@@ -135,8 +138,9 @@ local function tree_node_data_from_item(item, bufs)
     istatus = istatus,
     stage_icon = stage_icon,
     stage_color = icon_color,
-    modified = modified,
     conflicted = conflicted,
+    modified = modified,
+    loaded = loaded,
   }
 end
 
@@ -231,7 +235,7 @@ function GitStatusTree:update(status)
   local bufs = {}
   for _, bufnr in pairs(vim.tbl_filter(vim.api.nvim_buf_is_loaded, vim.api.nvim_list_bufs())) do
     local b = vim.bo[bufnr]
-    if b and b.modified then
+    if b then
       local path = vim.fn.fnamemodify(vim.api.nvim_buf_get_name(bufnr), ":t")
       bufs[path] = {
         modified = b.modified,
@@ -272,7 +276,7 @@ function GitStatusTree:update(status)
   self.tree:set_nodes(tree_construct_nodes(dir_tree, ""))
 end
 
----Add or unstage a node from index.
+-- Adds, stage unstage a node from index.
 ---@param repo GitRepository
 ---@param index GitIndex
 ---@param add boolean enable add to index
@@ -343,6 +347,42 @@ function GitStatusTree:index_add_reset(repo, index, add, reset, node)
       -- require full refresh if update failed
       inplace = false
     end
+  end
+
+  return updated, not inplace
+end
+
+-- Checkouts file from head, have the same effect as discard.
+---@param repo GitRepository
+---@param index GitIndex
+---@param node NuiTree.Node
+---@return boolean updated Tree is updated or not.
+---@return boolean refresh Whether needed to do full refresh.
+function GitStatusTree:index_checkout(repo, index, node)
+  local err
+  local updated = false
+  local inplace = true -- whether can update status inplace
+
+  if node.wstatus ~= "-" then
+    -- err = repo:checkout_head({node.id})
+    err = repo:checkout_index(index, git2.GIT_CHECKOUT.FORCE, { node.id })
+    if err ~= 0 then
+      error("Git Error when checkout head: " .. err)
+    end
+    updated = true
+  end
+
+  -- inplace update
+  if updated then
+    if self:update_single_node(repo, node) ~= 0 then
+      -- require full refresh if update failed
+      inplace = false
+    end
+  end
+
+  -- update file buffer
+  if node.loaded then
+    vim.cmd.checktime(node.id)
   end
 
   return updated, not inplace

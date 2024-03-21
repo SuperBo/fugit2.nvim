@@ -33,7 +33,7 @@ ffi.cdef [[
   typedef struct git_tree git_tree;
   typedef struct git_tree_entry git_tree_entry;
 
-    typedef struct git_strarray {
+  typedef struct git_strarray {
     char **strings;
     size_t count;
   } git_strarray;
@@ -226,7 +226,7 @@ ffi.cdef [[
     void *notify_payload;
     git_checkout_progress_cb progress_cb;
     void *progress_payload;
-    git_strarray paths;
+    git_strarray_readonly paths;
     git_tree *baseline;
     git_index *baseline_index;
     const char *target_directory; /**< alternative checkout path to workdir */
@@ -321,6 +321,10 @@ ffi.cdef [[
   int git_blob_is_binary(const git_blob *blob);
   git_object_size_t git_blob_rawsize(const git_blob *blob);
   void git_blob_free(git_blob *blob);
+
+  int git_checkout_head(git_repository *repo, const git_checkout_options *opts);
+  int git_checkout_index(git_repository *repo, git_index *index, const git_checkout_options *opts);
+  int git_checkout_tree(git_repository *repo, const git_object *treeish, const git_checkout_options *opts);
 
   char * git_oid_tostr(char *out, size_t n, const git_oid *id);
   char * git_oid_tostr_s(const git_oid *oid);
@@ -547,6 +551,9 @@ M.git_config_entry_double_pointer = ffi.typeof "git_config_entry*[1]"
 
 ---@type ffi.ctype* git_config_iterator*[1]
 M.git_config_iterator_double_pointer = ffi.typeof "git_config_iterator*[1]"
+
+---@type ffi.ctype* git_checkout_options[1]
+M.git_checkout_options = ffi.typeof "git_checkout_options[1]"
 
 ---@type ffi.ctype* git_oid[1]
 M.git_oid = ffi.typeof "git_oid[1]"

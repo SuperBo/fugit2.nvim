@@ -233,12 +233,12 @@ function GitStatus:init(ns_id, repo, last_window, current_file)
   self._views.files = GitStatusTree(self.ns_id, " 󰙅 Files ", "[b]ranches [c]ommits [d]iff", "FloatFooter")
 
   -- menus
-  local amend_confirm = UI.Confirm(
-    self.ns_id,
-    NuiLine { NuiText "This commit has already been pushed to upstream, do you really want to modify it?" }
-  )
   self._prompts = {
-    amend_confirm = amend_confirm,
+    amend_confirm = UI.Confirm(
+      self.ns_id,
+      NuiLine { NuiText "This commit has already been pushed to upstream, do you really want to modify it?" }
+    ),
+    discard_confirm = UI.Confirm(self.ns_id, NuiLine { NuiText "󰮈 Discard changes, are you sure?" }),
   }
   ---@type { [integer]: Fugit2UITransientMenu }
   self._menus = {}
@@ -989,10 +989,11 @@ end
 
 ---Add/reset file entries handler.
 ---@param is_visual_mode boolean whether this handler is called in visual mode.
----@param add boolean add to index enable
----@param reset boolean reset from enable
+---@param add boolean ennable add to index
+---@param reset boolean enable reset from index
+---@param discard boolean enable discard changes
 ---@return fun()
-function GitStatus:index_add_reset_handler(is_visual_mode, add, reset)
+function GitStatus:index_add_reset_handler(is_visual_mode, add, reset, discard)
   local tree = self._views.files
   local git = self._git
   local states = self._states
@@ -1024,7 +1025,12 @@ function GitStatus:index_add_reset_handler(is_visual_mode, add, reset)
 
     local results = nodes
       :map(function(node)
-        local is_updated, is_refresh = tree:index_add_reset(self.repo, self.index, add, reset, node)
+        local is_updated, is_refresh
+        if discard then
+          is_updated, is_refresh = tree:index_checkout(self.repo, self.index, node)
+        else
+          is_updated, is_refresh = tree:index_add_reset(self.repo, self.index, add, reset, node)
+        end
 
         if is_updated then
           -- remove cached diff
@@ -2035,23 +2041,35 @@ function GitStatus:setup_handlers()
     end
   end, map_options)
 
-  ---- Space/[-]: Add or remove index
-  file_tree:map("n", { "-", "<space>" }, self:index_add_reset_handler(false, true, true), map_options)
+  --- Space/[-]: Add or remove index
+  file_tree:map("n", { "-", "<space>" }, self:index_add_reset_handler(false, true, true, false), map_options)
 
-  ---- [s]: stage file
-  file_tree:map("n", "s", self:index_add_reset_handler(false, true, false), map_options)
+  --- [s]: stage file
+  file_tree:map("n", "s", self:index_add_reset_handler(false, true, false, false), map_options)
 
-  ---- [u]: unstage file
-  file_tree:map("n", "u", self:index_add_reset_handler(false, false, true), map_options)
+  --- [u]: unstage file
+  file_tree:map("n", "u", self:index_add_reset_handler(false, false, true, false), map_options)
 
-  ---- Visual Space/[-]: Add remove for range
-  file_tree:map("v", { "-", "<space>" }, self:index_add_reset_handler(true, true, true), map_options)
+  --- [D]/[x]: discard file changes
+  -- file_tree:map("n", {"D", "x"}, self:index_add_reset_handler(false, false, false, true), map_options)
+  self._prompts.discard_confirm:on_yes(self:index_add_reset_handler(true, false, false, true))
+  file_tree:map("n", { "D", "x" }, function()
+    self._prompts.discard_confirm:show()
+  end, map_options)
+
+  --- Visual Space/[-]: Add remove for range
+  file_tree:map("v", { "-", "<space>" }, self:index_add_reset_handler(true, true, true, false), map_options)
 
   --- Visual [s]: stage files in range
-  file_tree:map("v", "s", self:index_add_reset_handler(true, true, false), map_options)
+  file_tree:map("v", "s", self:index_add_reset_handler(true, true, false, false), map_options)
 
   --- Visual [u]: unstage files in range
-  file_tree:map("v", "u", self:index_add_reset_handler(true, false, true), map_options)
+  file_tree:map("v", "u", self:index_add_reset_handler(true, false, true, false), map_options)
+
+  --- Visual [x][d]: discard files in range
+  file_tree:map("v", { "x", "d" }, function()
+    self._prompts.discard_confirm:show()
+  end, map_options)
 
   ---- Write index
   file_tree:map("n", "w", function()
