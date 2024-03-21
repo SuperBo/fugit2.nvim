@@ -18,6 +18,8 @@ Git plugin for Neovim (based on libgit2).
 - ✔ Nice git graph.
 - ☐ TODO: In-memory rebase.
 - ☐ TODO: Diff view.
+- ☐ TODO: Remap default key binding.
+- ☐ TODO: Proper help menu.
 
 ## 📦 Installation
 
@@ -59,6 +61,9 @@ brew install libgit2
 #### Lazy
 
 If you are using lazy, you can use this config
+
+
+
 
 ```lua
 {
