@@ -99,6 +99,7 @@ If you are using lazy, you can use this config
   dependencies = {
     'MunifTanjim/nui.nvim',
     'nvim-tree/nvim-web-devicons',
+    'sindrets/diffview.nvim',
     'nvim-lua/plenary.nvim',
     {
       'chrisgrieser/nvim-tinygit', -- optional: for Github PR view
