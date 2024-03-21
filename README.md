@@ -90,8 +90,6 @@ Now you should have a `libgit2.dll` in the `build` directory. This should be cop
 If you are using lazy, you can use this config
 
 
-
-
 ```lua
 {
   'SuperBo/fugit2.nvim',
@@ -129,6 +127,8 @@ Hot keys and usages:
 - `s`: Stage current entry.
 - `u`: Unstage current entry.
 - `=`: Toggle patch view of current entry.
+- `x`: Discard current entry.
+- `D`: Discard current entry.
 - `j`: Move cursor to next entry.
 - `k`: Move cursor to previous entry.
 - `l`: Move cursor to patch view if visible.

@@ -1771,6 +1771,7 @@ function Repository:config()
 end
 
 
+-- Creates a git_annotated_commit from the given reference.
 ---@param ref GitReference
 ---@return GitAnnotatedCommit?
 ---@return GIT_ERROR
@@ -1786,6 +1787,7 @@ function Repository:annotated_commit_from_ref(ref)
 end
 
 
+-- Creates a git_annotated_commit from a revision string.
 ---@param revspec string
 ---@return GitAnnotatedCommit?
 ---@return GIT_ERROR
@@ -2011,6 +2013,58 @@ function Repository:reset_default(paths)
     end
     return 0
   end
+end
+
+
+-- Updates files in the working tree to match the content of the index.
+---@param index GitIndex? Repository index, can be null
+---@param strategy GIT_CHECKOUT?
+---@param paths string[] file paths to be checkout
+---@return GIT_ERROR
+function Repository:checkout_index(index, strategy, paths)
+  local c_paths
+  local opts = libgit2.git_checkout_options(libgit2.GIT_CHECKOUT_OPTIONS_INIT)
+
+  if strategy ~= nil then
+    opts[0].checkout_strategy = strategy
+  end
+
+  if #paths > 0 then
+    c_paths = libgit2.const_char_pointer_array(#paths, paths)
+    opts[0].paths.strings = c_paths
+    opts[0].paths.count = #paths
+  end
+
+  local err = libgit2.C.git_checkout_index(
+    self.repo,
+    index and index.index or nil,
+    opts
+  )
+  return err
+end
+
+
+-- Updates files in the index and the working tree to match
+-- the content of the commit pointed at by HEAD.
+---@param strategy GIT_CHECKOUT?
+---@param paths string[] files paths to be checkout
+---@return GIT_ERROR
+function Repository:checkout_head(strategy, paths)
+  local c_paths
+  local opts = libgit2.git_checkout_options(libgit2.GIT_CHECKOUT_OPTIONS_INIT)
+
+  if strategy ~= nil then
+    opts[0].checkout_strategy = strategy
+  end
+
+  if #paths > 0 then
+    c_paths = libgit2.const_char_pointer_array(#paths, paths)
+    opts[0].paths.strings = c_paths
+    opts[0].paths.count = #paths
+  end
+
+  local err = libgit2.C.git_checkout_head(self.repo, opts)
+  return err
 end
 
 
@@ -2859,10 +2913,9 @@ end
 ---Set a library global option
 ---@param option GIT_OPT
 ---@param value integer
----@return integer success code
+---@return GIT_ERROR
 local function libgit2_set_opts(option, value)
-  local ret = libgit2.C.git_libgit2_opts(option, value)
-  return ret
+  return libgit2.C.git_libgit2_opts(option, value)
 end
 
 
@@ -2943,6 +2996,7 @@ M.GIT_OPT = libgit2.GIT_OPT
 M.GIT_OBJECT = libgit2.GIT_OBJECT
 M.GIT_REBASE_NO_OPERATION = libgit2.GIT_REBASE_NO_OPERATION
 M.GIT_REBASE_OPERATION = libgit2.GIT_REBASE_OPERATION
+M.GIT_CHECKOUT = libgit2.GIT_CHECKOUT
 
 
 M.head = Repository.head
