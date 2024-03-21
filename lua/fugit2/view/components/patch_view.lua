@@ -48,6 +48,7 @@ function PatchView:init(ns_id, title, title_color)
     win_options = {
       winhighlight = "Normal:Normal,FloatBorder:FloatBorder",
       cursorline = true,
+      foldlevel = 99,
     },
   }
 
