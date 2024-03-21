@@ -64,7 +64,7 @@ There are no pre-packaged releases of libgit2 on Windows so the library must be 
 
 ```powershell
 #requires -RunAsAdministrator
-choco install choco install cmake --installargs 'ADD_CMAKE_TO_PATH=User'
+choco install cmake --installargs 'ADD_CMAKE_TO_PATH=User'
 choco install mingw
 ```
 
