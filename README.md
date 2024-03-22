@@ -102,11 +102,19 @@ If you are using lazy, you can use this config
       'chrisgrieser/nvim-tinygit', -- optional: for Github PR view
       dependencies = { 'stevearc/dressing.nvim' }
     },
-    'sindrets/diffview.nvim' -- optional: for Diffview
   },
   cmd = { 'Fugit2', 'Fugit2Graph' },
   keys = {
     { '<leader>F', mode = 'n', '<cmd>Fugit2<cr>' }
+  }
+},
+{
+  -- optional: for diffview.nvim integration
+  'sindrets/diffview.nvim',
+  dependencies = { 'nvim-tree/nvim-web-devicons' },
+  -- lazy, only load diffview by these commands
+  cmd = {
+    'DiffviewFileHistory', 'DiffviewOpen', 'DiffviewToggleFiles', 'DiffviewFocusFiles', 'DiffviewRefresh'
   }
 }
 ```
