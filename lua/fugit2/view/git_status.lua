@@ -531,15 +531,18 @@ function GitStatus:_init_patch_views()
   patch_unstaged:map("n", { "q", "<esc" }, exit_fn, opts)
   patch_staged:map("n", { "q", "<esc>" }, exit_fn, opts)
 
+  self._prompts.discard_hunk_confirm = UI.Confirm(self.ns_id, NuiLine { NuiText "󰮈 Discard this hunk?" })
+  self._prompts.discard_line_confirm = UI.Confirm(self.ns_id, NuiLine { NuiText "󰮈 Discard these lines?" })
+
   -- Commit menu
   local commit_menu_handler = self:_menu_handlers(Menu.COMMIT)
   patch_unstaged:map("n", "c", commit_menu_handler, opts)
   patch_staged:map("n", "c", commit_menu_handler, opts)
 
   -- Diff menu
-  local diff_menu_handler = self:_menu_handlers(Menu.DIFF)
-  patch_unstaged:map("n", "d", diff_menu_handler, opts)
-  patch_staged:map("n", "d", diff_menu_handler, opts)
+  -- local diff_menu_handler = self:_menu_handlers(Menu.DIFF)
+  -- patch_unstaged:map("n", "d", diff_menu_handler, opts)
+  -- patch_staged:map("n", "d", diff_menu_handler, opts)
 
   -- Branch menu
   local branch_menu_handler = self:_menu_handlers(Menu.BRANCH)
@@ -575,14 +578,18 @@ function GitStatus:_init_patch_views()
   patch_unstaged:map("n", "=", turn_off_patch_fn, opts)
   patch_staged:map("n", "=", turn_off_patch_fn, opts)
 
-  local diff_apply_fn = function(diff_str)
+  local diff_apply_fn = function(diff_str, is_index)
     local diff, err = git2.Diff.from_buffer(diff_str)
     if not diff then
       vim.notify("[Fugit2] Failed to construct git2 diff, code " .. err, vim.log.levels.ERROR)
       return -1
     end
 
-    err = self.repo:apply_index(diff)
+    if is_index then
+      err = self.repo:apply_index(diff)
+    else
+      err = self.repo:apply_workdir(diff)
+    end
     if err ~= 0 then
       vim.notify("[Fugit2] Failed to apply partial diff, code " .. err, vim.log.levels.ERROR)
       return err
@@ -626,12 +633,34 @@ function GitStatus:_init_patch_views()
       return
     end
 
-    if diff_apply_fn(diff_str) == 0 then
+    if diff_apply_fn(diff_str, true) == 0 then
       local node, _ = tree:get_child_node_linenr()
       if node then
         diff_update_fn(node)
       end
     end
+  end, opts)
+
+  -- [x]/[d]: Discard handling
+  self._prompts.discard_hunk_confirm:on_yes(function()
+    local diff_str = patch_unstaged:get_diff_hunk_reversed()
+    if not diff_str then
+      vim.notify("[Fugit2] Failed to get hunk", vim.log.levels.ERROR)
+      return
+    end
+
+    if diff_apply_fn(diff_str, false) == 0 then
+      local node, _ = tree:get_child_node_linenr()
+      if node then
+        diff_update_fn(node)
+        if node.loaded then
+          vim.cmd.checktime(node.id)
+        end
+      end
+    end
+  end)
+  patch_unstaged:map("n", { "d", "x" }, function()
+    self._prompts.discard_hunk_confirm:show()
   end, opts)
 
   -- [-]/[u]: Unstage handling
@@ -650,7 +679,7 @@ function GitStatus:_init_patch_views()
         vim.notify("[Fugit2] Failed to get revere hunk", vim.log.levels.ERROR)
         return
       end
-      err = diff_apply_fn(diff_str)
+      err = diff_apply_fn(diff_str, true)
     end
 
     if err == 0 then
@@ -671,7 +700,7 @@ function GitStatus:_init_patch_views()
 
     vim.api.nvim_feedkeys(utils.KEY_ESC, "n", false)
 
-    if diff_apply_fn(diff_str) == 0 then
+    if diff_apply_fn(diff_str, true) == 0 then
       local node, _ = tree:get_child_node_linenr()
       if node then
         diff_update_fn(node)
@@ -692,12 +721,38 @@ function GitStatus:_init_patch_views()
 
     vim.api.nvim_feedkeys(utils.KEY_ESC, "n", false)
 
-    if diff_apply_fn(diff_str) == 0 then
+    if diff_apply_fn(diff_str, true) == 0 then
       local node, _ = tree:get_child_node_linenr()
       if node then
         diff_update_fn(node)
       end
     end
+  end, opts)
+
+  -- [d]/[x]: Visual selected discard
+  self._prompts.discard_line_confirm:on_yes(function()
+    local cursor_start = vim.fn.getpos("v")[2]
+    local cursor_end = vim.fn.getpos(".")[2]
+
+    local diff_str = patch_unstaged:get_diff_hunk_range_reversed(cursor_start, cursor_end)
+    if not diff_str then
+      return
+    end
+
+    vim.api.nvim_feedkeys(utils.KEY_ESC, "n", false)
+
+    if diff_apply_fn(diff_str, false) == 0 then
+      local node, _ = tree:get_child_node_linenr()
+      if node then
+        diff_update_fn(node)
+        if node.loaded then
+          vim.cmd.checktime(node.id)
+        end
+      end
+    end
+  end)
+  patch_unstaged:map("v", { "d", "x" }, function()
+    self._prompts.discard_line_confirm:show()
   end, opts)
 end
 
@@ -970,7 +1025,11 @@ function GitStatus:unmount()
   end
   self._views = nil
 
-  self._prompts.amend_confirm:unmount()
+  for _, p in ipairs(self._prompts) do
+    p:unmount()
+  end
+  self._prompts = nil
+
   self._menus = {}
   self.command_popup:unmount()
   self.input_popup:unmount()
