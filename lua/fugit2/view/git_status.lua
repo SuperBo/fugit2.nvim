@@ -531,14 +531,8 @@ function GitStatus:_init_patch_views()
   patch_unstaged:map("n", { "q", "<esc" }, exit_fn, opts)
   patch_staged:map("n", { "q", "<esc>" }, exit_fn, opts)
 
-  self._prompts.discard_hunk_confirm = UI.Confirm(
-    self.ns_id,
-    NuiLine { NuiText "󰮈 Discard this hunk?" }
-  )
-  self._prompts.discard_line_confirm = UI.Confirm(
-    self.ns_id,
-    NuiLine { NuiText "󰮈 Discard these lines?" }
-  )
+  self._prompts.discard_hunk_confirm = UI.Confirm(self.ns_id, NuiLine { NuiText "󰮈 Discard this hunk?" })
+  self._prompts.discard_line_confirm = UI.Confirm(self.ns_id, NuiLine { NuiText "󰮈 Discard these lines?" })
 
   -- Commit menu
   local commit_menu_handler = self:_menu_handlers(Menu.COMMIT)
@@ -665,7 +659,7 @@ function GitStatus:_init_patch_views()
       end
     end
   end)
-  patch_unstaged:map("n", {"d", "x"}, function()
+  patch_unstaged:map("n", { "d", "x" }, function()
     self._prompts.discard_hunk_confirm:show()
   end, opts)
 
