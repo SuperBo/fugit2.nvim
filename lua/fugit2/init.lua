@@ -37,7 +37,8 @@ local repos = {}
 
 ---@return GitRepository?
 local function open_repository()
-  local cwd = vim.fn.getcwd()
+  local cwd = vim.fn.fnamemodify(vim.api.nvim_buf_get_name(0), ":p:h")
+
   ---@type GitRepository?
   local repo = repos[cwd]
 
@@ -45,9 +46,12 @@ local function open_repository()
     local err
     repo, err = git2.Repository.open(cwd, true)
     if repo then
-      repos[cwd] = repo
-      if repo:repo_path() ~= cwd then
-        repos[repo:repo_path()] = repo
+      -- repos[cwd] = repo
+      local repo_path = vim.fn.fnamemodify(repo:repo_path(), ":p:h:h")
+
+      while repo_path:len() <= cwd:len() do
+        repos[cwd] = repo
+        cwd = vim.fn.fnamemodify(cwd, ":h")
       end
     else
       vim.notify(string.format("Can't open git directory at %s, error code: %d", cwd, err), vim.log.levels.WARN)

@@ -9,7 +9,7 @@ local M = {}
 
 local last_status_window = nil
 
----Creates Fugit2 Main Floating Window
+-- Creates Fugit2 Main Floating Window
 ---@param namespace integer Nvim namespace
 ---@param repo GitRepository
 ---@return Fugit2GitStatusView
@@ -38,7 +38,7 @@ function M.new_fugit2_graph_window(namespace, repo)
   return graph
 end
 
----Creates Fugit2 DiffView tab.
+-- Creates Fugit2 DiffView tab.
 ---@param namespace integer Nvim namespace
 ---@return Fugit2GitDiffView
 function M.new_fugit2_diff_view(namespace, repo)
