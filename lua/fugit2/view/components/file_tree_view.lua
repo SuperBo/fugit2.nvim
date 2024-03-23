@@ -49,6 +49,7 @@ local function tree_construct_nodes(dir_tree, prefix)
   return files
 end
 
+-- Gets colors for a tree node
 ---@param worktree_status GIT_DELTA
 ---@param index_status GIT_DELTA
 ---@param modified boolean

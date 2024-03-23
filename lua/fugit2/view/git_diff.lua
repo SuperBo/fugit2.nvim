@@ -47,7 +47,7 @@ function GitDiff:init(ns_id, repo, index)
   self._pane = Pane.SINGLE
 end
 
----Creates new tab
+-- Open GitDiffView in new tab
 function GitDiff:mount()
   if self.tabpage and vim.api.nvim_tabpage_is_valid(self.tabpage) then
     vim.api.nvim_set_current_tabpage(self.tabpage)
@@ -58,13 +58,16 @@ function GitDiff:mount()
   end
 end
 
----Update info based on index
+-- Update info based on index
 function GitDiff:update()
   -- Clears status
 
-  -- Updates
+  -- Updates git status
   local status_files, err = self.repo:status()
   if status_files then
+    self._views.files:update(status_files)
+  else
+    vim.notify("[Fugit2] Error updating git status, err " .. err)
   end
 end
 
@@ -89,10 +92,10 @@ function GitDiff:_post_mount()
   self:render()
 end
 
----Switches to two main panes layout
+-- Switches to two main panes layout
 function GitDiff:_two_panes_layout() end
 
----Switches to three main panes layout
+-- Switches to three main panes layout
 function GitDiff:_three_panes_layout() end
 
 return GitDiff

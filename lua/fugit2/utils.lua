@@ -131,6 +131,29 @@ function M.get_git_namespace_icon(namespace)
   return ""
 end
 
+-- Returns git status icon
+---@param status GIT_DELTA
+---@return string
+function M.get_git_status_icon(status)
+  if status == git2.GIT_DELTA.MODIFIED then
+    return " "
+  elseif status == git2.GIT_DELTA.ADDED then
+    return " "
+  elseif status == git2.GIT_DELTA.DELETED then
+    return " "
+  elseif status == git2.GIT_DELTA.RENAMED then
+    return " "
+  elseif status == git2.GIT_DELTA.UNTRACKED then
+    return " "
+  elseif status == git2.GIT_DELTA.CONFLICTED then
+    return " "
+  elseif status == git2.GIT_DELTA.IGNORED then
+    return " "
+  end
+
+  return ""
+end
+
 ---Return ahead behind string
 ---@param ahead integer?
 ---@param behind integer?
