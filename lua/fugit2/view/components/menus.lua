@@ -85,14 +85,13 @@ function Confirm:set_text(text)
   title:append(text)
   title:render(self._popup.bufnr, self.ns_id, 1)
 
-  local yes_no_width = math.floor(width * 0.3)
-  local yes_width, no_width = 5, 4
+  local yes_no_width = math.max(math.floor(width * 0.3), 12)
   self._yes_pos = math.floor((width - yes_no_width) / 2)
-  self._no_pos = self._yes_pos + yes_no_width - no_width
+  self._no_pos = self._yes_pos + yes_no_width - 2
   local yes_no = NuiLine {
     NuiText(string.rep(" ", self._yes_pos)),
     NuiText("󰄬 Yes", "Fugit2Staged"),
-    NuiText(string.rep(" ", self._no_pos - self._yes_pos - yes_width - no_width)),
+    NuiText(string.rep(" ", self._no_pos - self._yes_pos - 9)),
     NuiText("󰜺 No", "Fugit2Untracked"),
   }
   yes_no:render(self._popup.bufnr, self.ns_id, 2)
