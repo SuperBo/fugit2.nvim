@@ -375,8 +375,8 @@ end
 
 
 ---@param oid ffi.cdata* libgit2 git_oid*, borrow data
-function ObjectId.borrow (oid)
-  local object_id = { oid = oid }
+function ObjectId.borrow(oid)
+  local object_id = { oid = ffi.cast(libgit2.git_oid_pointer, oid) }
   setmetatable(object_id, ObjectId)
   return object_id
 end
@@ -795,6 +795,23 @@ function Reference:target()
   end
 
   return nil, 0
+end
+
+
+-- Conditionally creates a new reference
+-- with the same name as the given reference.
+---@param oid GitObjectId
+---@param message string
+---@return GitReference?
+---@return GIT_ERROR
+function Reference:set_target(oid, message)
+  local ref = libgit2.git_reference_double_pointer()
+  local err = libgit2.C.git_reference_set_target(ref, self.ref, oid.oid, message)
+  if err ~= 0 then
+    return nil, err
+  end
+
+  return Reference.new(ref[0]), 0
 end
 
 
@@ -1699,6 +1716,7 @@ function Repository:__tostring()
   return string.format("Git Repository: %s", self.path)
 end
 
+
 ---Opens Git repository
 ---@param path string Path to repository
 ---@param search boolean Whether to search parent directories.
@@ -1719,6 +1737,7 @@ function Repository.open (path, search)
 
   return Repository.new(git_repo[0]), 0
 end
+
 
 ---Checks a Repository is empty or not
 ---@return boolean is_empty Whether this git repo is empty
@@ -1836,6 +1855,31 @@ function Repository:head_commit()
 
   return Commit.new(ffi.cast(libgit2.git_commit_pointer, git_object[0])), 0
 end
+
+
+-- Gets GitCommit signature
+---@param oid GitObjectId
+---@param field string? GPG sign field
+function Repository:commit_signature(oid, field)
+  local buf_signature = libgit2.git_buf()
+  local buf_signed_data = libgit2.git_buf()
+
+  local err = libgit2.C.git_commit_extract_signature(
+    buf_signature, buf_signed_data, self.repo, oid.oid, field
+  )
+  if err ~= 0 then
+    return nil, nil, 0
+  end
+
+  local signature = ffi.string(buf_signature[0].ptr, buf_signature[0].size)
+  local signed_data = ffi.string(buf_signed_data[0].ptr, buf_signed_data[0].size)
+
+  libgit2.C.git_buf_dispose(buf_signature[0])
+  libgit2.C.git_buf_dispose(buf_signed_data[0])
+
+  return signature, signed_data, 0
+end
+
 
 ---@return GitTree?
 ---@return GIT_ERROR
@@ -2483,7 +2527,7 @@ function Repository:create_commit(index, signature, message)
     git_oid,
     self.repo, "HEAD",
     signature.sign[0], signature.sign[0],
-    "UTF-8", message,
+    nil, message,
     tree[0],
     parents and 1 or 0,
     parents
@@ -2513,7 +2557,7 @@ function Repository:create_commit_content(index, signature, message)
     buf,
     self.repo,
     signature.sign[0], signature.sign[0],
-    "UTF-8", message,
+    nil, message,
     tree[0],
     parents and 1 or 0,
     parents
@@ -3032,12 +3076,12 @@ end
 local function message_prettify(msg)
   local c_buf = libgit2.git_buf()
 
-  local err = libgit2.C.git_buf_grow(c_buf, msg:len() + 1)
-  if err ~= 0 then
-    return nil, err
-  end
+  -- local err = libgit2.C.git_buf_grow(c_buf, msg:len() + 1)
+  -- if err ~= 0 then
+  --   return nil, err
+  -- end
 
-  err = libgit2.C.git_message_prettify(c_buf, msg, 1, string.byte("#"))
+  local err = libgit2.C.git_message_prettify(c_buf, msg, 1, string.byte("#"))
   if err ~= 0 then
     libgit2.C.git_buf_dispose(c_buf)
     return nil, err
