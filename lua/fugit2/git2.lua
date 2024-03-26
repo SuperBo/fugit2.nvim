@@ -2420,51 +2420,73 @@ function Repository:signature_default()
 end
 
 
----Creates new commit in the repository.
+-- Creates tree and parents object used in
+-- create_commit and create_commmit_object funcionts.
 ---@param index GitIndex
----@param signature GitSignature
----@param message string
----@return GitObjectId?
+---@return ffi.cdata*?
+---@return ffi.cdata*?
 ---@return GIT_ERROR
-function Repository:commit(index, signature, message)
+function Repository:_create_commit_head_tree_parents(index)
+  local parents = nil
+
   -- get head as parent commit
   local head, err = self:head()
   if err ~= 0
     and err ~= libgit2.GIT_ERROR.GIT_ENOTFOUND
     and err ~= libgit2.GIT_ERROR.GIT_EUNBORNBRANCH
   then
-    return nil, err
+    return nil, parents, err
   end
 
   local parent = nil
   if head then
     parent, err = head:peel_commit()
     if err ~= 0 then
-      return nil, err
+      return nil, parents, err
+    end
+
+    if parent then
+      parents = libgit2.git_commit_constant_pointer_array(1)
+      parents[0] = parent.commit
     end
   end
 
   local tree_id
   tree_id, err = index:write_tree()
   if not tree_id then
-    return nil, err
+    return nil, nil, err
   end
 
   local tree = libgit2.git_tree_double_pointer()
   err = libgit2.C.git_tree_lookup(tree, self.repo, tree_id.oid)
   if err ~= 0 then
+    return nil, nil, err
+  end
+
+  return tree, parents, 0
+end
+
+-- Creates new commit in the repository.
+---@param index GitIndex
+---@param signature GitSignature
+---@param message string
+---@return GitObjectId?
+---@return GIT_ERROR
+function Repository:create_commit(index, signature, message)
+  local tree, parents, err = self:_create_commit_head_tree_parents(index)
+  if not tree or err ~= 0 then
     return nil, err
   end
 
   local git_oid = libgit2.git_oid()
-  err = libgit2.C.git_commit_create_v(
+  err = libgit2.C.git_commit_create(
     git_oid,
     self.repo, "HEAD",
     signature.sign[0], signature.sign[0],
     "UTF-8", message,
     tree[0],
-    parent and 1 or 0,
-    parent and parent.commit or nil
+    parents and 1 or 0,
+    parents
   )
   libgit2.C.git_tree_free(tree[0])
   if err ~= 0 then
@@ -2474,7 +2496,63 @@ function Repository:commit(index, signature, message)
   return ObjectId.borrow(git_oid), 0
 end
 
----Lookup a blob object from a repository.
+-- Creates new commit object as string.
+---@param index GitIndex
+---@param signature GitSignature
+---@param message string
+---@return string?
+---@return GIT_ERROR
+function Repository:create_commit_content(index, signature, message)
+  local tree, parents, err = self:_create_commit_head_tree_parents(index)
+  if not tree or err ~= 0 then
+    return nil, err
+  end
+
+  local buf = libgit2.git_buf()
+  err = libgit2.C.git_commit_create_buffer(
+    buf,
+    self.repo,
+    signature.sign[0], signature.sign[0],
+    "UTF-8", message,
+    tree[0],
+    parents and 1 or 0,
+    parents
+  )
+  libgit2.C.git_tree_free(tree[0])
+
+  if err ~= 0 then
+    libgit2.C.git_buf_dispose(buf)
+    return nil, err
+  end
+
+  local commit_str = ffi.string(buf[0].ptr, buf[0].size)
+  libgit2.C.git_buf_dispose(buf)
+  return commit_str, 0
+end
+
+-- Creates a commit object from the given content and signature
+---@param commit_content string Gitcommit object as string
+---@param signature string Gitcommit content signature
+---@param signature_field string? signature field
+---@return GitObjectId?
+---@return GIT_ERROR
+function Repository:create_commit_with_signature(commit_content, signature, signature_field)
+  local git_oid = libgit2.git_oid()
+  local err = libgit2.C.git_commit_create_with_signature(
+    git_oid,
+    self.repo,
+    commit_content,
+    signature,
+    signature_field
+  )
+  if err ~= 0 then
+    return nil, 0
+  end
+
+  return ObjectId.borrow(git_oid), 0
+end
+
+-- Lookups a blob object from a repository.
 ---@param id GitObjectId
 ---@return GitBlob?
 ---@return GIT_ERROR
@@ -2487,8 +2565,7 @@ function Repository:blob_lookup(id)
   return Blob.new(blob[0]), 0
 end
 
-
----Rewords HEAD commit.
+-- Rewords HEAD commit.
 ---@param signature GitSignature
 ---@param message string
 ---@return GitObjectId?

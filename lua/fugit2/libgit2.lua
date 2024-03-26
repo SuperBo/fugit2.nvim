@@ -187,7 +187,7 @@ ffi.cdef [[
     const char *message,
     const git_tree *tree,
     size_t parent_count,
-    const git_commit *parents[],
+    const git_commit **parents,
     void *payload
   );
   typedef int (*git_checkout_notify_cb)(
@@ -361,6 +361,36 @@ ffi.cdef [[
     const git_tree *tree,
     size_t parent_count,
     ...
+  );
+  int git_commit_create(
+    git_oid *id,
+    git_repository *repo,
+    const char *update_ref,
+    const git_signature *author,
+    const git_signature *committer,
+    const char *message_encoding,
+    const char *message,
+    const git_tree *tree,
+    size_t parent_count,
+    const git_commit **parents
+  );
+  int git_commit_create_buffer(
+    git_buf *out,
+    git_repository *repo,
+    const git_signature *author,
+    const git_signature *committer,
+    const char *message_encoding,
+    const char *message,
+    const git_tree *tree,
+    size_t parent_count,
+    const git_commit **parents
+  );
+  int git_commit_create_with_signature(
+    git_oid *out,
+    git_repository *repo,
+    const char *commit_content,
+    const char *signature,
+    const char *signature_field
   );
   int git_commit_amend(
     git_oid *id,
@@ -579,6 +609,8 @@ M.git_object_pointer = ffi.typeof "git_object*"
 M.git_commit_double_pointer = ffi.typeof "git_commit*[1]"
 ---@type ffi.ctype* git_commit *
 M.git_commit_pointer = ffi.typeof "git_commit*"
+---@type ffi.ctype* git_commit * array
+M.git_commit_constant_pointer_array = ffi.typeof "const git_commit*[?]"
 
 ---@type ffi.ctype* git_blob **
 M.git_blob_double_pointer = ffi.typeof "git_blob*[1]"
