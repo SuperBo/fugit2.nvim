@@ -252,7 +252,7 @@ local function load_gpgme()
   }
 
   -- Init gpgme
-  gpgme.gpgme_check_version("1.18.0")
+  gpgme.gpgme_check_version "1.18.0"
 
   return gpgme, gpgme_type
 end
@@ -268,7 +268,7 @@ local lazy_C = {
     rawset(M, "types", types)
 
     return gpgme[key]
-  end
+  end,
 }
 setmetatable(lazy_C, lazy_C)
 
@@ -280,7 +280,7 @@ local lazy_types = {
     rawset(M, "types", types)
 
     return types[key]
-  end
+  end,
 }
 setmetatable(lazy_types, lazy_types)
 
@@ -306,10 +306,8 @@ end
 -- Retrieves the error source from an error value.
 ---@param err integer
 local function gpgme_err_source(err)
-    return bit.band(bit.rshift(err, 24), 127)
+  return bit.band(bit.rshift(err, 24), 127)
 end
-
-
 
 -- ===============
 -- | GPGme enums |
@@ -324,7 +322,7 @@ M.GPG_ERROR = {
   BAD_SIGNATURE = 8, -- Bad signature
   NO_PUBKEY = 9, -- No public key
   CHECKSUM = 10, -- Checksum error
-  BAD_PASSPHRASE = 11,-- Bad passphrase
+  BAD_PASSPHRASE = 11, -- Bad passphrase
   CIPHER_ALGO = 12, -- Invalid cipher algorithm
   KEYRING_OPEN = 13, -- Cannot open keyring
   NO_SECKEY = 17, -- No secret key
@@ -339,16 +337,16 @@ M.GPG_ERROR = {
   DECRYPT_FAILED = 152, -- Decryption failed
   NOT_OPERATIONAL = 176, -- Not operational
   EOF = 16383, -- End of file
-  ENOMEM = bit.bor(GPG_ERR_SYSTEM_ERROR, 86),-- out-of-memory condition occurred.
+  ENOMEM = bit.bor(GPG_ERR_SYSTEM_ERROR, 86), -- out-of-memory condition occurred.
 }
 
 ---@enum GPGME_SIG_MODE
 M.GPGME_SIG_MODE = {
   NORMAL = 0,
   DETACH = 1,
-  CLEAR  = 2,
+  CLEAR = 2,
   ARCHIVE = 4,
-  FILE = 8
+  FILE = 8,
 }
 
 -- ================
@@ -369,7 +367,6 @@ Data.__index = Data
 ---@field key ffi.cdata* GPGme struct gpgme_key*
 local Key = {}
 Key.__index = Key
-
 
 -- ===============-=========
 -- | GPGme Context methods |

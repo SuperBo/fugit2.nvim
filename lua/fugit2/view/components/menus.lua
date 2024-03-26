@@ -147,7 +147,7 @@ local INPUT_TYPE = {
 ---@field ns_id integer
 local Menu = Object "Fugit2UITransientMenu"
 
----@alias Fugit2UITransientArg { key: string, text: NuiText, arg: string, type: Fugit2UITransientInputType, model: string }
+---@alias Fugit2UITransientArg { key: string, text: NuiText, arg: string, type: Fugit2UITransientInputType, model: string, default: boolean?}
 ---@alias Fugit2UITransientItem { key: string?, texts: NuiText[] }
 ---@alias Fugit2UITransientArgModel { [string]: string[] }
 
@@ -200,9 +200,9 @@ function Menu:init(ns_id, title, menu_items, arg_items)
   })
 
   ---@type { [string]: boolean }
-  self._args = {}
+  self._args = {} -- store args value
   ---@type { [string]: integer }
-  self._arg_indices = {}
+  self._arg_indices = {} -- mapping from arg name to index in arg_items
   ---@type { [string]: { type: Fugit2UITransientInputType, keys: string[] } }
   self._arg_models = {}
   if arg_items then
@@ -230,7 +230,7 @@ function Menu:init(ns_id, title, menu_items, arg_items)
 
     self._arg_items = arg_items
     for i, item in ipairs(arg_items) do
-      self._args[item.key] = false
+      self._args[item.key] = item.default or false
       self._arg_indices[item.key] = i
 
       if not self._arg_models[item.model] then
@@ -268,10 +268,10 @@ local function arg_item_to_line(item, enabled)
   return line
 end
 
----Render args selection
+-- Render args selection
 function Menu:render()
   for i, item in ipairs(self._arg_items) do
-    local line = arg_item_to_line(item, false)
+    local line = arg_item_to_line(item, self._args[item.key])
     line:render(self._args_popup.bufnr, self.ns_id, i)
   end
 end
@@ -339,10 +339,13 @@ function Menu:mount()
       },
     }
     self._args_popup:mount()
-    self:render()
 
-    for arg, _ in pairs(self._args) do
-      self._args[arg] = false
+    for _, item in pairs(self._arg_items) do
+      -- reset setting to default
+      self._args[item.key] = item.default or false
+
+      -- map arg keys
+      local arg = item.key
       self._menu:map("n", arg, function()
         local enabled = not self._args[arg]
         self._args[arg] = enabled
@@ -352,7 +355,7 @@ function Menu:mount()
         line:render(self._args_popup.bufnr, self.ns_id, i)
 
         if self._arg_items[i].type == INPUT_TYPE.RADIO then
-          -- turnoff other flags
+          -- turn off other flags
           local model = self._arg_models[self._arg_items[i].model]
           if model then
             for _, a in ipairs(model.keys) do
@@ -367,6 +370,8 @@ function Menu:mount()
         end
       end, { noremap = true, nowait = true })
     end
+
+    self:render()
   end
 end
 

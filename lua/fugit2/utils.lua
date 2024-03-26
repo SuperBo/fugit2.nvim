@@ -31,11 +31,11 @@ end
 -- Pretty print lines to debug
 ---@param str string
 function M.lines_print(str)
-  for line in vim.gsplit(str, "\n", {plain=true}) do
+  for line in vim.gsplit(str, "\n", { plain = true }) do
     if line:len() > 0 then
       print(line)
     else
-      print("--newline--")
+      print "--newline--"
     end
   end
 end
