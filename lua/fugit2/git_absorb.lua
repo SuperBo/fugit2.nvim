@@ -1,5 +1,5 @@
----Module contains git absorb implementation
----Adapt from https://github.com/tummychow/git-absorb
+-- Module contains git absorb implementation
+-- Adapt from https://github.com/tummychow/git-absorb
 
 ---@class GitAbsorbBlock
 ---@field start integer

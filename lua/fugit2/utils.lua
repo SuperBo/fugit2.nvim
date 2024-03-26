@@ -28,6 +28,18 @@ function M.lines_head(str)
   return str
 end
 
+-- Pretty print lines to debug
+---@param str string
+function M.lines_print(str)
+  for line in vim.gsplit(str, "\n", { plain = true }) do
+    if line:len() > 0 then
+      print(line)
+    else
+      print "--newline--"
+    end
+  end
+end
+
 ---@param str string
 ---@return NuiLine
 function M.message_title_prettify(str)

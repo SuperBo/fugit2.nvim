@@ -375,8 +375,8 @@ end
 
 
 ---@param oid ffi.cdata* libgit2 git_oid*, borrow data
-function ObjectId.borrow (oid)
-  local object_id = { oid = oid }
+function ObjectId.borrow(oid)
+  local object_id = { oid = ffi.cast(libgit2.git_oid_pointer, oid) }
   setmetatable(object_id, ObjectId)
   return object_id
 end
@@ -795,6 +795,23 @@ function Reference:target()
   end
 
   return nil, 0
+end
+
+
+-- Conditionally creates a new reference
+-- with the same name as the given reference.
+---@param oid GitObjectId
+---@param message string
+---@return GitReference?
+---@return GIT_ERROR
+function Reference:set_target(oid, message)
+  local ref = libgit2.git_reference_double_pointer()
+  local err = libgit2.C.git_reference_set_target(ref, self.ref, oid.oid, message)
+  if err ~= 0 then
+    return nil, err
+  end
+
+  return Reference.new(ref[0]), 0
 end
 
 
@@ -1699,6 +1716,7 @@ function Repository:__tostring()
   return string.format("Git Repository: %s", self.path)
 end
 
+
 ---Opens Git repository
 ---@param path string Path to repository
 ---@param search boolean Whether to search parent directories.
@@ -1719,6 +1737,7 @@ function Repository.open (path, search)
 
   return Repository.new(git_repo[0]), 0
 end
+
 
 ---Checks a Repository is empty or not
 ---@return boolean is_empty Whether this git repo is empty
@@ -1836,6 +1855,31 @@ function Repository:head_commit()
 
   return Commit.new(ffi.cast(libgit2.git_commit_pointer, git_object[0])), 0
 end
+
+
+-- Gets GitCommit signature
+---@param oid GitObjectId
+---@param field string? GPG sign field
+function Repository:commit_signature(oid, field)
+  local buf_signature = libgit2.git_buf()
+  local buf_signed_data = libgit2.git_buf()
+
+  local err = libgit2.C.git_commit_extract_signature(
+    buf_signature, buf_signed_data, self.repo, oid.oid, field
+  )
+  if err ~= 0 then
+    return nil, nil, 0
+  end
+
+  local signature = ffi.string(buf_signature[0].ptr, buf_signature[0].size)
+  local signed_data = ffi.string(buf_signed_data[0].ptr, buf_signed_data[0].size)
+
+  libgit2.C.git_buf_dispose(buf_signature[0])
+  libgit2.C.git_buf_dispose(buf_signed_data[0])
+
+  return signature, signed_data, 0
+end
+
 
 ---@return GitTree?
 ---@return GIT_ERROR
@@ -2420,51 +2464,73 @@ function Repository:signature_default()
 end
 
 
----Creates new commit in the repository.
+-- Creates tree and parents object used in
+-- create_commit and create_commmit_object funcionts.
 ---@param index GitIndex
----@param signature GitSignature
----@param message string
----@return GitObjectId?
+---@return ffi.cdata*?
+---@return ffi.cdata*?
 ---@return GIT_ERROR
-function Repository:commit(index, signature, message)
+function Repository:_create_commit_head_tree_parents(index)
+  local parents = nil
+
   -- get head as parent commit
   local head, err = self:head()
   if err ~= 0
     and err ~= libgit2.GIT_ERROR.GIT_ENOTFOUND
     and err ~= libgit2.GIT_ERROR.GIT_EUNBORNBRANCH
   then
-    return nil, err
+    return nil, parents, err
   end
 
   local parent = nil
   if head then
     parent, err = head:peel_commit()
     if err ~= 0 then
-      return nil, err
+      return nil, parents, err
+    end
+
+    if parent then
+      parents = libgit2.git_commit_constant_pointer_array(1)
+      parents[0] = parent.commit
     end
   end
 
   local tree_id
   tree_id, err = index:write_tree()
   if not tree_id then
-    return nil, err
+    return nil, nil, err
   end
 
   local tree = libgit2.git_tree_double_pointer()
   err = libgit2.C.git_tree_lookup(tree, self.repo, tree_id.oid)
   if err ~= 0 then
+    return nil, nil, err
+  end
+
+  return tree, parents, 0
+end
+
+-- Creates new commit in the repository.
+---@param index GitIndex
+---@param signature GitSignature
+---@param message string
+---@return GitObjectId?
+---@return GIT_ERROR
+function Repository:create_commit(index, signature, message)
+  local tree, parents, err = self:_create_commit_head_tree_parents(index)
+  if not tree or err ~= 0 then
     return nil, err
   end
 
   local git_oid = libgit2.git_oid()
-  err = libgit2.C.git_commit_create_v(
+  err = libgit2.C.git_commit_create(
     git_oid,
     self.repo, "HEAD",
     signature.sign[0], signature.sign[0],
-    "UTF-8", message,
+    nil, message,
     tree[0],
-    parent and 1 or 0,
-    parent and parent.commit or nil
+    parents and 1 or 0,
+    parents
   )
   libgit2.C.git_tree_free(tree[0])
   if err ~= 0 then
@@ -2474,7 +2540,63 @@ function Repository:commit(index, signature, message)
   return ObjectId.borrow(git_oid), 0
 end
 
----Lookup a blob object from a repository.
+-- Creates new commit object as string.
+---@param index GitIndex
+---@param signature GitSignature
+---@param message string
+---@return string?
+---@return GIT_ERROR
+function Repository:create_commit_content(index, signature, message)
+  local tree, parents, err = self:_create_commit_head_tree_parents(index)
+  if not tree or err ~= 0 then
+    return nil, err
+  end
+
+  local buf = libgit2.git_buf()
+  err = libgit2.C.git_commit_create_buffer(
+    buf,
+    self.repo,
+    signature.sign[0], signature.sign[0],
+    nil, message,
+    tree[0],
+    parents and 1 or 0,
+    parents
+  )
+  libgit2.C.git_tree_free(tree[0])
+
+  if err ~= 0 then
+    libgit2.C.git_buf_dispose(buf)
+    return nil, err
+  end
+
+  local commit_str = ffi.string(buf[0].ptr, buf[0].size)
+  libgit2.C.git_buf_dispose(buf)
+  return commit_str, 0
+end
+
+-- Creates a commit object from the given content and signature
+---@param commit_content string Gitcommit object as string
+---@param signature string Gitcommit content signature
+---@param signature_field string? signature field
+---@return GitObjectId?
+---@return GIT_ERROR
+function Repository:create_commit_with_signature(commit_content, signature, signature_field)
+  local git_oid = libgit2.git_oid()
+  local err = libgit2.C.git_commit_create_with_signature(
+    git_oid,
+    self.repo,
+    commit_content,
+    signature,
+    signature_field
+  )
+  if err ~= 0 then
+    return nil, 0
+  end
+
+  return ObjectId.borrow(git_oid), 0
+end
+
+-- Lookups a blob object from a repository.
 ---@param id GitObjectId
 ---@return GitBlob?
 ---@return GIT_ERROR
@@ -2487,8 +2609,7 @@ function Repository:blob_lookup(id)
   return Blob.new(blob[0]), 0
 end
 
-
----Rewords HEAD commit.
+-- Rewords HEAD commit.
 ---@param signature GitSignature
 ---@param message string
 ---@return GitObjectId?
@@ -2955,12 +3076,12 @@ end
 local function message_prettify(msg)
   local c_buf = libgit2.git_buf()
 
-  local err = libgit2.C.git_buf_grow(c_buf, msg:len() + 1)
-  if err ~= 0 then
-    return nil, err
-  end
+  -- local err = libgit2.C.git_buf_grow(c_buf, msg:len() + 1)
+  -- if err ~= 0 then
+  --   return nil, err
+  -- end
 
-  err = libgit2.C.git_message_prettify(c_buf, msg, 1, string.byte("#"))
+  local err = libgit2.C.git_message_prettify(c_buf, msg, 1, string.byte("#"))
   if err ~= 0 then
     libgit2.C.git_buf_dispose(c_buf)
     return nil, err

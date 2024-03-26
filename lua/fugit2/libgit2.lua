@@ -187,7 +187,7 @@ ffi.cdef [[
     const char *message,
     const git_tree *tree,
     size_t parent_count,
-    const git_commit *parents[],
+    const git_commit **parents,
     void *payload
   );
   typedef int (*git_checkout_notify_cb)(
@@ -347,6 +347,7 @@ ffi.cdef [[
   git_repository * git_commit_owner(const git_commit *commit);
   const char * git_commit_message(const git_commit *commit);
   const char * git_commit_message_encoding(const git_commit *commit);
+  int git_commit_extract_signature(git_buf *signature, git_buf *signed_data, git_repository *repo, git_oid *commit_id, const char *field);
   unsigned int git_commit_parentcount(const git_commit *commit);
   int git_commit_parent(git_commit **out, const git_commit *commit, unsigned int n);
   const git_oid * git_commit_parent_id(const git_commit *commit, unsigned int n);
@@ -361,6 +362,36 @@ ffi.cdef [[
     const git_tree *tree,
     size_t parent_count,
     ...
+  );
+  int git_commit_create(
+    git_oid *id,
+    git_repository *repo,
+    const char *update_ref,
+    const git_signature *author,
+    const git_signature *committer,
+    const char *message_encoding,
+    const char *message,
+    const git_tree *tree,
+    size_t parent_count,
+    const git_commit **parents
+  );
+  int git_commit_create_buffer(
+    git_buf *out,
+    git_repository *repo,
+    const git_signature *author,
+    const git_signature *committer,
+    const char *message_encoding,
+    const char *message,
+    const git_tree *tree,
+    size_t parent_count,
+    const git_commit **parents
+  );
+  int git_commit_create_with_signature(
+    git_oid *out,
+    git_repository *repo,
+    const char *commit_content,
+    const char *signature,
+    const char *signature_field
   );
   int git_commit_amend(
     git_oid *id,
@@ -420,6 +451,7 @@ ffi.cdef [[
   void git_reference_free(git_reference *ref);
   int git_reference_type(const git_reference *ref);
   const git_oid * git_reference_target(const git_reference *ref);
+  int git_reference_set_target(git_reference **out, git_reference *ref, const git_oid *id, const char *log_message);
   int git_reference_peel(git_object **out, const git_reference *ref, int type);
   int git_reference_name_to_id(git_oid *out, git_repository *repo, const char *name);
   int git_reference_lookup(git_reference **out, git_repository *repo, const char *name);
@@ -462,6 +494,7 @@ ffi.cdef [[
   int git_repository_head(git_reference **out, git_repository *repo);
   int git_repository_index(git_index **out, git_repository *repo);
   int git_repository_config(git_config **out, git_repository *repo);
+  int git_repository_set_head(git_repository *repo, const char *refname);
 
   void git_index_free(git_index *index);
   int git_index_read(git_index *index, int force);
@@ -579,6 +612,8 @@ M.git_object_pointer = ffi.typeof "git_object*"
 M.git_commit_double_pointer = ffi.typeof "git_commit*[1]"
 ---@type ffi.ctype* git_commit *
 M.git_commit_pointer = ffi.typeof "git_commit*"
+---@type ffi.ctype* git_commit * array
+M.git_commit_constant_pointer_array = ffi.typeof "const git_commit*[?]"
 
 ---@type ffi.ctype* git_blob **
 M.git_blob_double_pointer = ffi.typeof "git_blob*[1]"

@@ -18,6 +18,7 @@ local LogView = require "fugit2.view.components.commit_log_view"
 local PatchView = require "fugit2.view.components.patch_view"
 local UI = require "fugit2.view.components.menus"
 local git2 = require "fugit2.git2"
+local gpgme = require "fugit2.gpgme"
 local utils = require "fugit2.utils"
 
 -- ===================
@@ -117,6 +118,7 @@ function GitStatus:init(ns_id, repo, last_window, current_file)
   ---@field push_target { name: string, oid: string, ahead: integer, behind: integer }?
   ---@field signature GitSignature?
   ---@field walker GitRevisionWalker?
+  ---@field config GitConfig?
   self._git = {
     head = nil,
     ahead = 0,
@@ -124,6 +126,7 @@ function GitStatus:init(ns_id, repo, last_window, current_file)
     index_updated = false,
     unstaged_diff = {},
     staged_diff = {},
+    config = nil,
   }
 
   if repo ~= nil then
@@ -285,6 +288,7 @@ function GitStatus:init(ns_id, repo, last_window, current_file)
   ---@class Fugit2GitStatusInternal
   ---@field last_window integer
   ---@field commit_mode Fugit2GitStatusCommitMode
+  ---@field commit_args string[]?
   ---@field side_panel Fugit2GitStatusSidePanel
   ---@field last_patch_line integer
   ---@field patch_staged_shown boolean
@@ -362,13 +366,15 @@ end
 ---@param menu_type Fugit2GitStatusMenu menu to init
 ---@return Fugit2UITransientMenu
 function GitStatus:_init_menus(menu_type)
-  local menu_items, menu_title, arg_items
+  local menu_items, menu_title, arg_items, config
   local title_hl = "Fugit2FloatTitle"
   local head_hl = "Fugit2MenuHead"
   local states = self._states
   local git = self._git
 
   if menu_type == Menu.COMMIT then
+    config = self:read_config()
+
     menu_title = NuiText(" Committing ", title_hl)
     menu_items = {
       { texts = { NuiText("  Create ", head_hl) } },
@@ -383,6 +389,16 @@ function GitStatus:_init_menus(menu_type)
       { texts = { NuiText "  Absorb" }, key = "b" },
       { texts = { NuiText("  Log ", head_hl) } },
       { texts = { NuiText "󱁉  Graph" }, key = "g" },
+    }
+    arg_items = {
+      {
+        text = NuiText "GPG sign commit",
+        key = "-S",
+        arg = "--gpg-sign",
+        type = UI.INPUT_TYPE.CHECKBOX,
+        model = "args",
+        default = config and config:get_bool "commit.gpgsign",
+      },
     }
   elseif menu_type == Menu.DIFF then
     menu_title = NuiText(" Diffing ", title_hl)
@@ -756,7 +772,24 @@ function GitStatus:_init_patch_views()
   end, opts)
 end
 
----Updates git status.
+-- Read git config
+---@return GitConfig?
+function GitStatus:read_config()
+  if self._git.config then
+    return self._git.config
+  end
+
+  local config, err = self.repo:config()
+  if not config then
+    vim.notify("[Fugit2] Failed to read config, err", err)
+    return nil
+  end
+
+  self._git.config = config
+  return config
+end
+
+-- Updates git status.
 function GitStatus:update()
   utils.list_clear(self._status_lines)
   -- clean cached menus
@@ -1205,23 +1238,124 @@ local function check_signature_message(signature, message)
   return prettified
 end
 
----Creates a commit
+-- Creates a commit
 ---@param message string
-function GitStatus:_git_create_commit(message)
+---@param args string[]?
+function GitStatus:_git_create_commit(message, args)
+  local gpg_sign = args and vim.tbl_contains(args, "--gpg-sign")
   local prettified = check_signature_message(self._git.signature, message)
 
-  if self._git.signature and prettified then
-    self:write_index()
-    local commit_id, err = self.repo:commit(self.index, self._git.signature, prettified)
-    if commit_id then
-      vim.notify("[Fugit2] New commit " .. commit_id:tostring(8), vim.log.levels.INFO)
-      self:hide_input(true)
-      self:update()
-      self:render()
-    else
-      vim.notify("Failed to create commit, code: " .. err, vim.log.levels.ERROR)
-    end
+  if not self._git.signature or not prettified then
+    -- skip when not find signature or failed to prettified
+    return
   end
+
+  local result = {}
+
+  async.run(
+    -- async fun, create index
+    function()
+      -- save index before creating commit
+      self:write_index()
+
+      local commit_id, err
+      if not gpg_sign then
+        commit_id, err = self.repo:create_commit(self.index, self._git.signature, prettified)
+        result.commit_id = commit_id
+        result.err = err
+        return
+      end
+
+      -- create commit with gpg sign
+      -- TODO: move to a common git2-gpg-helper lib library
+
+      local commit_content
+      commit_content, err = self.repo:create_commit_content(self.index, self._git.signature, prettified)
+      if not commit_content then
+        result.err = err
+        return
+      end
+
+      local context, keyid, config, signature, head
+
+      context, err = gpgme.new_context()
+      if not context then
+        result.err = err
+        result.message = "Failed to create GPGme context"
+        return
+      end
+
+      context:set_amor(true)
+
+      config = self:read_config()
+      keyid = config and config:get_string "user.signingkey"
+
+      if keyid then
+        local key
+        key, err = context:get_key(keyid, true)
+        if key then
+          err = context:add_signer(key)
+          if err ~= 0 then
+            result.err = err
+            result.message = "Failed to add gpg key " .. keyid
+            return
+          end
+        else
+          result.err = err
+          result.message = "Failed to get gpg key " .. keyid
+          return
+        end
+      end
+
+      signature, err = gpgme.sign_string_detach(context, commit_content)
+      if not signature then
+        result.err = err
+        result.message = "Failed to sign commit"
+        return
+      end
+
+      commit_id, err = self.repo:create_commit_with_signature(commit_content, signature, nil)
+
+      if not commit_id then
+        result.err = err
+        return
+      end
+
+      head, err = self.repo:head()
+      if not head then
+        result.err = err
+        result.message = "Failed to get head"
+        return
+      end
+
+      _, err = head:set_target(commit_id, utils.lines_head(prettified))
+      if err ~= 0 then
+        result.err = err
+        result.message = "Failed to reset head"
+        return
+      end
+
+      result.commit_id = commit_id
+    end,
+
+    -- callback func, called when finished
+    async_utils.scheduler(function()
+      if result.commit_id then
+        vim.notify(
+          string.format("[Fugit2] New %scommit %s", gpg_sign and "signed " or "", result.commit_id:tostring(8)),
+          vim.log.levels.INFO
+        )
+        self:hide_input(true)
+        self:update()
+        self:render()
+      else
+        vim.notify(
+          string.format("[Fugit2] %s, code: %d", result.message or "Failed creating commit", result.err or 0),
+          vim.log.levels.ERROR
+        )
+      end
+    end)
+  )
 end
 
 ---Extends HEAD commit
@@ -1307,8 +1441,10 @@ function GitStatus:_set_input_popup_commit_title(init_str, include_changes, noti
   self.input_popup.border:set_text("top", NuiText(title, "Fugit2MessageHeading"), "left")
 end
 
-function GitStatus:commit_create()
+---@param args string[]
+function GitStatus:commit_create(args)
   self._states.commit_mode = CommitMode.CREATE
+  self._states.commit_args = args
 
   self:_set_input_popup_commit_title("Create commit", true, true)
 
@@ -1366,9 +1502,9 @@ end
 
 function GitStatus:_init_commit_menu()
   local m = self:_init_menus(Menu.COMMIT)
-  m:on_submit(function(item_id, _)
+  m:on_submit(function(item_id, args)
     if item_id == "c" then
-      self:commit_create()
+      self:commit_create(args["args"])
     elseif item_id == "e" then
       self:commit_extend()
     elseif item_id == "r" then
@@ -2153,12 +2289,14 @@ function GitStatus:setup_handlers()
   local input_enter_fn = function()
     local message = vim.trim(table.concat(vim.api.nvim_buf_get_lines(self.input_popup.bufnr, 0, -1, true), "\n"))
     if states.commit_mode == CommitMode.CREATE then
-      self:_git_create_commit(message)
+      self:_git_create_commit(message, states.commit_args)
     elseif states.commit_mode == CommitMode.REWORD then
       self:_git_reword_commit(message)
     elseif states.commit_mode == CommitMode.AMEND then
       self:_git_amend_commit(message)
     end
+
+    states.commit_args = nil
   end
   self.input_popup:map("n", "<cr>", input_enter_fn, map_options)
   self.input_popup:map("i", "<c-cr>", "<esc><cr>", { nowait = true })
