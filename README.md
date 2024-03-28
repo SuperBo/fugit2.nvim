@@ -181,6 +181,14 @@ Hot keys and usages:
 - `J`: Move to next hunk.
 - `K`: Move to previous hunk.
 
+### Git Graph View
+
+Keys and usages:
+
+- `k`, `j`: move up and down.
+- `yy`: copy commit id.
+- `yc`: copy commit id to clipboard.
+
 
 ## Credits
 

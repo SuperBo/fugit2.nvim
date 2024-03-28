@@ -2165,6 +2165,26 @@ function GitStatus:setup_handlers()
   end, map_options)
   commit_log:map("n", "J", "", map_options)
 
+  -- Quick jump commit
+  commit_log:map("n", "j", "2j", map_options)
+  commit_log:map("n", "k", "2k", map_options)
+
+  -- copy commit id
+  commit_log:map("n", "yy", function()
+    local commit, _ = commit_log:get_commit()
+    print("Hell", commit.oid)
+    if commit then
+      vim.api.nvim_call_function("setreg", { '"', commit.oid })
+    end
+  end, map_options)
+
+  commit_log:map("n", "yc", function()
+    local commit, _ = commit_log:get_commit()
+    if commit then
+      vim.api.nvim_call_function("setreg", { "+", commit.oid })
+    end
+  end, map_options)
+
   -- expand all
   file_tree:map("n", "L", function()
     local updated = false
