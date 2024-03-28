@@ -163,7 +163,6 @@ function SourceTree:init(ns_id)
     buf_options = {
       buftype = "nofile",
       swapfile = false,
-      -- nonumber = true,
     },
     win_options = {
       foldcolumn = "0",
@@ -261,10 +260,11 @@ function SourceTree:update(status)
 end
 
 ---@return NuiTree.Node?
+---@return integer? line_number
 function SourceTree:get_node()
-  local node = self.tree:get_node()
+  local node, linenr = self.tree:get_node()
   if node and not node:has_children() then
-    return node
+    return node, linenr
   end
 end
 

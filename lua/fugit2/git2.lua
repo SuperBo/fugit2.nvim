@@ -1177,6 +1177,17 @@ function Index:add_bypath(path)
 end
 
 
+-- Adds or update an index entry from a buffer in memory
+---@param entry GitIndexEntry
+---@param buffer string String buffer
+---@return GIT_ERROR
+function Index:add_from_buffer(entry, buffer)
+  return libgit2.C.git_index_add_from_buffer(
+    self.index, entry.entry, buffer, buffer:len()
+  )
+end
+
+
 -- Removes path from index.
 ---@param path string File path to be removed.
 ---@return GIT_ERROR
@@ -3150,17 +3161,17 @@ M.Repository = Repository
 M.Reference = Reference
 
 
-M.GIT_ERROR = libgit2.GIT_ERROR
 M.GIT_BRANCH = libgit2.GIT_BRANCH
+M.GIT_CHECKOUT = libgit2.GIT_CHECKOUT
 M.GIT_DELTA = libgit2.GIT_DELTA
-M.GIT_REFERENCE = libgit2.GIT_REFERENCE
-M.GIT_REFERENCE_NAMESPACE = GIT_REFERENCE_NAMESPACE
+M.GIT_ERROR = libgit2.GIT_ERROR
 M.GIT_INDEX_STAGE = libgit2.GIT_INDEX_STAGE
-M.GIT_OPT = libgit2.GIT_OPT
 M.GIT_OBJECT = libgit2.GIT_OBJECT
+M.GIT_OPT = libgit2.GIT_OPT
 M.GIT_REBASE_NO_OPERATION = libgit2.GIT_REBASE_NO_OPERATION
 M.GIT_REBASE_OPERATION = libgit2.GIT_REBASE_OPERATION
-M.GIT_CHECKOUT = libgit2.GIT_CHECKOUT
+M.GIT_REFERENCE = libgit2.GIT_REFERENCE
+M.GIT_REFERENCE_NAMESPACE = GIT_REFERENCE_NAMESPACE
 
 
 M.head = Repository.head
