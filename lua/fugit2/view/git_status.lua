@@ -16,6 +16,7 @@ local iterators = require "plenary.iterators"
 local GitStatusTree = require "fugit2.view.components.file_tree_view"
 local LogView = require "fugit2.view.components.commit_log_view"
 local PatchView = require "fugit2.view.components.patch_view"
+local Path = require "plenary.path"
 local UI = require "fugit2.view.components.menus"
 local git2 = require "fugit2.git2"
 local gpgme = require "fugit2.gpgme"
@@ -105,6 +106,7 @@ function GitStatus:init(ns_id, repo, last_window, current_file)
 
   self.closed = false
   ---@class Fugit2GitStatusGitStates
+  ---@field path string
   ---@field head GitStatusHead?
   ---@field upstream GitStatusUpstream?
   ---@field ahead integer
@@ -148,6 +150,8 @@ function GitStatus:init(ns_id, repo, last_window, current_file)
     if walker then
       self._git.walker = walker
     end
+
+    self._git.path = vim.fn.fnamemodify(repo:repo_path(), ":p:h:h")
   else
     error "[Fugit2] Null repo"
   end
@@ -2252,7 +2256,13 @@ function GitStatus:setup_handlers()
     --   end
     elseif node then
       exit_fn()
-      vim.cmd.edit(vim.fn.fnameescape(node.id))
+      local cwd = vim.fn.getcwd()
+      if cwd == self._git.path then
+        vim.cmd.edit(vim.fn.fnameescape(node.id))
+      else
+        local file_path = Path:new(self._git.path) / vim.fn.fnameescape(node.id)
+        vim.cmd.edit(file_path:make_relative(cwd))
+      end
     end
   end, map_options)
 
