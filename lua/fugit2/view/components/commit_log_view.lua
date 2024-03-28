@@ -647,7 +647,7 @@ function CommitLogView:focus()
   end
 end
 
----Get current focus commit
+-- Gets current focus commit
 ---@return Fugit2GitGraphCommitNode?
 ---@return integer? commit_index commit index 1-based
 function CommitLogView:get_commit()
