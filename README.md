@@ -23,7 +23,16 @@ Git plugin for Neovim (based on libgit2).
 
 ## 📦 Installation
 
+Third party libraries:
+  - Required: [Libgit2](#libgit2)
+  - Optional if use gpg signing: [GPGpme](#gpgme)
+
+
 ### Libgit2
+
+<details>
+
+<summary>How to install libgit2</summary>
 
 Libgit2 is required for this plugin to work. So you have to install it in your OS before starting with Fugit2.
 For more information, you can refer to this https://libgit2.org/
@@ -82,6 +91,39 @@ cmake --build .
 ```
 
 Now you should have a `libgit2.dll` in the `build` directory. This should be copied to a location in your `PATH` or to the same directory as your Neovim executable.
+
+</details>
+
+### GPGme
+
+<details>
+
+<summary>How to install gpgme</summary>
+
+If you do config enabling git gpg signing, you must install [GPGme](https://gnupg.org/software/gpgme/index.html) lib for fugit2 to work.
+
+In addition, you should config gpg-agent to use a GUI Pinentry, so that it don't disrupt terminal when asking passphrase.
+
+#### Mac OS
+
+```sh
+brew install gpgme pinentry-mac
+echo "pinentry-program $(which pinentry-mac)" >> ~/.gnupg/gpg-agent.conf
+```
+
+#### Ubuntu/Debian
+
+```sh
+sudo apt-get install libgpgme-dev
+```
+
+### Arch Linux
+
+```sh
+sudo pacman -S gpgme
+```
+
+</details>
 
 ### Neovim
 
