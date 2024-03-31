@@ -5,6 +5,7 @@ local NuiPopup = require "nui.popup"
 local NuiText = require "nui.text"
 local NuiTree = require "nui.tree"
 local Object = require "nui.object"
+local Path = require "plenary.path"
 local WebDevIcons = require "nvim-web-devicons"
 
 local git2 = require "fugit2.git2"
@@ -230,13 +231,14 @@ function GitStatusTree:get_child_node_linenr()
 end
 
 ---@param status GitStatusItem[]
-function GitStatusTree:update(status)
+---@param git_path string git root path, used to detect modifed buffer
+function GitStatusTree:update(status, git_path)
   -- get all bufs modified info
   local bufs = {}
   for _, bufnr in pairs(vim.tbl_filter(vim.api.nvim_buf_is_loaded, vim.api.nvim_list_bufs())) do
     local b = vim.bo[bufnr]
     if b then
-      local path = vim.fn.fnamemodify(vim.api.nvim_buf_get_name(bufnr), ":t")
+      local path = Path:new(vim.api.nvim_buf_get_name(bufnr)):make_relative(git_path)
       bufs[path] = {
         modified = b.modified,
       }
