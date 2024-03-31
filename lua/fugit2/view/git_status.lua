@@ -1016,7 +1016,7 @@ function GitStatus:update()
   status_files, err = self.repo:status()
   if status_files then
     -- update files tree
-    self._views.files:update(status_files)
+    self._views.files:update(status_files, self._git.path)
   end
 end
 
@@ -2176,7 +2176,6 @@ function GitStatus:setup_handlers()
   -- copy commit id
   commit_log:map("n", "yy", function()
     local commit, _ = commit_log:get_commit()
-    print("Hell", commit.oid)
     if commit then
       vim.api.nvim_call_function("setreg", { '"', commit.oid })
     end
@@ -2257,10 +2256,11 @@ function GitStatus:setup_handlers()
     elseif node then
       exit_fn()
       local cwd = vim.fn.getcwd()
-      if cwd == self._git.path then
-        vim.cmd.edit(vim.fn.fnameescape(node.id))
-      else
-        local file_path = Path:new(self._git.path) / vim.fn.fnameescape(node.id)
+      local current_file = vim.api.nvim_buf_get_name(0)
+
+      local file_path = Path:new(self._git.path) / vim.fn.fnameescape(node.id)
+
+      if tostring(file_path) ~= current_file then
         vim.cmd.edit(file_path:make_relative(cwd))
       end
     end
