@@ -122,11 +122,15 @@ Tag.__index = Tag
 local Reference = {}
 Reference.__index = Reference
 
+---@class GitIndexEntry
+---@field entry ffi.cdata* libgit2 git_index_entry *
+local IndexEntry = {}
+IndexEntry.__index = IndexEntry
+
 ---@class GitIndex
 ---@field index ffi.cdata* libgit2 struct git_index*[1]
 local Index = {}
 Index.__index = Index
-
 
 ---@class GitRemote
 ---@field remote ffi.cdata* libgit2 struct git_remote*[1]
@@ -1060,11 +1064,60 @@ function Signature:__tostring()
 end
 
 
+-- ===========================
+-- | GitIndexEntry functions |
+-- ===========================
+
+
+-- Inits new GitIndexEntry object.
+---@param git_index_entry ffi.cdata* libgit2.git_index_entry_pointer, don't own data
+---@return GitIndexEntry
+function IndexEntry.borrow(git_index_entry)
+  local entry = { entry = libgit2.git_index_entry_pointer(git_index_entry) }
+  setmetatable(entry, IndexEntry)
+  return entry
+end
+
+
+-- Whether the given index entry is a conflict.
+---@return boolean is_conflict
+function IndexEntry:is_conflict()
+  local ret = libgit2.C.git_index_entry_is_conflict(self.entry)
+  return ret == 1
+end
+
+
+-- Get file_size of IndexEntry.
+---@return integer
+function IndexEntry:file_size()
+  return tonumber(self.entry["file_size"]) or -1
+end
+
+
+-- Gets Git oid of IndexEntry.
+---@return GitObjectId
+function IndexEntry:id()
+  return ObjectId.borrow(self.entry["id"])
+end
+
+
+-- Get path of IndexEntry.
+---@return string
+function IndexEntry:path()
+  return ffi.string(self.entry["path"])
+end
+
+
+-- Get flags of IndexEntry.
+---@return integer
+function IndexEntry:flags()
+  return self.entry["flags"]
+end
+
+
 -- ===================
 -- | Index functions |
 -- ===================
-
----@alias GitIndexEntry { file_size: integer, id: GitObjectId, path: string, flags: integer }
 
 
 -- Inits new GitIndex object.
@@ -1148,12 +1201,7 @@ function Index:get_bypath(path, stage_number)
     return nil
   end
 
-  return {
-    file_size = tonumber(entry.file_size),
-    path      = ffi.string(entry.path),
-    id        = ObjectId.borrow(entry.id),
-    flags     = tonumber(entry.flags),
-  }
+  return IndexEntry.borrow(entry)
 end
 
 
@@ -1174,12 +1222,7 @@ function Index:iter()
       return nil
     end
 
-    return {
-      file_size = tonumber(entry[0].file_size),
-      path      = ffi.string(entry[0].path),
-      id        = ObjectId.borrow(entry[0].id),
-      flags     = tonumber(entry[0].flags),
-    }
+    return IndexEntry.borrow(entry[0])
   end
 end
 

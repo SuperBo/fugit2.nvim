@@ -718,6 +718,8 @@ M.git_index_pointer = ffi.typeof "git_index*"
 M.git_index_iterator_double_pointer = ffi.typeof "git_index_iterator*[1]"
 ---@type ffi.ctype* git_index_entry**
 M.git_index_entry_double_pointer = ffi.typeof "git_index_entry*[1]"
+---@type ffi.ctype* git_index_entry pointer
+M.git_index_entry_pointer = ffi.typeof "const git_index_entry*"
 
 ---@type ffi.ctype* struct git_branch_iterator *[1]
 M.git_branch_iterator_double_pointer = ffi.typeof "git_branch_iterator *[1]"
