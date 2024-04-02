@@ -20,6 +20,7 @@ Git plugin for Neovim (based on libgit2).
 - ☐ TODO: Diff view.
 - ☐ TODO: Remap default key binding.
 - ☐ TODO: Proper help menu.
+- ☐ TODO: Native branch popup.
 
 ## 📦 Installation
 
