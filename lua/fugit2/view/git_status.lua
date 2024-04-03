@@ -1684,10 +1684,10 @@ function GitStatus:_init_branch_menu()
   local m = self:_init_menus(Menu.BRANCH)
   m:on_submit(function(item_id, _)
     if item_id == "b" then
-      if vim.fn.exists ":Telescope" then
+      if vim.fn.exists ":Telescope" > 0 then
         self:unmount()
         vim.cmd { cmd = "Telescope", args = { "git_branches" } }
-      elseif vim.fn.exists ":FzfLua" then
+      elseif vim.fn.exists ":FzfLua" > 0 then
         self:unmount()
         vim.cmd { cmd = "FzfLua", args = { "git_branches" } }
       else
