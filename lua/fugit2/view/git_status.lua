@@ -7,16 +7,16 @@ local NuiLine = require "nui.line"
 local NuiPopup = require "nui.popup"
 local NuiText = require "nui.text"
 local Object = require "nui.object"
-local event = require("nui.utils.autocmd").event
+local Path = require "plenary.path"
 local PlenaryJob = require "plenary.job"
 local async = require "plenary.async"
 local async_utils = require "plenary.async.util"
+local event = require("nui.utils.autocmd").event
 local iterators = require "plenary.iterators"
 
 local GitStatusTree = require "fugit2.view.components.file_tree_view"
 local LogView = require "fugit2.view.components.commit_log_view"
 local PatchView = require "fugit2.view.components.patch_view"
-local Path = require "plenary.path"
 local UI = require "fugit2.view.components.menus"
 local git2 = require "fugit2.git2"
 local gpgme = require "fugit2.gpgme"
@@ -34,7 +34,7 @@ local COMMAND_QUEUE_MAX = 8
 git2.set_opts(git2.GIT_OPT.SET_SERVER_CONNECT_TIMEOUT, SERVER_CONNECT_TIMEOUT)
 git2.set_opts(git2.GIT_OPT.SET_SERVER_TIMEOUT, SERVER_TIMEOUT)
 
-local FILE_WINDOW_WIDTH = 58
+-- local FILE_WINDOW_WIDTH = 100
 local GIT_LOG_MAX_COMMITS = 8
 
 -- ======================
@@ -98,11 +98,14 @@ local GitStatus = Object "Fugit2GitStatusView"
 ---@param repo GitRepository
 ---@param last_window integer
 ---@param current_file string
-function GitStatus:init(ns_id, repo, last_window, current_file)
+---@param opts Fugit2Config
+function GitStatus:init(ns_id, repo, last_window, current_file, opts)
   self.ns_id = -1
   if ns_id then
     self.ns_id = ns_id
   end
+
+  self.opts = opts
 
   self.closed = false
   ---@class Fugit2GitStatusGitStates
@@ -237,7 +240,7 @@ function GitStatus:init(ns_id, repo, last_window, current_file)
   ---@type Fugit2CommitLogView
   self._views.commits = LogView(self.ns_id, "  Commits ", false)
   ---@type Fugit2GitStatusTree
-  self._views.files = GitStatusTree(self.ns_id, " 󰙅 Files ", "[b]ranches [c]ommits [d]iff", "FloatFooter")
+  self._views.files = GitStatusTree(self.ns_id, " 󰙅 Files ", "[b]ranches [c]ommits [d]iff", opts.content_width)
 
   -- menus
   self._prompts = {
@@ -270,7 +273,7 @@ function GitStatus:init(ns_id, repo, last_window, current_file)
   self._boxes = {
     main = NuiLayout.Box({
       NuiLayout.Box(self.info_popup, { size = 6 }),
-      NuiLayout.Box(self._views.files.popup, { grow = 1 }),
+      NuiLayout.Box(self._views.files.popup, { grow = 1, size = 10 }),
       NuiLayout.Box(self._views.commits.popup, { size = 10 }),
     }, { dir = "col" }),
     main_row = NuiLayout.Box(self._views.files.popup, { grow = 1 }),
@@ -279,11 +282,11 @@ function GitStatus:init(ns_id, repo, last_window, current_file)
     main = {
       relative = "editor",
       position = "50%",
-      size = { width = 100, height = "60%" },
+      size = { width = self.opts.width, height = self.opts.height },
     },
     diff = {
       position = "50%",
-      size = { width = "80%", height = "60%" },
+      size = { width = self.opts.max_width, height = self.opts.height },
     },
   }
   self._layout = NuiLayout(self._layout_opts.main, self._boxes.main)
@@ -303,11 +306,13 @@ function GitStatus:init(ns_id, repo, last_window, current_file)
   ---@field job Job?
   ---@field command_queue integer[]
   ---@field jobs Job[]
+  ---@field file_entry_width integer
   self._states = {
     last_window = last_window,
     current_file = current_file,
     commit_mode = CommitMode.CREATE,
     side_panel = SidePanel.NONE,
+    file_entry_width = opts.content_width,
     command_queue = {},
   }
 
@@ -1600,7 +1605,7 @@ function GitStatus:show_patch_view(unstaged, staged)
     row = self._boxes.patch_unstaged_staged
     if not row then
       row = utils.update_table(self._boxes, "patch_unstaged_staged", {
-        NuiLayout.Box(self._views.files.popup, { size = FILE_WINDOW_WIDTH }),
+        NuiLayout.Box(self._views.files.popup, { size = self.opts.min_width }),
         NuiLayout.Box(self._views.patch_unstaged.popup, { grow = 1 }),
         NuiLayout.Box(self._views.patch_staged.popup, { grow = 1 }),
       })
@@ -1609,7 +1614,7 @@ function GitStatus:show_patch_view(unstaged, staged)
     row = self._boxes.patch_unstaged
     if not row then
       row = utils.update_table(self._boxes, "patch_unstaged", {
-        NuiLayout.Box(self._views.files.popup, { size = FILE_WINDOW_WIDTH }),
+        NuiLayout.Box(self._views.files.popup, { size = self.opts.min_width }),
         NuiLayout.Box(self._views.patch_unstaged.popup, { grow = 1 }),
       })
     end
@@ -1617,7 +1622,7 @@ function GitStatus:show_patch_view(unstaged, staged)
     row = self._boxes.patch_staged
     if not row then
       row = utils.update_table(self._boxes, "patch_staged", {
-        NuiLayout.Box(self._views.files.popup, { size = FILE_WINDOW_WIDTH }),
+        NuiLayout.Box(self._views.files.popup, { size = self.opts.min_width }),
         NuiLayout.Box(self._views.patch_staged.popup, { grow = 1 }),
       })
     end
@@ -1632,12 +1637,22 @@ function GitStatus:show_patch_view(unstaged, staged)
     }, { dir = "col" })
   )
   self._states.side_panel = SidePanel.PATCH_VIEW
+
+  if self.opts.min_width ~= self._states.file_entry_width then
+    self._views.files:set_width(self.opts.min_width)
+    self._views.files:render()
+  end
 end
 
 function GitStatus:hide_patch_view()
   self._layout:update(self._layout_opts.main, self._boxes.main)
   self._boxes.main_row = NuiLayout.Box(self._views.files.popup, { grow = 1 })
   self._states.side_panel = SidePanel.NONE
+
+  if self.opts.min_width ~= self._states.file_entry_width then
+    self._views.files:set_width(self._states.file_entry_width)
+    self._views.files:render()
+  end
 end
 
 -- ================

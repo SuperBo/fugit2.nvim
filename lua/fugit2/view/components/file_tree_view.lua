@@ -15,8 +15,6 @@ local utils = require "fugit2.utils"
 -- |  Status tree  |
 -- =================
 
-local FILE_ENTRY_PADDING = 45
-
 ---@class Fugit2StatusTreeNodeData
 ---@field id string
 ---@field text string
@@ -145,24 +143,29 @@ local function tree_node_data_from_item(item, bufs)
   }
 end
 
----@param node NuiTree.Node
----@return NuiLine
-local function tree_prepare_node(node)
-  local line = NuiLine()
-  line:append(string.rep("  ", node:get_depth() - 1))
+---@class Fugit2GitStatusTreeState
+---@field padding integer
 
-  if node:has_children() then
-    line:append(node:is_expanded() and "  " or "  ", "Fugit2SymbolicRef")
-    line:append(node.text, "Fugit2SymbolicRef")
-  else
-    local format_str = "%s %-" .. (FILE_ENTRY_PADDING - node:get_depth() * 2) .. "s"
-    line:append(string.format(format_str, node.icon, node.text), node.color)
+---@param states Fugit2GitStatusTreeState file entry padding
+---@return fun(node: NuiTree.Node): NuiLine
+local function create_tree_prepare_node_fn(states)
+  return function(node)
+    local line = NuiLine()
+    line:append(string.rep("  ", node:get_depth() - 1))
 
-    line:append(node.modified and "[+] " or "    ", node.color)
-    line:append(node.stage_icon .. " " .. node.wstatus .. node.istatus, node.stage_color)
+    if node:has_children() then
+      line:append(node:is_expanded() and "  " or "  ", "Fugit2SymbolicRef")
+      line:append(node.text, "Fugit2SymbolicRef")
+    else
+      local format_str = "%s %-" .. (states.padding - node:get_depth() * 2) .. "s"
+      line:append(string.format(format_str, node.icon, node.text), node.color)
+
+      line:append(node.modified and "[+] " or "    ", node.color)
+      line:append(node.stage_icon .. " " .. node.wstatus .. node.istatus, node.stage_color)
+    end
+
+    return line
   end
-
-  return line
 end
 
 ---@class Fugit2GitStatusTree
@@ -174,7 +177,8 @@ local GitStatusTree = Object "Fugit2GitStatusTree"
 ---@param ns_id integer
 ---@param top_title string
 ---@param bottom_title string
-function GitStatusTree:init(ns_id, top_title, bottom_title)
+---@param min_width integer
+function GitStatusTree:init(ns_id, top_title, bottom_title, min_width)
   self.namespace = ns_id
 
   self.popup = NuiPopup {
@@ -204,6 +208,9 @@ function GitStatusTree:init(ns_id, top_title, bottom_title)
     },
   }
 
+  ---@type Fugit2GitStatusTreeState
+  self.states = { padding = min_width - 13 }
+
   self.tree = NuiTree {
     bufnr = self.popup.bufnr,
     ns_id = ns_id,
@@ -211,7 +218,7 @@ function GitStatusTree:init(ns_id, top_title, bottom_title)
       buftype = "nofile",
       swapfile = false,
     },
-    prepare_node = tree_prepare_node,
+    prepare_node = create_tree_prepare_node_fn(self.states),
     nodes = {},
   }
 end
@@ -426,6 +433,11 @@ function GitStatusTree:update_single_node(repo, node)
   end
 
   return 0
+end
+
+---@param width integer
+function GitStatusTree:set_width(width)
+  self.states.padding = width - 13
 end
 
 function GitStatusTree:render()

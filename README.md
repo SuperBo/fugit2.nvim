@@ -136,7 +136,9 @@ If you are using lazy, you can use this config
 ```lua
 {
   'SuperBo/fugit2.nvim',
-  opts = {},
+  opts = {
+    width = 70,
+  },
   dependencies = {
     'MunifTanjim/nui.nvim',
     'nvim-tree/nvim-web-devicons',
@@ -159,6 +161,24 @@ If you are using lazy, you can use this config
   cmd = {
     'DiffviewFileHistory', 'DiffviewOpen', 'DiffviewToggleFiles', 'DiffviewFocusFiles', 'DiffviewRefresh'
   }
+}
+```
+
+Default options dictionary
+
+```lua
+---@class Fugit2Config
+---@field width integer|string Main popup width
+---@field max_width integer|string Main popup popup width when expand patch view
+---@field min_width integer File view width when expand patch view
+---@field content_width File view content width
+---@field height integer|string Main popup height
+local opts = {
+  width = 100,
+  min_width = 50,
+  content_width = 60,
+  max_width = "80%",
+  height = "60%",
 }
 ```
 
