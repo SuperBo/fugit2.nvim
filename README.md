@@ -264,3 +264,4 @@ Keys and usages:
 - [fugitive.vim](https://github.com/tpope/vim-fugitive) for a great vim git client.
 - [magit](https://magit.vc/) for a great Git client.
 - [neogit](https://github.com/NeogitOrg/neogit) for great Neovim git client.
+- [vim-flog](https://github.com/rbong/vim-flog) for beautiful git graph.
