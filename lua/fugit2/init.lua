@@ -3,10 +3,18 @@ local colors = require "fugit2.view.colors"
 local git2 = require "fugit2.git2"
 local ui = require "fugit2.view.ui"
 
----@class Config
----@field opt string Default config option
+---@class Fugit2Config
+---@field width integer|string main popup width
+---@field max_width integer|string expand popup width
+---@field min_width integer
+---@field content_width integer
+---@field height integer|string main file popup height
 local config = {
-  opt = "Hello!",
+  width = 100,
+  min_width = 50,
+  content_width = 60,
+  max_width = "80%",
+  height = "60%",
 }
 
 ---@class Fugit2Module
@@ -15,7 +23,7 @@ local M = {}
 ---@type number
 M.namespace = 0
 
----@type Config
+---@type Fugit2Config
 M.config = config
 
 ---@param args Config?
@@ -65,7 +73,7 @@ end
 function M.git_status()
   local repo = open_repository()
   if repo then
-    ui.new_fugit2_status_window(M.namespace, repo):mount()
+    ui.new_fugit2_status_window(M.namespace, repo, M.config):mount()
   end
 end
 
