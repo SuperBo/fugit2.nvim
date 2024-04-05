@@ -1,7 +1,8 @@
 # A Git Porcelain inside Neovim
 
-![GitHub Workflow Status](https://img.shields.io/github/actions/workflow/status/ellisonleao/nvim-plugin-template/lint-test.yml?branch=main&style=for-the-badge)
+![Neovim](https://camo.githubusercontent.com/eead1ee1a978cd0b8a41e94d79973e5f84a337858ce89db1b2c2084140c35a0b/68747470733a2f2f696d672e736869656c64732e696f2f62616467652f4e656f56696d2d2532333537413134332e7376673f267374796c653d666f722d7468652d6261646765266c6f676f3d6e656f76696d266c6f676f436f6c6f723d7768697465)
 ![Lua](https://img.shields.io/badge/Made%20with%20Lua-blueviolet.svg?style=for-the-badge&logo=lua)
+![GitHub Workflow Status](https://img.shields.io/github/actions/workflow/status/ellisonleao/nvim-plugin-template/lint-test.yml?branch=main&style=for-the-badge)
 
 Git plugin for Neovim (based on libgit2).
 
@@ -127,6 +128,14 @@ sudo pacman -S gpgme
 </details>
 
 ### Neovim
+
+[![LuaRocks](https://img.shields.io/luarocks/v/superbo/fugit2.nvim?logo=lua&color=purple)](https://luarocks.org/modules/SuperBo/fugit2.nvim)
+
+#### Rocks.nvim
+
+```
+:Rocks install fugit2.nvim
+```
 
 #### Lazy
 
