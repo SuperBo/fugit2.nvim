@@ -12,7 +12,7 @@ on:
 
 jobs:
   luarocks-upload:
-    runs-on: ubuntu-23.10
+    runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@v4
         with:
@@ -21,8 +21,8 @@ jobs:
         run: echo "LUAROCKS_VERSION=$(git describe --abbrev=0 --tags)" >> $GITHUB_ENV
       - name: Install libgit2
         run: |
-          sudo apt-get install -y libgit2-1.5
-          sudo ln -s /usr/lib/x86_64-linux-gnu/libgit2.so.1.5 /usr/local/lib/libgit2.so
+          sudo apt-get install -y libgit2-1.1
+          sudo ln -s /usr/lib/x86_64-linux-gnu/libgit2.so.1.1 /usr/local/lib/libgit2.so
           sudo ldconfig
       - name: LuaRocks Upload
         uses: nvim-neorocks/luarocks-tag-release@v5
