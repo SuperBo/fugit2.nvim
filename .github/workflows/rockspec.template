@@ -1,3 +1,7 @@
+local git_ref = '$git_ref'
+local modrev = '$modrev'
+local specrev = '$specrev'
+
 local repo_url = '$repo_url'
 
 rockspec_format = '3.0'
