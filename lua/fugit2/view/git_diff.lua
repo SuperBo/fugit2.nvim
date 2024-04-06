@@ -59,6 +59,7 @@ function GitDiff:init(ns_id, repo, index)
     -- file buffer cache
     buffers = {},
     last_line = -1,
+    index_updated = false,
   }
 end
 
@@ -73,15 +74,6 @@ function GitDiff:mount()
   end
 end
 
----Update info based on index
-function GitDiff:update()
-  -- Clears status
-
-  -- Updates
-  local status_files, err = self.repo:status()
-  if status_files then
-  end
-end
 
 function GitDiff:render()
   self._views.files:render()
@@ -106,10 +98,22 @@ function GitDiff:_post_mount()
   self:render()
 end
 
----Switches to two main panes layout
 
 -- Unmount Diffview remove buffers
-function GitDiff:umount()
+function GitDiff:unmount()
+  -- write index back to disk
+  if self._states.index_updated and not self.index:in_memory() then
+    self.index:write()
+  end
+
+  vim.schedule(vim.cmd.tabclose)
+
+  for _, bufnr in pairs(self._states.buffers) do
+    local name = vim.fn.fnamemodify(vim.api.nvim_buf_get_name(bufnr), ":.")
+    if name:sub(1, 7) == "index::" then
+      vim.api.nvim_buf_delete(bufnr, { force = true })
+    end
+  end
 end
 
 
@@ -127,19 +131,24 @@ function GitDiff:update()
 end
 
 
-function GitDiff:render()
-  self._views.files:render()
-end
-
-
 -- Writes an index file to git index.
----@param bufnr integer buffer number
-function GitDiff:_write_index(bufnr, filepath)
+---@param ev table vim event table
+---@return boolean success whether write success
+function GitDiff:_write_index(ev)
+  local filepath = ev.file
+  local bufnr = ev.buf
+
+  if filepath:sub(1, 7) ~= "index::" then
+    vim.notify("[Fugit2] Wrong index file name", vim.log.levels.ERROR)
+    return false
+  end
+  filepath = filepath:sub(8)
+
   -- add to index
   local entry = self.index:get_bypath(filepath, git2.GIT_INDEX_STAGE.NORMAL)
   if not entry then
-    vim.ui.notify("[Fugit2] Failed to get index entry")
-    return
+    vim.notify("[Fugit2] Failed to get index entry")
+    return false
   end
 
   local content_buffer = table.concat(
@@ -150,15 +159,18 @@ function GitDiff:_write_index(bufnr, filepath)
 
   local err = self.index:add_from_buffer(entry, content_buffer)
   if err ~= 0 then
-    vim.ui.notify(
+    vim.notify(
       string.format("[Fugit2] Failed to write to buffer, code: %d", err),
-      vim.logs.levels.ERROR
+      vim.log.levels.ERROR
     )
-    return
+    return false
   end
 
   -- reset modified option
-  vim.api.nvim_buf_set_option(bufnr, "modifed", false)
+  vim.api.nvim_buf_set_option(bufnr, "modified", false)
+
+  self._states.index_updated = true
+  return true
 end
 
 
@@ -203,7 +215,7 @@ function GitDiff:_setup_diff_windows(node)
       if entry then
         local blob, err = self.repo:blob_lookup(entry:id())
         if not blob then
-          vim.ui.notify("[Fugit2] Can't get blob, error " .. err, vim.logs.levels.ERROR)
+          vim.notify("[Fugit2] Can't get blob, error " .. err, vim.log.levels.ERROR)
         else
           local content = vim.split(blob:content(), "\n", { plain=true })
           if content[#content] == "" then
@@ -214,6 +226,12 @@ function GitDiff:_setup_diff_windows(node)
       end
 
       vim.api.nvim_buf_set_option(bufnr, "buftype", "acwrite")
+      vim.api.nvim_create_autocmd({"BufWriteCmd"}, {
+        buffer = bufnr,
+        callback = function(ev)
+          self:_write_index(ev)
+        end
+      })
       if filetype then
         vim.api.nvim_buf_set_option(bufnr, "filetype", filetype)
       end
@@ -234,11 +252,17 @@ function GitDiff:_setup_handlers()
   local windows = self._windows
   local source_tree = self._views.files
 
-  source_tree:map("n", { "q", "<esc>" }, ":tabclose<cr>", opts)
+  source_tree:map("n", { "q", "<esc>" }, function()
+    self._views.files:unmount()
+  end, opts)
 
   source_tree:map("n", "l", "<c-w>l", opts)
 
-  -- SourceTree event
+  -- SourceTree handlers
+  source_tree:on(event.BufWinLeave, function()
+    self:unmount()
+  end, opts)
+
   source_tree:on(event.CursorMoved, function()
     local node, linenr = source_tree:get_node()
 

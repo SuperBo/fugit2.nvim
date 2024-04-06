@@ -1169,6 +1169,25 @@ function Index:write_tree()
 end
 
 
+-- Get the full path to the index file on disk.
+---@return string? path to index file or NULL for in-memory index
+function Index:path()
+  local path = libgit2.C.git_index_path(self.index)
+  if path ~= nil then
+    return ffi.string(path)
+  end
+  return nil
+end
+
+
+-- Checks index in-memory or not
+---return boolean inmemory Index in memory
+function Index:in_memory()
+  local path = libgit2.C.git_index_path(self.index)
+  return path == nil
+end
+
+
 -- Adds path to index.
 ---@param path string File path to be added.
 ---@return GIT_ERROR

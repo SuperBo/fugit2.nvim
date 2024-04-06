@@ -278,6 +278,11 @@ function SourceTree:mount()
   self.pane:mount()
 end
 
+-- Unmount split pane
+function SourceTree:unmount()
+  self.pane:unmount()
+end
+
 function SourceTree:focus()
   vim.api.nvim_set_current_win(self.pane.winid)
 end

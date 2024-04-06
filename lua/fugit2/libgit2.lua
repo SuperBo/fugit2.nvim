@@ -500,6 +500,7 @@ ffi.cdef [[
   int git_index_read(git_index *index, int force);
   int git_index_write(git_index *index);
   int git_index_write_tree(git_oid *out, git_index *index);
+  const char * git_index_path(const git_index *index);
   int git_index_add_from_buffer(git_index *index, const git_index_entry *entry, const void *buffer, size_t len);
   int git_index_add_bypath(git_index *index, const char *path);
   int git_index_remove_bypath(git_index *index, const char *path);
