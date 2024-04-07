@@ -1,5 +1,6 @@
 local ffi = require "ffi"
 local libgit2 = require "fugit2.libgit2"
+local stat = require "fugit2.core.stat"
 
 --- Libgit2 init
 local libgit2_init_count = 0
@@ -49,6 +50,33 @@ local GIT_DELTA_STRING = {
   "UNREADABLE",
   "CONFLICTED",
 }
+
+
+-- ===================
+-- | Macro functions |
+-- ===================
+
+
+---@param mode integer
+---@return boolean
+local function GIT_PERMS_IS_EXEC(mode)
+  return bit.band(mode, 64) ~= 0
+end
+
+
+---@param mode integer
+---@return integer
+local function GIT_PERMS_CANONICAL(mode)
+  return GIT_PERMS_IS_EXEC(mode) and 493 or 420
+end
+
+
+---@param mode integer
+---@return integer
+local function GIT_PERMS_FOR_WRITE(mode)
+  return GIT_PERMS_IS_EXEC(mode) and 511 or 438
+end
+
 
 -- =====================
 -- | Class definitions |
@@ -1076,6 +1104,50 @@ function IndexEntry.borrow(git_index_entry)
   local entry = { entry = libgit2.git_index_entry_pointer(git_index_entry) }
   setmetatable(entry, IndexEntry)
   return entry
+end
+
+
+---@return integer
+local function git_index_create_mode(mode)
+	if stat.S_ISLNK(mode) then
+	  return stat.S_IFLNK
+  end
+
+  local link_or_dir = bit.bor(stat.S_IFLNK, stat.S_IFDIR)
+	if stat.S_ISDIR(mode) or bit.band(mode, stat.S_IFMT) == link_or_dir then
+    return link_or_dir
+  end
+
+	return bit.bor(stat.S_IFREG, GIT_PERMS_CANONICAL(mode))
+end
+
+
+---@param fs_stat uv.fs_stat.result
+---@param path string file path
+---@param distrust boolean index distrust mode
+---@return GitIndexEntry
+function IndexEntry.from_stat(fs_stat, path, distrust)
+  local git_index_entry = libgit2.git_index_entry()
+  local entry = git_index_entry[0]
+  entry.ctime.seconds = fs_stat.ctime.sec
+  entry.ctime.nanoseconds = fs_stat.ctime.nsec
+  entry.mtime.seconds = fs_stat.mtime.sec
+  entry.mtime.nanoseconds = fs_stat.mtime.nsec
+  entry.dev = fs_stat.rdev
+  entry.ino = fs_stat.ino
+
+  if distrust and stat.S_ISREG(fs_stat.mode) then
+    entry.mode = git_index_create_mode(438) -- 0666
+  else
+    entry.mode = git_index_create_mode(fs_stat.mode)
+  end
+
+  entry.uid = fs_stat.uid
+  entry.gid = fs_stat.gid
+  entry.file_size = fs_stat.size
+  entry.path = path
+
+  return IndexEntry.borrow(git_index_entry)
 end
 
 
@@ -3178,6 +3250,7 @@ M.Config = Config
 M.Diff = Diff
 M.Repository = Repository
 M.Reference = Reference
+M.IndexEntry = IndexEntry
 
 
 M.GIT_BRANCH = libgit2.GIT_BRANCH

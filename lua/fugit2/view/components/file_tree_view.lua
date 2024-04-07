@@ -1,5 +1,7 @@
 ---Fugit2 Git status file tree
 
+local LogLevel = vim.log.levels
+
 local NuiLine = require "nui.line"
 local NuiPopup = require "nui.popup"
 local NuiText = require "nui.text"
@@ -303,13 +305,13 @@ function GitStatusTree:index_add_reset(repo, index, add, reset, node)
     -- rename
     err = index:add_bypath(node.alt_path)
     if err ~= 0 then
-      vim.notify("[Fugit2] Git Error when handling rename " .. err, vim.log.levels.ERROR)
+      vim.notify("[Fugit2] Git Error when handling rename " .. err, LogLevel.ERROR)
       return false, false
     end
 
     err = index:remove_bypath(node.id)
     if err ~= 0 then
-      vim.notify("[Fugit2] Git Error when handling rename " .. err, vim.log.levels.ERROR)
+      vim.notify("[Fugit2] Git Error when handling rename " .. err, LogLevel.ERROR)
       return false, false
     end
 
@@ -319,7 +321,7 @@ function GitStatusTree:index_add_reset(repo, index, add, reset, node)
     -- add to index if worktree status is in (UNTRACKED, MODIFIED, TYPECHANGE)
     err = index:add_bypath(node.id)
     if err ~= 0 then
-      vim.notify("[Fugit2] Git Error when adding to index: " .. err, vim.log.levels.ERROR)
+      vim.notify("[Fugit2] Git Error when adding to index: " .. err, LogLevel.ERROR)
       return false, false
     end
 
@@ -328,7 +330,7 @@ function GitStatusTree:index_add_reset(repo, index, add, reset, node)
     -- remove from index
     err = index:remove_bypath(node.id)
     if err ~= 0 then
-      vim.notify("[Fugit2] Git Error when removing from index: " .. err, vim.log.levels.ERROR)
+      vim.notify("[Fugit2] Git error when removing from index: " .. err, LogLevel.ERROR)
       return false, false
     end
 
@@ -337,7 +339,8 @@ function GitStatusTree:index_add_reset(repo, index, add, reset, node)
     -- reset both paths if rename in index
     err = repo:reset_default { node.id, node.alt_path }
     if err ~= 0 then
-      vim.notify("[Fugit2] Git Error when reset rename: " .. err, vim.log.levels.ERROR)
+      vim.notify("[Fugit2] Git error when reset rename: " .. err, LogLevel.ERROR)
+      return false, false
     end
 
     updated = true
@@ -349,7 +352,8 @@ function GitStatusTree:index_add_reset(repo, index, add, reset, node)
       err = index:remove_bypath(node.id)
     end
     if err ~= 0 then
-      vim.notify("[Fugit2] Git Error when unstage from index: " .. err, vim.log.levels.ERROR)
+      vim.notify("[Fugit2] Git error when unstage from index: " .. err, LogLevel.ERROR)
+      return false, false
     end
 
     updated = true

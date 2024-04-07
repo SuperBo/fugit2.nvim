@@ -41,7 +41,7 @@ end
 ---@param namespace integer Nvim namespace
 ---@return Fugit2GitDiffView
 function M.new_fugit2_diff_view(namespace, repo)
-  local diffview = GitDiff(namespace, repo)
+  local diffview = GitDiff(namespace, repo, nil, nil)
   return diffview
 end
 

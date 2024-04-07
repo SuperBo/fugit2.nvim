@@ -565,6 +565,7 @@ local M = {
   C = ffi.load "libgit2",
 }
 
+M.uint32 = ffi.typeof "uint32_t"
 M.char_pointer = ffi.typeof "char*"
 M.char_array = ffi.typeof "char[?]"
 M.const_char_pointer_array = ffi.typeof "const char *[?]"
@@ -722,6 +723,8 @@ M.git_index_iterator_double_pointer = ffi.typeof "git_index_iterator*[1]"
 M.git_index_entry_double_pointer = ffi.typeof "git_index_entry*[1]"
 ---@type ffi.ctype* git_index_entry pointer
 M.git_index_entry_pointer = ffi.typeof "const git_index_entry*"
+---@type ffi.ctype* git_index_entry[1]
+M.git_index_entry = ffi.typeof("git_index_entry[1]")
 
 ---@type ffi.ctype* struct git_branch_iterator *[1]
 M.git_branch_iterator_double_pointer = ffi.typeof "git_branch_iterator *[1]"
