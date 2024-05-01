@@ -38,6 +38,34 @@ local SourceTree = Object "Fugit2SourceTree"
 -- | Tree funcions |
 -- =================
 
+-- Gets colors for a tree workdir node
+---@param worktree_status GIT_DELTA
+---@param modified boolean
+---@return string text_color Text color
+---@return string icon_color Icon color
+local function tree_node_worktree_colors(worktree_status, modified)
+  local text_color, icon_color = "", "Fugit2Unchanged"
+
+  if worktree_status == git2.GIT_DELTA.CONFLICTED then
+    text_color = "Fugit2Untracked"
+    icon_color = "Fugit2Untracked"
+  elseif worktree_status == git2.GIT_DELTA.UNTRACKED then
+    text_color = "Fugit2Untracked"
+    icon_color = "Fugit2Untracked"
+  elseif worktree_status == git2.GIT_DELTA.IGNORED then
+    text_color = "Fugit2Ignored"
+    icon_color = "Fugit2Ignored"
+  elseif worktree_status == git2.GIT_DELTA.MODIFIED then
+    icon_color = "Fugit2Modified"
+  end
+
+  if modified then
+    text_color = "Fugit2Modified"
+  end
+
+  return text_color, icon_color
+end
+
 -- Prepares node in tree.
 ---@param node NuiTree.Node
 ---@return NuiLine
@@ -53,15 +81,24 @@ local function status_tree_prepare_node(node)
     local align = FILE_ENTRY_ALIGN
     local text = node.icon .. " " .. node.text
     local text_width = left_align + strings.strdisplaywidth(text)
+    local text_color = node.color
 
     if text_width > FILE_ENTRY_WIDTH then
       align = math.ceil(text_width / FILE_ENTRY_WIDTH) * FILE_ENTRY_WIDTH - 1
     end
 
+    if node.modified then
+      align = align - 3
+      text_color = "Fugit2Modified"
+    end
+
     line:append(
       strings.align_str(text, align - left_align),
-      node.color
+      text_color
     )
+    if node.modified then
+      line:append("[+]", text_color)
+    end
     line:append(" " .. node.status_icon, node.icon_color)
 
     -- line:append(node.modified and "[+] " or "    ", node.color)
@@ -101,33 +138,6 @@ local function status_tree_construct_nodes(merged, staged, unstaged)
   return nodes
 end
 
--- Gets colors for a tree workdir node
----@param worktree_status GIT_DELTA
----@param modified boolean
----@return string text_color Text color
----@return string icon_color Icon color
-local function tree_node_worktree_colors(worktree_status, modified)
-  local text_color, icon_color = "", "Fugit2Unchanged"
-
-  if worktree_status == git2.GIT_DELTA.CONFLICTED then
-    text_color = "Fugit2Untracked"
-    icon_color = "Fugit2Untracked"
-  elseif worktree_status == git2.GIT_DELTA.UNTRACKED then
-    text_color = "Fugit2Untracked"
-    icon_color = "Fugit2Untracked"
-  elseif worktree_status == git2.GIT_DELTA.IGNORED then
-    text_color = "Fugit2Ignored"
-    icon_color = "Fugit2Ignored"
-  elseif worktree_status == git2.GIT_DELTA.MODIFIED then
-    icon_color = "Fugit2Modified"
-  end
-
-  if modified then
-    text_color = "Fugit2Modified"
-  end
-
-  return text_color, icon_color
-end
 
 -- Gets colors for a tree index node
 ---@param index_status GIT_DELTA
@@ -221,7 +231,8 @@ function SourceTree:update(status)
         text = item.path,
         icon = icon,
         status_icon = "U",
-        status = SOURCE_TREE_GIT_STATUS.CONFLICT
+        status = SOURCE_TREE_GIT_STATUS.CONFLICT,
+        modified = modified
       })
     else
       if item.index_status ~= git2.GIT_DELTA.UNMODIFIED
@@ -236,7 +247,8 @@ function SourceTree:update(status)
           status_icon = utils.get_git_status_icon(item.index_status),
           color = text_color,
           icon_color = icon_color,
-          status = SOURCE_TREE_GIT_STATUS.STAGED
+          status = SOURCE_TREE_GIT_STATUS.STAGED,
+          modified = modified
         })
       end
 
@@ -251,6 +263,7 @@ function SourceTree:update(status)
           color = text_color,
           icon_color = icon_color,
           status = SOURCE_TREE_GIT_STATUS.UNSTAGED,
+          modified = modified
         })
       end
     end
@@ -259,10 +272,12 @@ function SourceTree:update(status)
   self.tree:set_nodes(status_tree_construct_nodes(git_merged, git_staged, git_unstaged))
 end
 
+
 ---@return NuiTree.Node?
+---@param node_id string?
 ---@return integer? line_number
-function SourceTree:get_node()
-  local node, linenr = self.tree:get_node()
+function SourceTree:get_node(node_id)
+  local node, linenr = self.tree:get_node(node_id)
   if node and not node:has_children() then
     return node, linenr
   end
@@ -285,6 +300,11 @@ end
 
 function SourceTree:focus()
   vim.api.nvim_set_current_win(self.pane.winid)
+end
+
+---@param buf_name string
+function SourceTree:set_buf_name(buf_name)
+  vim.api.nvim_buf_set_name(self.pane.bufnr, buf_name)
 end
 
 ---@param mode string

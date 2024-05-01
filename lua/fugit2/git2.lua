@@ -357,16 +357,20 @@ function Object.new(git_object)
   setmetatable(object, Object)
 
   ffi.gc(object.obj, libgit2.C.git_object_free)
-
   return object
 end
-
 
 -- Get the id (SHA1) of a repository object.
 ---@return GitObjectId
 function Object:id()
   local oid = libgit2.C.git_object_id(self.obj[0])
   return ObjectId.borrow(oid)
+end
+
+-- Cast GitObject to GitBlob, the reference still be owned by main GitObject.
+---@return GitBlob
+function Object:as_blob()
+  return Blob.borrow(ffi.cast(libgit2.git_blob_pointer, self.obj))
 end
 
 
@@ -489,6 +493,13 @@ function Blob.new(git_blob)
   return blob
 end
 
+---@param git_blob ffi.cdata* libgit2.git_blob_pointer, doesn't own data
+function Blob.borrow(git_blob)
+  local blob = { blob = libgit2.git_blob_pointer(git_blob) }
+  setmetatable(blob, Blob)
+  return blob
+end
+
 ---@return GitObjectId
 function Blob:id()
   local oid = libgit2.C.git_blob_id(self.blob)
@@ -549,6 +560,19 @@ end
 ---@return GIT_OBJECT
 function TreeEntry:type()
   return libgit2.C.git_tree_entry_type(self.entry)
+end
+
+---@param repo GitRepository
+---@return GitObject?
+---@return GIT_ERROR
+function TreeEntry:to_object(repo)
+  local git_object = libgit2.git_object_double_pointer()
+  local err = libgit2.C.git_tree_entry_to_object(git_object, repo.repo, self.entry)
+  if err ~= 0 then
+    return nil, err
+  end
+
+  return Object.new(git_object[0]), 0
 end
 
 -- ===================
@@ -724,6 +748,20 @@ function Commit:parent_oids()
   end
 
   return parents
+end
+
+
+-- Gets the tree pointed to by a commit.
+---@return GitTree?
+---@return GIT_ERROR
+function Commit:tree()
+  local git_tree = libgit2.git_tree_double_pointer()
+  local err = libgit2.C.git_commit_tree(git_tree, self.commit)
+  if err ~= 0 then
+    return nil, err
+  end
+
+  return Tree.new(git_tree[0]), 0
 end
 
 

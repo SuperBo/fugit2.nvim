@@ -3,12 +3,18 @@
 local LogLevel = vim.log.levels
 local uv = vim.loop
 
+local NuiLine = require "nui.line"
+local NuiText = require "nui.text"
 local Object = require "nui.object"
 local Path = require "plenary.path"
 local event = require("nui.utils.autocmd").event
 
 local git2 = require "fugit2.git2"
 local SourceTree = require "fugit2.view.components.source_tree_view"
+local UI = require "fugit2.view.components.menus"
+
+
+local GIT_OID_LENGTH = 8
 
 ---@enum Fugit2GitDiffViewPane
 local Pane = {
@@ -45,14 +51,13 @@ function GitDiff:init(ns_id, repo, index, head_commit)
     self.index = _index
   end
 
-  if head_commit then
-    self.head = head_commit
-  else
+  local _head_commit = head_commit
+  if not head_commit then
     local _commit, err = repo:head_commit()
     if not _commit and err ~= git2.GIT_ERROR.GIT_EUNBORNBRANCH then
-      error("[Fugit2] Can't get repo head " .. err)
+      error("[Fugit2] Can't retrieve repo head " .. err)
     end
-    self.head = _commit
+    _head_commit = _commit
   end
 
   -- sub views
@@ -62,7 +67,20 @@ function GitDiff:init(ns_id, repo, index, head_commit)
   -- git info
   self._git = {
     path = vim.fn.fnamemodify(repo:repo_path(), ":p:h:h"),
+    head_name = "head::",
+    head_tree = nil,
   }
+
+  if _head_commit then
+    self._git.head_name = _head_commit:id():tostring(GIT_OID_LENGTH) .. "::"
+
+    local _tree, err = _head_commit:tree()
+    if _tree then
+      self._git.head_tree = _tree
+    else
+      error("[Fugit2] Cant' retrieve head tree" .. err)
+    end
+  end
 
   -- states
   self._states = {
@@ -71,6 +89,8 @@ function GitDiff:init(ns_id, repo, index, head_commit)
     buffers = {},
     last_line = -1,
     index_updated = false,
+    init_buffer = -1,
+    active_node = nil,
   }
 end
 
@@ -80,6 +100,7 @@ function GitDiff:mount()
     vim.api.nvim_set_current_tabpage(self.tabpage)
   else
     vim.cmd.tabnew()
+    self._states.init_buffer = vim.api.nvim_get_current_buf()
     self.tabpage = vim.api.nvim_tabpage_get_number(0)
     self:_post_mount()
   end
@@ -95,13 +116,15 @@ function GitDiff:_post_mount()
   local source_tree = SourceTree(self.ns_id)
   self._views.files = source_tree
 
-  self:_setup_handlers()
   source_tree:mount()
+  source_tree:set_buf_name("Source Tree")
 
   vim.cmd "rightbelow vsplit"
   self._windows[2] = vim.api.nvim_get_current_win()
 
   self._states.pane = Pane.TWO
+
+  self:_setup_handlers()
 
   source_tree:focus()
   self:update()
@@ -111,20 +134,96 @@ end
 
 -- Unmount Diffview remove buffers
 function GitDiff:unmount()
+  local save_queue = {}
+  local files = {}
+
+  -- check unsaved buffers
+  for _, bufnr in pairs(self._states.buffers) do
+    local name = ""
+    if vim.api.nvim_buf_is_loaded(bufnr) then
+      name = vim.fn.fnamemodify(vim.api.nvim_buf_get_name(bufnr), ":.")
+    end
+
+    if name:sub(1, 7) == "index::"
+      and vim.api.nvim_buf_get_option(bufnr, "modified")
+    then
+      save_queue[#save_queue+1] = bufnr
+      files[#files+1] = name
+    end
+  end
+
+  if #save_queue == 0 then
+    self:_destroy()
+    return
+  end
+
+  local confirm = UI.Confirm(
+    self.ns_id,
+    NuiLine {
+      NuiText(string.format("Do you want to save %s to index?", files[#files]:sub(8)))
+    }
+  )
+  confirm:on_yes(
+    function()
+      self:_write_index(files[#files], save_queue[#save_queue])
+    end
+  )
+  confirm:on_exit(function()
+    -- pop last of queue
+    save_queue[#save_queue] = nil
+    files[#files] = nil
+
+    if #save_queue == 0 or #files == 0 then
+      vim.schedule(function() self:_destroy() end)
+      return
+    end
+
+    confirm:set_text(NuiLine {
+      NuiText(string.format("Do you want to save %s to index?", files[#files]:sub(8)))
+    })
+
+    vim.schedule(function() confirm:show() end)
+  end)
+
+  confirm:mount()
+end
+
+
+-- Destroys GitDiff tab
+function GitDiff:_destroy()
+  -- close windows
+  vim.api.nvim_win_close(self._windows[1], true)
+  vim.api.nvim_win_close(self._windows[2], true)
+  if self._states.pane == Pane.THREE then
+    vim.api.nvim_win_close(self._windows[3], true)
+  end
+
+  -- close buffers
+  for _, bufnr in pairs(self._states.buffers) do
+    local name = ""
+    if vim.api.nvim_buf_is_loaded(bufnr) then
+      name = vim.fn.fnamemodify(vim.api.nvim_buf_get_name(bufnr), ":.")
+    end
+
+    if name:sub(1, 7) == "index::"
+      or name:sub(1, 6) == "head::"
+      or name:sub(GIT_OID_LENGTH+1, GIT_OID_LENGTH+2) == "::"
+    then
+      vim.api.nvim_buf_delete(bufnr, { force = true })
+    end
+  end
+
   -- write index back to disk
   if self._states.index_updated and not self.index:in_memory() then
     self.index:write()
     self._states.index_updated = false
   end
 
-  vim.schedule(vim.cmd.tabclose)
-
-  for _, bufnr in pairs(self._states.buffers) do
-    local name = vim.fn.fnamemodify(vim.api.nvim_buf_get_name(bufnr), ":.")
-    if name:sub(1, 7) == "index::" then
-      vim.api.nvim_buf_delete(bufnr, { force = true })
-    end
+  if vim.api.nvim_buf_is_valid(self._states.init_buffer) then
+    vim.api.nvim_buf_delete(self._states.init_buffer, { force = true })
   end
+
+  self._views.files:unmount()
 end
 
 
@@ -142,13 +241,31 @@ function GitDiff:update()
 end
 
 
--- Writes an index file to git index.
----@param ev table vim event table
----@return boolean success whether write success
-function GitDiff:_write_index(ev)
-  local filepath = ev.file
-  local bufnr = ev.buf
+-- Set tree nodes modified
+---@param bufnr integer buffer nnumber
+---@param filepath string git filepath
+function GitDiff:_set_modified_path(bufnr, filepath)
+  local is_modified = vim.api.nvim_buf_get_option(bufnr, "modified")
 
+  local node = self._views.files:get_node("-staged-" .. filepath)
+  if node then
+    node.modified = is_modified
+  end
+
+  node = self._views.files:get_node("-unstaged-" .. filepath)
+  if node then
+    node.modified = is_modified
+  end
+
+  self._views.files:render()
+end
+
+
+-- Writes an index file to git index.
+---@param filepath string
+---@param bufnr integer
+---@return boolean success whether write success
+function GitDiff:_write_index(filepath, bufnr)
   if filepath:sub(1, 7) ~= "index::" then
     vim.notify("[Fugit2] Wrong index file name", LogLevel.ERROR)
     return false
@@ -176,8 +293,8 @@ function GitDiff:_write_index(ev)
   local err = self.index:add_from_buffer(entry, content_buffer)
   if err ~= 0 then
     vim.notify(
-      string.format("[Fugit2] Failed to write to buffer, code: %d", err),
-      vim.log.levels.ERROR
+      "[Fugit2] Failed to write to buffer, code: " .. err,
+      LogLevel.ERROR
     )
     return false
   end
@@ -200,19 +317,19 @@ function GitDiff:_three_panes_layout() end
 
 -- Creates a buffer coressponding to a index file.
 -- Return a cached result if buffer is created before.
----@param node_id string NuiTree.Node id
 ---@param path string git file path
 ---@param filetype string? file type
 ---@return integer buffer buffer number
-function GitDiff:_get_or_create_index_buffer(node_id, path, filetype)
-  local bufnr = self._states.buffers[node_id]
+function GitDiff:_get_or_create_index_buffer(path, filetype)
+  local buf_key = "index::" .. path
+  local bufnr = self._states.buffers[buf_key]
   if bufnr then
     return bufnr
   end
 
   bufnr = vim.api.nvim_create_buf(true, false)
-  vim.api.nvim_buf_set_name(bufnr, "index::" .. path)
-  self._states.buffers[node_id] = bufnr
+  vim.api.nvim_buf_set_name(bufnr, buf_key)
+  self._states.buffers[buf_key] = bufnr
 
   -- read raw content
   local entry = self.index:get_bypath(path, git2.GIT_INDEX_STAGE.NORMAL)
@@ -232,15 +349,25 @@ function GitDiff:_get_or_create_index_buffer(node_id, path, filetype)
   end
 
   vim.api.nvim_buf_set_option(bufnr, "buftype", "acwrite")
-  vim.api.nvim_create_autocmd({"BufWriteCmd"}, {
+  vim.api.nvim_create_autocmd({event.BufWriteCmd}, {
     buffer = bufnr,
-    callback = function(ev)
-      self:_write_index(ev)
+    callback = function(e)
+      if self:_write_index(e.file, e.buf) then
+        self:update()
+        self:render()
+      end
     end
   })
   if filetype then
     vim.api.nvim_buf_set_option(bufnr, "filetype", filetype)
   end
+  vim.api.nvim_buf_set_option(bufnr, "modified", false)
+
+  -- setup buffer event
+  vim.api.nvim_create_autocmd({event.BufModifiedSet}, {
+    buffer = bufnr,
+    callback = function(e) self:_set_modified_path(bufnr, path) end
+  })
 
   return bufnr
 end
@@ -248,18 +375,47 @@ end
 
 -- Creates a buffer coressponding to a head file.
 -- Returns a cached result if buffer is created before.
+---@param path string git file path
+---@param filetype string? file type
 ---@return integer buffer buffer number
-function GitDiff:_get_or_create_head_buffer(node_id, path, filetype)
-  local bufnr = self._states.buffers[node_id]
+function GitDiff:_get_or_create_head_buffer(path, filetype)
+  local buf_key = "head::" .. path
+  local bufnr = self._states.buffers[buf_key]
   if bufnr then
     return bufnr
   end
 
   bufnr = vim.api.nvim_create_buf(true, false)
-  vim.api.nvim_buf_set_name(bufnr, "head::" .. path)
-  self._states.buffers[node_id] = bufnr
+  vim.api.nvim_buf_set_name(bufnr, self._git.head_name .. path)
+  self._states.buffers[buf_key] = bufnr
 
   -- read from git commit
+  local head_tree = self._git.head_tree
+  if head_tree then
+    local entry, obj, err
+    entry, err = head_tree:entry_bypath(path)
+    if not entry then
+      vim.notify("[Fugit2] Failed to get tree entry!".. err, LogLevel.ERROR)
+    else
+      obj, err = entry:to_object(self.repo)
+      if not obj then
+        vim.notify("[Fugit2] Failed to get git object!" .. err, LogLevel.ERROR)
+      else
+        local content = vim.split(obj:as_blob():content(), "\n", { plain = true })
+        if content[#content] == "" then
+          content[#content] = nil
+        end
+        vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, content)
+      end
+    end
+  end
+
+  vim.api.nvim_buf_set_option(bufnr, "buftype", "nofile")
+  vim.api.nvim_buf_set_option(bufnr, "modifiable", false)
+  if filetype then
+    vim.api.nvim_buf_set_option(bufnr, "filetype", filetype)
+  end
+  return bufnr
 end
 
 
@@ -268,8 +424,6 @@ end
 function GitDiff:_setup_diff_windows(node)
   local windows = self._windows
   local git = self._git
-  local buffer = self._states.buffers
-  local node_id = node:get_id()
   local filetype = vim.filetype.match { filename = node.text }
 
   if node.status == SourceTree.GIT_STATUS.UNSTAGED then
@@ -277,27 +431,31 @@ function GitDiff:_setup_diff_windows(node)
     local file_path = Path:new(git.path) / node.text
     file_path = vim.fn.fnameescape(file_path:make_relative())
 
-    -- Workdir file
-    vim.schedule(function()
-      vim.fn.win_execute(windows[2], "edit " .. file_path)
-    end)
-
     -- Index file
-    local bufnr = self:_get_or_create_index_buffer(node_id, node.text, filetype)
-    vim.api.nvim_win_set_buf(windows[1], bufnr)
+    local bufnr = self:_get_or_create_index_buffer(node.text, filetype)
 
     -- setup vim diff
     vim.schedule(function()
-      vim.cmd "diffoff!"
+      vim.cmd.diffoff { bang = true }
+      vim.fn.win_execute(windows[2], "edit " .. file_path)
+      vim.api.nvim_win_set_buf(windows[1], bufnr)
       vim.fn.win_execute(windows[2], "diffthis")
       vim.fn.win_execute(windows[1], "diffthis")
     end)
   elseif node.status == SourceTree.GIT_STATUS.STAGED then
     -- Index file
-    local bufnr = self:_get_or_create_index_buffer(node_id, node.text, filetype)
-    vim.api.nvim_win_set_buf(windows[2], bufnr)
+    local bufnr2 = self:_get_or_create_index_buffer(node.text, filetype)
 
     -- Head file
+    local bufnr1 = self:_get_or_create_head_buffer(node.text, filetype)
+
+    vim.schedule(function()
+      vim.cmd.diffoff { bang = true }
+      vim.api.nvim_win_set_buf(windows[2], bufnr2)
+      vim.api.nvim_win_set_buf(windows[1], bufnr1)
+      vim.fn.win_execute(windows[2], "diffthis")
+      vim.fn.win_execute(windows[1], "diffthis")
+    end)
   end
 end
 
@@ -308,15 +466,15 @@ function GitDiff:_setup_handlers()
   local source_tree = self._views.files
 
   source_tree:map("n", { "q", "<esc>" }, function()
-    self._views.files:unmount()
-  end, opts)
-
-  source_tree:map("n", "l", "<c-w>l", opts)
-
-  -- SourceTree handlers
-  source_tree:on(event.BufWinLeave, function()
     self:unmount()
   end, opts)
+
+  source_tree:map("n", { "l", "<cr>" }, "<c-w>l", opts)
+
+  -- SourceTree handlers
+  -- source_tree:on(event.BufWinLeave, function()
+  --   self:unmount()
+  -- end, opts)
 
   source_tree:on(event.CursorMoved, function()
     local node, linenr = source_tree:get_node()
@@ -329,7 +487,7 @@ function GitDiff:_setup_handlers()
     end
 
     self._states.last_line = linenr
-
+    self._states.active_node = node
     self:_setup_diff_windows(node)
   end)
 end

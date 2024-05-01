@@ -320,6 +320,7 @@ ffi.cdef [[
   const void * git_blob_rawcontent(const git_blob *blob);
   int git_blob_is_binary(const git_blob *blob);
   git_object_size_t git_blob_rawsize(const git_blob *blob);
+  const void * git_blob_rawcontent(const git_blob *blob);
   void git_blob_free(git_blob *blob);
 
   int git_checkout_head(git_repository *repo, const git_checkout_options *opts);
@@ -351,6 +352,7 @@ ffi.cdef [[
   unsigned int git_commit_parentcount(const git_commit *commit);
   int git_commit_parent(git_commit **out, const git_commit *commit, unsigned int n);
   const git_oid * git_commit_parent_id(const git_commit *commit, unsigned int n);
+  int git_commit_tree(git_tree **tree_out, const git_commit *commit);
   int git_commit_create_v(
     git_oid *id,
     git_repository *repo,
@@ -523,6 +525,9 @@ ffi.cdef [[
 
   const git_oid * git_tree_entry_id(const git_tree_entry *entry);
   void git_tree_entry_free(git_tree_entry *entry);
+  const char * git_tree_entry_name(const git_tree_entry *entry);
+  int git_tree_entry_type(const git_tree_entry *entry);
+  int git_tree_entry_to_object(git_object **object_out, git_repository *repo, const git_tree_entry *entry);
 
   int git_reset_default(git_repository *repo, const git_object *target, const git_strarray_readonly *pathspecs);
 

@@ -53,19 +53,23 @@ function Confirm:init(ns_id, msg_line)
   self:set_text(msg_line)
 
   -- handlers
+  local opts = {nowait = true, noremap = true}
   local exit_fn = function()
     self._popup:hide()
   end
   self._popup:on(event.BufLeave, exit_fn)
-  self._popup:map("n", "q", exit_fn)
-  self._popup:map("n", "n", exit_fn)
-  self._popup:map("n", "<esc>", exit_fn)
+  self._popup:map("n", { "q", "n", "<esc>" }, exit_fn, opts)
   self._popup:map("n", "l", function()
     vim.api.nvim_win_set_cursor(self._popup.winid, { 2, self._no_pos })
-  end)
+  end, opts)
   self._popup:map("n", "h", function()
     vim.api.nvim_win_set_cursor(self._popup.winid, { 2, self._yes_pos })
-  end)
+  end, opts)
+  self._popup:map("n", "<tab>", function()
+    local pos = vim.api.nvim_win_get_cursor(self._popup.winid)
+    local new_pos = (pos[2] < self._yes_pos + 4) and self._no_pos or self._yes_pos
+    vim.api.nvim_win_set_cursor(self._popup.winid, { 2, new_pos })
+  end, opts)
 end
 
 ---@parm text NuiLine
@@ -99,7 +103,7 @@ function Confirm:set_text(text)
   vim.api.nvim_buf_set_option(self._popup.bufnr, "readonly", true)
 end
 
----@param callback fun()
+---@param callback function
 function Confirm:on_yes(callback)
   self._popup:map("n", "y", function()
     self._popup:hide()
@@ -112,6 +116,11 @@ function Confirm:on_yes(callback)
       callback()
     end
   end, { noremap = true, nowait = true })
+end
+
+---@param callback function
+function Confirm:on_exit(callback)
+  self._popup:on(event.BufHidden, callback)
 end
 
 function Confirm:mount()
@@ -131,6 +140,7 @@ function Confirm:show()
   self._popup:show()
   vim.api.nvim_win_set_cursor(self._popup.winid, { 2, self._yes_pos })
 end
+
 
 --========================
 --| Transient Menu Popup |
