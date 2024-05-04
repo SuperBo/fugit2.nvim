@@ -9,6 +9,7 @@ local NuiTree = require "nui.tree"
 local Object = require "nui.object"
 local Path = require "plenary.path"
 local WebDevIcons = require "nvim-web-devicons"
+local plenary_filetype = require "plenary.filetype"
 
 local git2 = require "fugit2.git2"
 local utils = require "fugit2.utils"
@@ -106,7 +107,7 @@ local function tree_node_data_from_item(item, bufs)
   end
 
   local filename = vim.fs.basename(path)
-  local extension = vim.filetype.match { filename = filename }
+  local extension = plenary_filetype.detect(filename, {fs_access = false})
   local loaded = bufs[path] ~= nil
   local modified = loaded and bufs[path].modified or false
   local conflicted = (

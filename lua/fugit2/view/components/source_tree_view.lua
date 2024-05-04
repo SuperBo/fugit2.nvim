@@ -7,6 +7,7 @@ local Object = require "nui.object"
 local NuiLine = require "nui.line"
 local WebDevIcons = require "nvim-web-devicons"
 local strings = require "plenary.strings"
+local plenary_filetype = require "plenary.filetype"
 
 local git2 = require "fugit2.git2"
 local utils = require "fugit2.utils"
@@ -118,19 +119,19 @@ local function status_tree_construct_nodes(merged, staged, unstaged)
   local node
 
   if #merged > 0 then
-    node = NuiTree.Node({text = " Merged changes", color = "Fugit2Untracked"}, merged)
+    node = NuiTree.Node({text = "  Merged changes", color = "Fugit2Untracked"}, merged)
     node:expand()
     nodes[#nodes+1] = node
   end
 
   if #staged > 0 then
-    node = NuiTree.Node({text = "󰄲 Staged changes", color = "Fugit2Staged"}, staged)
+    node = NuiTree.Node({text = "󰄲  Staged changes", color = "Fugit2Staged"}, staged)
     node:expand()
     nodes[#nodes+1] = node
   end
 
   if #unstaged > 0 then
-    node = NuiTree.Node({text = "󰄷 Unstaged changes", color = "Fugit2Unstaged"}, unstaged)
+    node = NuiTree.Node({text = "󰄷  Unstaged changes", color = "Fugit2Unstaged"}, unstaged)
     node:expand()
     nodes[#nodes+1] = node
   end
@@ -220,7 +221,7 @@ function SourceTree:update(status)
 
   for _, item in ipairs(status) do
     local filename = vim.fs.basename(item.path)
-    local extension = vim.filetype.match { filename = filename }
+    local extension = plenary_filetype.detect(filename, { fs_access = false })
     local icon = WebDevIcons.get_icon(filename, extension, { default = true })
     local modified = bufs[item.path] and bufs[item.path].modified or false
 
