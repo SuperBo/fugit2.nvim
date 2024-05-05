@@ -132,7 +132,17 @@ function M.get_git_namespace_icon(namespace)
 end
 
 local _GIT_DELTA_ICONS = {
-  "󰆢 ", " ", " ", " ", " ", " ", " ", " ", nil, " ", " "
+  "󰆢 ",
+  " ",
+  " ",
+  " ",
+  " ",
+  " ",
+  " ",
+  " ",
+  nil,
+  " ",
+  " ",
 }
 
 -- Returns git status icon
@@ -140,7 +150,7 @@ local _GIT_DELTA_ICONS = {
 ---@param default string return icon when no match
 ---@return string
 function M.get_git_status_icon(status, default)
-  return _GIT_DELTA_ICONS[status+1] or default
+  return _GIT_DELTA_ICONS[status + 1] or default
 end
 
 ---Return ahead behind string

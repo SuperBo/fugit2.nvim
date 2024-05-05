@@ -1,6 +1,5 @@
 local M = {}
 
-
 local S_IFMT = 0xf000
 local S_IFSOCK = 0xc000
 local S_IFLNK = 0xa000
@@ -13,12 +12,10 @@ local S_ISUID = 0x800
 local S_ISGID = 0x400
 local S_ISVTX = 0x200
 
-
 M.S_IFMT = S_IFMT
 M.S_IFLNK = S_IFLNK
 M.S_IFREG = S_IFREG
 M.S_IFDIR = S_IFDIR
-
 
 ---@param m integer file mode
 ---@return boolean
@@ -61,6 +58,5 @@ end
 function M.S_ISSOCK(m)
   return bit.band(m, S_IFMT) == S_IFSOCK
 end
-
 
 return M

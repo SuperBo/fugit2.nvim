@@ -106,7 +106,7 @@ local function tree_node_data_from_item(item, bufs, stats_head_to_index)
   end
 
   local filename = vim.fs.basename(path)
-  local extension = plenary_filetype.detect(filename, {fs_access = false})
+  local extension = plenary_filetype.detect(filename, { fs_access = false })
   local loaded = bufs[path] ~= nil
   local modified = loaded and bufs[path].modified or false
   local conflicted = (
@@ -120,9 +120,7 @@ local function tree_node_data_from_item(item, bufs, stats_head_to_index)
   local text_color, icon_color, stage_icon = tree_node_colors(item.worktree_status, item.index_status, modified)
 
   local insertions, deletions
-  if item.index_status ~= git2.GIT_DELTA.UNMODIFIED
-    and item.index_status ~= git2.GIT_DELTA.UNTRACKED
-  then
+  if item.index_status ~= git2.GIT_DELTA.UNMODIFIED and item.index_status ~= git2.GIT_DELTA.UNTRACKED then
     local stats = stats_head_to_index[item.path]
     if stats then
       insertions = tostring(stats.insertions)
@@ -475,7 +473,7 @@ function GitStatusTree:update_single_node(repo, node)
 
   -- update insertions and deletions
   if node.istatus ~= "-" and node.istatus ~= "?" then
-    local diff, _ = repo:diff_head_to_index(nil, {node.id})
+    local diff, _ = repo:diff_head_to_index(nil, { node.id })
     if diff then
       local stats = diff:stats()
       if stats and stats.changed == 1 then

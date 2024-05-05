@@ -53,7 +53,7 @@ function Confirm:init(ns_id, msg_line)
   self:set_text(msg_line)
 
   -- handlers
-  local opts = {nowait = true, noremap = true}
+  local opts = { nowait = true, noremap = true }
   local exit_fn = function()
     self._popup:hide()
   end
@@ -140,7 +140,6 @@ function Confirm:show()
   self._popup:show()
   vim.api.nvim_win_set_cursor(self._popup.winid, { 2, self._yes_pos })
 end
-
 
 --========================
 --| Transient Menu Popup |
