@@ -816,7 +816,7 @@ function GitStatus:update()
     end
   end
 
-  local status_files, status_head, status_upstream, err
+  local status_files, status_head, status_upstream, diff_head_to_index, err
   ---@type NuiLine[]
   local lines = self._status_lines
 
@@ -1019,9 +1019,10 @@ function GitStatus:update()
   end
 
   status_files, err = self.repo:status()
+  diff_head_to_index = self.repo:diff_head_to_index(self.index)
   if status_files then
     -- update files tree
-    self._views.files:update(status_files, self._git.path)
+    self._views.files:update(status_files, self._git.path, diff_head_to_index)
   end
 end
 

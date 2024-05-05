@@ -1450,9 +1450,9 @@ function Diff:stats()
   end
   ---@type GitDiffStats
   local stats = {
-    changed = libgit2.C.git_diff_stats_files_changed(diff_stats[0]),
-    insertions = libgit2.C.git_diff_stats_insertions(diff_stats[0]),
-    deletions = libgit2.C.git_diff_stats_deletions(diff_stats[0])
+    changed = tonumber(libgit2.C.git_diff_stats_files_changed(diff_stats[0])) or 0,
+    insertions = tonumber(libgit2.C.git_diff_stats_insertions(diff_stats[0])) or 0,
+    deletions = tonumber(libgit2.C.git_diff_stats_deletions(diff_stats[0])) or 0,
   }
 
   libgit2.C.git_diff_stats_free(diff_stats[0]);

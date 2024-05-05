@@ -88,8 +88,14 @@ local function status_tree_prepare_node(node)
       align = math.ceil(text_width / FILE_ENTRY_WIDTH) * FILE_ENTRY_WIDTH - 1
     end
 
+    align = (
+      align
+      - (node.modified and 3 or 0)
+      - (node.insertions and node.insertions:len() + 1 or 0)
+      - (node.deletions and node.deletions:len() + 1 or 0)
+    )
+
     if node.modified then
-      align = align - 3
       text_color = "Fugit2Modified"
     end
 
@@ -97,9 +103,19 @@ local function status_tree_prepare_node(node)
       strings.align_str(text, align - left_align),
       text_color
     )
+
     if node.modified then
       line:append("[+]", text_color)
     end
+
+    if node.insertions then
+      line:append("+" .. node.insertions, "Fugit2Insertions")
+    end
+
+    if node.deletions then
+      line:append("-" .. node.deletions, "Fugit2Deletions")
+    end
+
     line:append(" " .. node.status_icon, node.icon_color)
 
     -- line:append(node.modified and "[+] " or "    ", node.color)
@@ -125,7 +141,7 @@ local function status_tree_construct_nodes(merged, staged, unstaged)
   end
 
   if #staged > 0 then
-    node = NuiTree.Node({text = "󰄲  Staged changes", color = "Fugit2Staged"}, staged)
+    node = NuiTree.Node({text = "  Staged changes", color = "Fugit2Staged"}, staged)
     node:expand()
     nodes[#nodes+1] = node
   end
@@ -201,7 +217,8 @@ end
 
 ---Update GitStatusList Pane
 ---@param status GitStatusItem[]
-function SourceTree:update(status)
+---@param diff_head_to_index GitDiff?
+function SourceTree:update(status, diff_head_to_index)
   local git_merged = {}
   local git_staged = {}
   local git_unstaged = {}
@@ -216,6 +233,20 @@ function SourceTree:update(status)
         modified = b.modified,
         loaded = true,
       }
+    end
+  end
+
+  -- get patch stats in diff_head_to_index
+  local stats_head_to_index = {}
+  if diff_head_to_index then
+    local patches, _ = diff_head_to_index:patches(false)
+    if patches then
+      for _, p in ipairs(patches) do
+        local stats, _ = p.patch:stats()
+        if stats then
+          stats_head_to_index[p.path] = stats
+        end
+      end
     end
   end
 
@@ -241,6 +272,12 @@ function SourceTree:update(status)
       then
         -- staged
         local text_color, icon_color = tree_node_index_colors(item.worktree_status, modified)
+        local stats = stats_head_to_index[item.path]
+        local insertions, deletions
+        if stats then
+          insertions = stats.insertions > 0 and tostring(stats.insertions)
+          deletions = stats.deletions > 0 and tostring(stats.deletions)
+        end
         git_staged[#git_staged+1] = NuiTree.Node({
           id = "staged-" .. item.path,
           text = item.path,
@@ -249,7 +286,9 @@ function SourceTree:update(status)
           color = text_color,
           icon_color = icon_color,
           status = SOURCE_TREE_GIT_STATUS.STAGED,
-          modified = modified
+          modified = modified,
+          insertions = insertions,
+          deletions = deletions,
         })
       end
 

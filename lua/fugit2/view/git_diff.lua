@@ -244,8 +244,10 @@ function GitDiff:update()
 
   -- Updates git source tree status
   local status_files, err = self.repo:status()
+  local diff_head_to_index, _ = self.repo:diff_head_to_index(self.index)
+
   if status_files then
-    self._views.files:update(status_files)
+    self._views.files:update(status_files, diff_head_to_index)
   else
     notifier.error("Error updating git status", err)
   end
@@ -443,7 +445,9 @@ function GitDiff:_get_or_create_head_buffer(path, filetype)
     local entry, obj, err
     entry, err = head_tree:entry_bypath(path)
     if not entry then
-      notifier.error("Failed to get tree entry", err)
+      if err ~= git2.GIT_ERROR.GIT_ENOTFOUND then
+        notifier.error("Failed to get tree entry", err)
+      end
     else
       obj, err = entry:to_object(self.repo)
       if not obj then
