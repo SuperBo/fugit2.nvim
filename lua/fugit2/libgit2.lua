@@ -320,6 +320,7 @@ ffi.cdef [[
   const void * git_blob_rawcontent(const git_blob *blob);
   int git_blob_is_binary(const git_blob *blob);
   git_object_size_t git_blob_rawsize(const git_blob *blob);
+  const void * git_blob_rawcontent(const git_blob *blob);
   void git_blob_free(git_blob *blob);
 
   int git_checkout_head(git_repository *repo, const git_checkout_options *opts);
@@ -351,6 +352,7 @@ ffi.cdef [[
   unsigned int git_commit_parentcount(const git_commit *commit);
   int git_commit_parent(git_commit **out, const git_commit *commit, unsigned int n);
   const git_oid * git_commit_parent_id(const git_commit *commit, unsigned int n);
+  int git_commit_tree(git_tree **tree_out, const git_commit *commit);
   int git_commit_create_v(
     git_oid *id,
     git_repository *repo,
@@ -500,11 +502,14 @@ ffi.cdef [[
   int git_index_read(git_index *index, int force);
   int git_index_write(git_index *index);
   int git_index_write_tree(git_oid *out, git_index *index);
+  const char * git_index_path(const git_index *index);
+  int git_index_add_from_buffer(git_index *index, const git_index_entry *entry, const void *buffer, size_t len);
   int git_index_add_bypath(git_index *index, const char *path);
   int git_index_remove_bypath(git_index *index, const char *path);
   int git_index_remove_directory(git_index *index, const char *dir, int stage);
   size_t git_index_entrycount(const git_index *index);
   int git_index_has_conflicts(const git_index *index);
+  int git_index_conflict_get(const git_index_entry **ancestor_out, const git_index_entry **our_out, const git_index_entry **their_out, git_index *index, const char *path);
   const git_index_entry * git_index_get_bypath(git_index *index, const char *path, int stage);
 
   int git_status_list_new(git_status_list **out, git_repository *repo, const git_status_options *opts);
@@ -521,6 +526,9 @@ ffi.cdef [[
 
   const git_oid * git_tree_entry_id(const git_tree_entry *entry);
   void git_tree_entry_free(git_tree_entry *entry);
+  const char * git_tree_entry_name(const git_tree_entry *entry);
+  int git_tree_entry_type(const git_tree_entry *entry);
+  int git_tree_entry_to_object(git_object **object_out, git_repository *repo, const git_tree_entry *entry);
 
   int git_reset_default(git_repository *repo, const git_object *target, const git_strarray_readonly *pathspecs);
 
@@ -563,6 +571,7 @@ local M = {
   C = ffi.load "libgit2",
 }
 
+M.uint32 = ffi.typeof "uint32_t"
 M.char_pointer = ffi.typeof "char*"
 M.char_array = ffi.typeof "char[?]"
 M.const_char_pointer_array = ffi.typeof "const char *[?]"
@@ -718,8 +727,12 @@ M.git_index_pointer = ffi.typeof "git_index*"
 M.git_index_iterator_double_pointer = ffi.typeof "git_index_iterator*[1]"
 ---@type ffi.ctype* git_index_entry**
 M.git_index_entry_double_pointer = ffi.typeof "git_index_entry*[1]"
+---@type ffi.ctype* git_index_entry pointer array
+M.git_index_entry_pointer_array = ffi.typeof "const git_index_entry*[?]"
 ---@type ffi.ctype* git_index_entry pointer
 M.git_index_entry_pointer = ffi.typeof "const git_index_entry*"
+---@type ffi.ctype* git_index_entry[1]
+M.git_index_entry = ffi.typeof "git_index_entry[1]"
 
 ---@type ffi.ctype* struct git_branch_iterator *[1]
 M.git_branch_iterator_double_pointer = ffi.typeof "git_branch_iterator *[1]"

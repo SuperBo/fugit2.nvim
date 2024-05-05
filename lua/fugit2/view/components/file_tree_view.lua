@@ -1,5 +1,7 @@
 ---Fugit2 Git status file tree
 
+local LogLevel = vim.log.levels
+
 local NuiLine = require "nui.line"
 local NuiPopup = require "nui.popup"
 local NuiText = require "nui.text"
@@ -7,6 +9,8 @@ local NuiTree = require "nui.tree"
 local Object = require "nui.object"
 local Path = require "plenary.path"
 local WebDevIcons = require "nvim-web-devicons"
+local plenary_filetype = require "plenary.filetype"
+local strings = require "plenary.strings"
 
 local git2 = require "fugit2.git2"
 local utils = require "fugit2.utils"
@@ -49,6 +53,7 @@ local function tree_construct_nodes(dir_tree, prefix)
   return files
 end
 
+-- Gets colors for a tree node
 ---@param worktree_status GIT_DELTA
 ---@param index_status GIT_DELTA
 ---@param modified boolean
@@ -57,20 +62,18 @@ end
 ---@return string status_icon Status icon
 local function tree_node_colors(worktree_status, index_status, modified)
   local text_color, icon_color = "Fugit2Modifier", "Fugit2Modifier"
-  local status_icon = "  "
+  local status_icon = utils.get_git_status_icon(worktree_status, "  ")
 
   if worktree_status == git2.GIT_DELTA.CONFLICTED then
     text_color = "Fugit2Untracked"
     icon_color = "Fugit2Untracked"
-    status_icon = " "
   elseif worktree_status == git2.GIT_DELTA.UNTRACKED then
     text_color = "Fugit2Untracked"
     icon_color = "Fugit2Untracked"
-    status_icon = " "
   elseif worktree_status == git2.GIT_DELTA.IGNORED or index_status == git2.GIT_DELTA.IGNORED then
     text_color = "Fugit2Ignored"
     icon_color = "Fugit2Ignored"
-    status_icon = " "
+    status_icon = utils.get_git_status_icon(git2.GIT_DELTA.IGNORED, "  ")
   elseif index_status == git2.GIT_DELTA.UNMODIFIED then
     text_color = "Fugit2Unchanged"
     icon_color = "Fugit2Unstaged"
@@ -78,11 +81,10 @@ local function tree_node_colors(worktree_status, index_status, modified)
   elseif worktree_status == git2.GIT_DELTA.MODIFIED then
     text_color = "Fugit2Modified"
     icon_color = "Fugit2Staged"
-    status_icon = "󰱒 "
   else
     text_color = "Fugit2Staged"
     icon_color = "Fugit2Staged"
-    status_icon = "󰱒 "
+    status_icon = utils.get_git_status_icon(index_status, "󰱒 ")
   end
 
   if modified then
@@ -94,8 +96,9 @@ end
 
 ---@param item GitStatusItem
 ---@param bufs table
+---@param stats_head_to_index { [string]: GitDiffStats }
 ---@return Fugit2StatusTreeNodeData
-local function tree_node_data_from_item(item, bufs)
+local function tree_node_data_from_item(item, bufs, stats_head_to_index)
   local path = item.path
   local alt_path
   if item.renamed and item.worktree_status == git2.GIT_DELTA.UNMODIFIED then
@@ -103,7 +106,7 @@ local function tree_node_data_from_item(item, bufs)
   end
 
   local filename = vim.fs.basename(path)
-  local extension = vim.filetype.match { filename = filename }
+  local extension = plenary_filetype.detect(filename, { fs_access = false })
   local loaded = bufs[path] ~= nil
   local modified = loaded and bufs[path].modified or false
   local conflicted = (
@@ -115,6 +118,15 @@ local function tree_node_data_from_item(item, bufs)
   local istatus = git2.status_char_dash(item.index_status)
 
   local text_color, icon_color, stage_icon = tree_node_colors(item.worktree_status, item.index_status, modified)
+
+  local insertions, deletions
+  if item.index_status ~= git2.GIT_DELTA.UNMODIFIED and item.index_status ~= git2.GIT_DELTA.UNTRACKED then
+    local stats = stats_head_to_index[item.path]
+    if stats then
+      insertions = tostring(stats.insertions)
+      deletions = tostring(stats.deletions)
+    end
+  end
 
   local rename = ""
   if item.renamed and item.index_status == git2.GIT_DELTA.UNMODIFIED then
@@ -140,6 +152,8 @@ local function tree_node_data_from_item(item, bufs)
     conflicted = conflicted,
     modified = modified,
     loaded = loaded,
+    insertions = insertions,
+    deletions = deletions,
   }
 end
 
@@ -157,11 +171,30 @@ local function create_tree_prepare_node_fn(states)
       line:append(node:is_expanded() and "  " or "  ", "Fugit2SymbolicRef")
       line:append(node.text, "Fugit2SymbolicRef")
     else
-      local format_str = "%s %-" .. (states.padding - node:get_depth() * 2) .. "s"
-      line:append(string.format(format_str, node.icon, node.text), node.color)
+      -- local format_str = "%s %-" .. (states.padding - node:get_depth() * 2) .. "s"
+      -- line:append(string.format(format_str, node.icon, node.text), node.color)
 
-      line:append(node.modified and "[+] " or "    ", node.color)
-      line:append(node.stage_icon .. " " .. node.wstatus .. node.istatus, node.stage_color)
+      local left_align = (
+        states.padding
+        - node:get_depth() * 2
+        - (node.modified and 4 or 0)
+        - (node.insertions and node.insertions:len() + 2 or 0)
+        - (node.deletions and node.deletions:len() + 2 or 0)
+      )
+      line:append(strings.align_str(node.icon .. " " .. node.text, left_align), node.color)
+
+      if node.modified then
+        line:append(" [+]", node.color)
+      end
+
+      if node.insertions then
+        line:append(" +" .. node.insertions, "Fugit2Insertions")
+      end
+      if node.deletions then
+        line:append(" -" .. node.deletions, "Fugit2Deletions")
+      end
+
+      line:append(" " .. node.stage_icon .. " " .. node.wstatus .. node.istatus, node.stage_color)
     end
 
     return line
@@ -209,7 +242,7 @@ function GitStatusTree:init(ns_id, top_title, bottom_title, min_width)
   }
 
   ---@type Fugit2GitStatusTreeState
-  self.states = { padding = min_width - 13 }
+  self.states = { padding = min_width - 10 }
 
   self.tree = NuiTree {
     bufnr = self.popup.bufnr,
@@ -239,7 +272,8 @@ end
 
 ---@param status GitStatusItem[]
 ---@param git_path string git root path, used to detect modifed buffer
-function GitStatusTree:update(status, git_path)
+---@param diff_head_to_index GitDiff? diff head to index
+function GitStatusTree:update(status, git_path, diff_head_to_index)
   -- get all bufs modified info
   local bufs = {}
   for _, bufnr in pairs(vim.tbl_filter(vim.api.nvim_buf_is_loaded, vim.api.nvim_list_bufs())) do
@@ -249,6 +283,20 @@ function GitStatusTree:update(status, git_path)
       bufs[path] = {
         modified = b.modified,
       }
+    end
+  end
+
+  -- get stats head to index
+  local stats_head_to_index = {}
+  if diff_head_to_index then
+    local patches, _ = diff_head_to_index:patches(false)
+    if patches then
+      for _, p in ipairs(patches) do
+        local stats, _ = p.patch:stats()
+        if stats then
+          stats_head_to_index[p.path] = stats
+        end
+      end
     end
   end
 
@@ -273,7 +321,7 @@ function GitStatusTree:update(status, git_path)
       end
     end
 
-    local entry = tree_node_data_from_item(item, bufs)
+    local entry = tree_node_data_from_item(item, bufs, stats_head_to_index)
 
     if dir["."] then
       table.insert(dir["."], entry)
@@ -302,12 +350,14 @@ function GitStatusTree:index_add_reset(repo, index, add, reset, node)
     -- rename
     err = index:add_bypath(node.alt_path)
     if err ~= 0 then
-      error("Git Error when handling rename " .. err)
+      vim.notify("[Fugit2] Git Error when handling rename " .. err, LogLevel.ERROR)
+      return false, false
     end
 
     err = index:remove_bypath(node.id)
     if err ~= 0 then
-      error("Git Error when handling rename " .. err)
+      vim.notify("[Fugit2] Git Error when handling rename " .. err, LogLevel.ERROR)
+      return false, false
     end
 
     updated = true
@@ -316,7 +366,8 @@ function GitStatusTree:index_add_reset(repo, index, add, reset, node)
     -- add to index if worktree status is in (UNTRACKED, MODIFIED, TYPECHANGE)
     err = index:add_bypath(node.id)
     if err ~= 0 then
-      error("Git Error when adding to index: " .. err)
+      vim.notify("[Fugit2] Git Error when adding to index: " .. err, LogLevel.ERROR)
+      return false, false
     end
 
     updated = true
@@ -324,7 +375,8 @@ function GitStatusTree:index_add_reset(repo, index, add, reset, node)
     -- remove from index
     err = index:remove_bypath(node.id)
     if err ~= 0 then
-      error("Git Error when removing from index: " .. err)
+      vim.notify("[Fugit2] Git error when removing from index: " .. err, LogLevel.ERROR)
+      return false, false
     end
 
     updated = true
@@ -332,7 +384,8 @@ function GitStatusTree:index_add_reset(repo, index, add, reset, node)
     -- reset both paths if rename in index
     err = repo:reset_default { node.id, node.alt_path }
     if err ~= 0 then
-      error("Git Error when reset rename: " .. err)
+      vim.notify("[Fugit2] Git error when reset rename: " .. err, LogLevel.ERROR)
+      return false, false
     end
 
     updated = true
@@ -344,7 +397,8 @@ function GitStatusTree:index_add_reset(repo, index, add, reset, node)
       err = index:remove_bypath(node.id)
     end
     if err ~= 0 then
-      error("Git Error when unstage from index: " .. err)
+      vim.notify("[Fugit2] Git error when unstage from index: " .. err, LogLevel.ERROR)
+      return false, false
     end
 
     updated = true
@@ -416,6 +470,21 @@ function GitStatusTree:update_single_node(repo, node)
   node.color, node.stage_color, node.stage_icon =
     tree_node_colors(worktree_status, index_status, node.modified or false)
   node.conflicted = worktree_status == git2.GIT_DELTA.CONFLICTED or index_status == git2.GIT_DELTA.CONFLICTED
+
+  -- update insertions and deletions
+  if node.istatus ~= "-" and node.istatus ~= "?" then
+    local diff, _ = repo:diff_head_to_index(nil, { node.id })
+    if diff then
+      local stats = diff:stats()
+      if stats and stats.changed == 1 then
+        node.insertions = tostring(stats.insertions)
+        node.deletions = tostring(stats.deletions)
+      end
+    end
+  else
+    node.insertions = nil
+    node.deletions = nil
+  end
 
   -- delete node when status == "--" and not conflicted
   if node.wstatus == "-" and node.istatus == "-" and not node.conflicted then

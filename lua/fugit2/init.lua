@@ -26,7 +26,7 @@ M.namespace = 0
 ---@type Fugit2Config
 M.config = config
 
----@param args Config?
+---@param args Fugit2Config?
 -- Usually configurations can be merged, accepting outside params and
 -- some validation here.
 M.setup = function(args)

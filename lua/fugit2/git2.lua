@@ -1,5 +1,6 @@
 local ffi = require "ffi"
 local libgit2 = require "fugit2.libgit2"
+local stat = require "fugit2.core.stat"
 
 --- Libgit2 init
 local libgit2_init_count = 0
@@ -49,6 +50,33 @@ local GIT_DELTA_STRING = {
   "UNREADABLE",
   "CONFLICTED",
 }
+
+
+-- ===================
+-- | Macro functions |
+-- ===================
+
+
+---@param mode integer
+---@return boolean
+local function GIT_PERMS_IS_EXEC(mode)
+  return bit.band(mode, 64) ~= 0
+end
+
+
+---@param mode integer
+---@return integer
+local function GIT_PERMS_CANONICAL(mode)
+  return GIT_PERMS_IS_EXEC(mode) and 493 or 420
+end
+
+
+---@param mode integer
+---@return integer
+local function GIT_PERMS_FOR_WRITE(mode)
+  return GIT_PERMS_IS_EXEC(mode) and 511 or 438
+end
+
 
 -- =====================
 -- | Class definitions |
@@ -329,16 +357,20 @@ function Object.new(git_object)
   setmetatable(object, Object)
 
   ffi.gc(object.obj, libgit2.C.git_object_free)
-
   return object
 end
-
 
 -- Get the id (SHA1) of a repository object.
 ---@return GitObjectId
 function Object:id()
   local oid = libgit2.C.git_object_id(self.obj[0])
   return ObjectId.borrow(oid)
+end
+
+-- Cast GitObject to GitBlob, the reference still be owned by main GitObject.
+---@return GitBlob
+function Object:as_blob()
+  return Blob.borrow(ffi.cast(libgit2.git_blob_pointer, self.obj))
 end
 
 
@@ -461,6 +493,13 @@ function Blob.new(git_blob)
   return blob
 end
 
+---@param git_blob ffi.cdata* libgit2.git_blob_pointer, doesn't own data
+function Blob.borrow(git_blob)
+  local blob = { blob = libgit2.git_blob_pointer(git_blob) }
+  setmetatable(blob, Blob)
+  return blob
+end
+
 ---@return GitObjectId
 function Blob:id()
   local oid = libgit2.C.git_blob_id(self.blob)
@@ -521,6 +560,19 @@ end
 ---@return GIT_OBJECT
 function TreeEntry:type()
   return libgit2.C.git_tree_entry_type(self.entry)
+end
+
+---@param repo GitRepository
+---@return GitObject?
+---@return GIT_ERROR
+function TreeEntry:to_object(repo)
+  local git_object = libgit2.git_object_double_pointer()
+  local err = libgit2.C.git_tree_entry_to_object(git_object, repo.repo, self.entry)
+  if err ~= 0 then
+    return nil, err
+  end
+
+  return Object.new(git_object[0]), 0
 end
 
 -- ===================
@@ -696,6 +748,20 @@ function Commit:parent_oids()
   end
 
   return parents
+end
+
+
+-- Gets the tree pointed to by a commit.
+---@return GitTree?
+---@return GIT_ERROR
+function Commit:tree()
+  local git_tree = libgit2.git_tree_double_pointer()
+  local err = libgit2.C.git_commit_tree(git_tree, self.commit)
+  if err ~= 0 then
+    return nil, err
+  end
+
+  return Tree.new(git_tree[0]), 0
 end
 
 
@@ -1079,6 +1145,50 @@ function IndexEntry.borrow(git_index_entry)
 end
 
 
+---@return integer
+local function git_index_create_mode(mode)
+	if stat.S_ISLNK(mode) then
+	  return stat.S_IFLNK
+  end
+
+  local link_or_dir = bit.bor(stat.S_IFLNK, stat.S_IFDIR)
+	if stat.S_ISDIR(mode) or bit.band(mode, stat.S_IFMT) == link_or_dir then
+    return link_or_dir
+  end
+
+	return bit.bor(stat.S_IFREG, GIT_PERMS_CANONICAL(mode))
+end
+
+
+---@param fs_stat uv.fs_stat.result
+---@param path string file path
+---@param distrust boolean index distrust mode
+---@return GitIndexEntry
+function IndexEntry.from_stat(fs_stat, path, distrust)
+  local git_index_entry = libgit2.git_index_entry()
+  local entry = git_index_entry[0]
+  entry.ctime.seconds = fs_stat.ctime.sec
+  entry.ctime.nanoseconds = fs_stat.ctime.nsec
+  entry.mtime.seconds = fs_stat.mtime.sec
+  entry.mtime.nanoseconds = fs_stat.mtime.nsec
+  entry.dev = fs_stat.rdev
+  entry.ino = fs_stat.ino
+
+  if distrust and stat.S_ISREG(fs_stat.mode) then
+    entry.mode = git_index_create_mode(438) -- 0666
+  else
+    entry.mode = git_index_create_mode(fs_stat.mode)
+  end
+
+  entry.uid = fs_stat.uid
+  entry.gid = fs_stat.gid
+  entry.file_size = fs_stat.size
+  entry.path = path
+
+  return IndexEntry.borrow(git_index_entry)
+end
+
+
 -- Whether the given index entry is a conflict.
 ---@return boolean is_conflict
 function IndexEntry:is_conflict()
@@ -1169,11 +1279,41 @@ function Index:write_tree()
 end
 
 
+-- Get the full path to the index file on disk.
+---@return string? path to index file or NULL for in-memory index
+function Index:path()
+  local path = libgit2.C.git_index_path(self.index)
+  if path ~= nil then
+    return ffi.string(path)
+  end
+  return nil
+end
+
+
+-- Checks index in-memory or not
+---return boolean inmemory Index in memory
+function Index:in_memory()
+  local path = libgit2.C.git_index_path(self.index)
+  return path == nil
+end
+
+
 -- Adds path to index.
 ---@param path string File path to be added.
 ---@return GIT_ERROR
 function Index:add_bypath(path)
   return libgit2.C.git_index_add_bypath(self.index, path)
+end
+
+
+-- Adds or update an index entry from a buffer in memory
+---@param entry GitIndexEntry
+---@param buffer string String buffer
+---@return GIT_ERROR
+function Index:add_from_buffer(entry, buffer)
+  return libgit2.C.git_index_add_from_buffer(
+    self.index, entry.entry, buffer, buffer:len()
+  )
 end
 
 
@@ -1192,6 +1332,7 @@ function Index:has_conflicts()
 end
 
 
+-- Gets index entry by path
 ---@param path string
 ---@param stage_number GIT_INDEX_STAGE
 ---@return GitIndexEntry?
@@ -1205,7 +1346,7 @@ function Index:get_bypath(path, stage_number)
 end
 
 
----Iterates through entries in the index.
+-- Iterates through entries in the index.
 ---@return (fun(): GitIndexEntry?)?
 function Index:iter()
   local entry = libgit2.git_index_entry_double_pointer()
@@ -1225,6 +1366,29 @@ function Index:iter()
     return IndexEntry.borrow(entry[0])
   end
 end
+
+
+-- Gets conflicst entries
+---@param path string path to get conflict
+---@return GitIndexEntry? ancestor
+---@return GitIndexEntry? our side
+---@return GitIndexEntry? their side
+---@return GIT_ERROR
+function Index:get_conflict(path)
+  local entries = libgit2.git_index_entry_pointer_array(3)
+
+  local err = libgit2.C.git_index_conflict_get(entries, entries+1, entries+2, self.index, path)
+  if err ~= 0 then
+    return nil, nil, nil, err
+  end
+
+  local ancestor_entry = IndexEntry.borrow(entries[0])
+  local our_entry = IndexEntry.borrow(entries[1])
+  local their_entry = IndexEntry.borrow(entries[2])
+
+  return ancestor_entry, our_entry, their_entry, 0
+end
+
 
 -- ==================
 -- | Diff functions |
@@ -1286,9 +1450,9 @@ function Diff:stats()
   end
   ---@type GitDiffStats
   local stats = {
-    changed = libgit2.C.git_diff_stats_files_changed(diff_stats[0]),
-    insertions = libgit2.C.git_diff_stats_insertions(diff_stats[0]),
-    deletions = libgit2.C.git_diff_stats_deletions(diff_stats[0])
+    changed = tonumber(libgit2.C.git_diff_stats_files_changed(diff_stats[0])) or 0,
+    insertions = tonumber(libgit2.C.git_diff_stats_insertions(diff_stats[0])) or 0,
+    deletions = tonumber(libgit2.C.git_diff_stats_deletions(diff_stats[0])) or 0,
   }
 
   libgit2.C.git_diff_stats_free(diff_stats[0]);
@@ -3148,19 +3312,20 @@ M.Config = Config
 M.Diff = Diff
 M.Repository = Repository
 M.Reference = Reference
+M.IndexEntry = IndexEntry
 
 
-M.GIT_ERROR = libgit2.GIT_ERROR
 M.GIT_BRANCH = libgit2.GIT_BRANCH
+M.GIT_CHECKOUT = libgit2.GIT_CHECKOUT
 M.GIT_DELTA = libgit2.GIT_DELTA
-M.GIT_REFERENCE = libgit2.GIT_REFERENCE
-M.GIT_REFERENCE_NAMESPACE = GIT_REFERENCE_NAMESPACE
+M.GIT_ERROR = libgit2.GIT_ERROR
 M.GIT_INDEX_STAGE = libgit2.GIT_INDEX_STAGE
-M.GIT_OPT = libgit2.GIT_OPT
 M.GIT_OBJECT = libgit2.GIT_OBJECT
+M.GIT_OPT = libgit2.GIT_OPT
 M.GIT_REBASE_NO_OPERATION = libgit2.GIT_REBASE_NO_OPERATION
 M.GIT_REBASE_OPERATION = libgit2.GIT_REBASE_OPERATION
-M.GIT_CHECKOUT = libgit2.GIT_CHECKOUT
+M.GIT_REFERENCE = libgit2.GIT_REFERENCE
+M.GIT_REFERENCE_NAMESPACE = GIT_REFERENCE_NAMESPACE
 
 
 M.head = Repository.head
