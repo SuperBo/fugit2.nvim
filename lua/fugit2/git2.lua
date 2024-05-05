@@ -1332,6 +1332,7 @@ function Index:has_conflicts()
 end
 
 
+-- Gets index entry by path
 ---@param path string
 ---@param stage_number GIT_INDEX_STAGE
 ---@return GitIndexEntry?
@@ -1345,7 +1346,7 @@ function Index:get_bypath(path, stage_number)
 end
 
 
----Iterates through entries in the index.
+-- Iterates through entries in the index.
 ---@return (fun(): GitIndexEntry?)?
 function Index:iter()
   local entry = libgit2.git_index_entry_double_pointer()
@@ -1365,6 +1366,29 @@ function Index:iter()
     return IndexEntry.borrow(entry[0])
   end
 end
+
+
+-- Gets conflicst entries
+---@param path string path to get conflict
+---@return GitIndexEntry? ancestor
+---@return GitIndexEntry? our side
+---@return GitIndexEntry? their side
+---@return GIT_ERROR
+function Index:get_conflict(path)
+  local entries = libgit2.git_index_entry_pointer_array(3)
+
+  local err = libgit2.C.git_index_conflict_get(entries, entries+1, entries+2, self.index, path)
+  if err ~= 0 then
+    return nil, nil, nil, err
+  end
+
+  local ancestor_entry = IndexEntry.borrow(entries[0])
+  local our_entry = IndexEntry.borrow(entries[1])
+  local their_entry = IndexEntry.borrow(entries[2])
+
+  return ancestor_entry, our_entry, their_entry, 0
+end
+
 
 -- ==================
 -- | Diff functions |

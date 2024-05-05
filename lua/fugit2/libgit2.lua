@@ -509,6 +509,7 @@ ffi.cdef [[
   int git_index_remove_directory(git_index *index, const char *dir, int stage);
   size_t git_index_entrycount(const git_index *index);
   int git_index_has_conflicts(const git_index *index);
+  int git_index_conflict_get(const git_index_entry **ancestor_out, const git_index_entry **our_out, const git_index_entry **their_out, git_index *index, const char *path);
   const git_index_entry * git_index_get_bypath(git_index *index, const char *path, int stage);
 
   int git_status_list_new(git_status_list **out, git_repository *repo, const git_status_options *opts);
@@ -726,6 +727,8 @@ M.git_index_pointer = ffi.typeof "git_index*"
 M.git_index_iterator_double_pointer = ffi.typeof "git_index_iterator*[1]"
 ---@type ffi.ctype* git_index_entry**
 M.git_index_entry_double_pointer = ffi.typeof "git_index_entry*[1]"
+---@type ffi.ctype* git_index_entry pointer array
+M.git_index_entry_pointer_array = ffi.typeof "const git_index_entry*[?]"
 ---@type ffi.ctype* git_index_entry pointer
 M.git_index_entry_pointer = ffi.typeof "const git_index_entry*"
 ---@type ffi.ctype* git_index_entry[1]

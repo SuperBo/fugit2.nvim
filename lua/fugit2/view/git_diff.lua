@@ -1,17 +1,18 @@
 -- Fugit2 Git diff view tab module
 
-local LogLevel = vim.log.levels
 local uv = vim.loop
 
 local NuiLine = require "nui.line"
 local NuiText = require "nui.text"
 local Object = require "nui.object"
 local Path = require "plenary.path"
+local plenary_filetype = require "plenary.filetype"
 local event = require("nui.utils.autocmd").event
 
 local git2 = require "fugit2.git2"
 local SourceTree = require "fugit2.view.components.source_tree_view"
 local UI = require "fugit2.view.components.menus"
+local notifier = require "fugit2.notifier"
 
 
 local GIT_OID_LENGTH = 8
@@ -192,9 +193,17 @@ end
 -- Destroys GitDiff tab
 function GitDiff:_destroy()
   -- close windows
-  vim.api.nvim_win_close(self._windows[1], true)
-  vim.api.nvim_win_close(self._windows[2], true)
-  if self._states.pane == Pane.THREE then
+  if vim.api.nvim_win_is_valid(self._windows[1]) then
+    vim.api.nvim_win_close(self._windows[1], true)
+  end
+
+  if vim.api.nvim_win_is_valid(self._windows[2]) then
+    vim.api.nvim_win_close(self._windows[2], true)
+  end
+
+  if self._windows[3]
+    and vim.api.nvim_win_is_valid(self._windows[3])
+  then
     vim.api.nvim_win_close(self._windows[3], true)
   end
 
@@ -205,9 +214,11 @@ function GitDiff:_destroy()
       name = vim.fn.fnamemodify(vim.api.nvim_buf_get_name(bufnr), ":.")
     end
 
-    if name:sub(1, 7) == "index::"
-      or name:sub(1, 6) == "head::"
+    if vim.startswith(name, "index::")
+      or vim.startswith(name, "head::")
       or name:sub(GIT_OID_LENGTH+1, GIT_OID_LENGTH+2) == "::"
+      or vim.startswith(name, "current(")
+      or vim.startswith(name, "incoming(")
     then
       vim.api.nvim_buf_delete(bufnr, { force = true })
     end
@@ -236,7 +247,7 @@ function GitDiff:update()
   if status_files then
     self._views.files:update(status_files)
   else
-    vim.notify("[Fugit2] Error updating git status, err " .. err, LogLevel.ERROR)
+    notifier.error("Error updating git status", err)
   end
 end
 
@@ -267,7 +278,7 @@ end
 ---@return boolean success whether write success
 function GitDiff:_write_index(filepath, bufnr)
   if filepath:sub(1, 7) ~= "index::" then
-    vim.notify("[Fugit2] Wrong index file name", LogLevel.ERROR)
+    notifier.error("Wrong index file name")
     return false
   end
   filepath = filepath:sub(8)
@@ -279,7 +290,7 @@ function GitDiff:_write_index(filepath, bufnr)
     if stat then
       entry = git2.IndexEntry.from_stat(stat, filepath, true)
     else
-      vim.notify("[Fugit2] Failed to create new index entry", LogLevel.ERROR)
+      notifier.error("Failed to create new index entry")
       return false
     end
   end
@@ -292,27 +303,70 @@ function GitDiff:_write_index(filepath, bufnr)
 
   local err = self.index:add_from_buffer(entry, content_buffer)
   if err ~= 0 then
-    vim.notify(
-      "[Fugit2] Failed to write to buffer, code: " .. err,
-      LogLevel.ERROR
-    )
+    notifier.error("Failed to write to buffer", err)
     return false
   end
 
   -- reset modified option
   vim.api.nvim_buf_set_option(bufnr, "modified", false)
 
-  vim.notify(string.format("[Fugit2] Saved %s to index", filepath), LogLevel.INFO)
+  notifier.info(string.format("Saved %s to index", filepath))
   self._states.index_updated = true
   return true
 end
 
 
--- Switches to two main panes layout
-function GitDiff:_two_panes_layout() end
+-- Switches to two main windows layout
+function GitDiff:_two_windows_layout()
+  if self._states.pane == Pane.TWO then
+    return
+  end
 
--- Switches to three main panes layout
-function GitDiff:_three_panes_layout() end
+  local w3 = self._windows[3]
+  if w3 and vim.api.nvim_win_is_valid(w3) then
+    vim.api.nvim_win_hide(w3)
+    self._windows[3] = nil
+  end
+
+  self._states.pane = Pane.TWO
+end
+
+-- Switches to three main windows layout
+function GitDiff:_three_windows_layout()
+  if self._states.pane == Pane.THREE then
+    return
+  end
+
+  local windows = self._windows
+  local current_win = vim.api.nvim_get_current_win()
+
+  local w2 = windows[2]
+  if w2 and vim.api.nvim_win_is_valid(w2) then
+    vim.api.nvim_win_hide(w2)
+  end
+
+  vim.api.nvim_set_current_win(windows[1])
+  vim.cmd "rightbelow split"
+  windows[3] = vim.api.nvim_get_current_win()
+  vim.api.nvim_set_current_win(windows[1])
+  vim.cmd "rightbelow vsplit"
+  windows[2] = vim.api.nvim_get_current_win()
+
+  vim.api.nvim_set_current_win(current_win)
+
+  self._states.pane = Pane.THREE
+end
+
+
+---@param bufnr integer
+---@param blob GitBlob
+local function set_buffer_from_blob(bufnr, blob)
+  local content = vim.split(blob:content(), "\n", { plain = true })
+  if content[#content] == "" then
+    content[#content] = nil
+  end
+  vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, content)
+end
 
 
 -- Creates a buffer coressponding to a index file.
@@ -336,15 +390,9 @@ function GitDiff:_get_or_create_index_buffer(path, filetype)
   if entry then
     local blob, err = self.repo:blob_lookup(entry:id())
     if not blob then
-      vim.notify(
-        string.format("[Fugit2] Can't get blob, error %d", err), LogLevel.ERROR
-      )
+      notifier.error("Can't get index blob", err)
     else
-      local content = vim.split(blob:content(), "\n", { plain=true })
-      if content[#content] == "" then
-        content[#content] = nil
-      end
-      vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, content)
+      set_buffer_from_blob(bufnr, blob)
     end
   end
 
@@ -395,17 +443,13 @@ function GitDiff:_get_or_create_head_buffer(path, filetype)
     local entry, obj, err
     entry, err = head_tree:entry_bypath(path)
     if not entry then
-      vim.notify("[Fugit2] Failed to get tree entry!".. err, LogLevel.ERROR)
+      notifier.error("Failed to get tree entry", err)
     else
       obj, err = entry:to_object(self.repo)
       if not obj then
-        vim.notify("[Fugit2] Failed to get git object!" .. err, LogLevel.ERROR)
+        notifier.error("Failed to get git object", err)
       else
-        local content = vim.split(obj:as_blob():content(), "\n", { plain = true })
-        if content[#content] == "" then
-          content[#content] = nil
-        end
-        vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, content)
+        set_buffer_from_blob(bufnr, obj:as_blob())
       end
     end
   end
@@ -419,15 +463,89 @@ function GitDiff:_get_or_create_head_buffer(path, filetype)
 end
 
 
+-- Gets or creates ours and theirs buffer of conflict entry.
+-- Returns a cached result if buffer is created before.
+---@param path string git file path
+---@param filetype string? file type
+---@return integer buffer_our ours buffer number
+---@return integer buffer_their theirs buffer number
+function GitDiff:_get_or_create_our_their_buffers(path, filetype)
+  local our_key = "our::" .. path
+  local bufnr1 = self._states.buffers[our_key]
+
+  local their_key = "their::" .. path
+  local bufnr2 = self._states.buffers[their_key]
+
+  if bufnr1 and bufnr1 then
+    return bufnr1, bufnr2
+  end
+
+  local _, our, their, err = self.index:get_conflict(path)
+  local blob
+
+  if not bufnr1 then
+    bufnr1 = vim.api.nvim_create_buf(true, false)
+    self._states.buffers[our_key] = bufnr1
+
+    if not our then
+      notifier.error("Failed to get our side in conflict", err)
+    else
+      local our_id = our:id()
+      vim.api.nvim_buf_set_name(
+        bufnr1,
+        string.format("current(%s)::%s", our_id:tostring(GIT_OID_LENGTH), path)
+      )
+
+      blob, err = self.repo:blob_lookup(our_id)
+
+      if not blob then
+        notifier.error("Failed to get our blob", err)
+      else
+        set_buffer_from_blob(bufnr1, blob)
+      end
+    end
+  end
+
+  if not bufnr2 then
+    bufnr2 = vim.api.nvim_create_buf(true, false)
+    self._states.buffers[their_key] = bufnr2
+
+    if not their then
+      notifier.error("Failed to get their side in conflict", err)
+    else
+      local their_id = their:id()
+      vim.api.nvim_buf_set_name(
+        bufnr2,
+        string.format("incoming(%s)::%s", their_id:tostring(GIT_OID_LENGTH), path)
+      )
+
+      blob, err = self.repo:blob_lookup(their_id)
+      if not blob then
+        notifier.error("Failed get their blob", err)
+      else
+        set_buffer_from_blob(bufnr2, blob)
+      end
+    end
+  end
+
+  if filetype then
+    vim.api.nvim_buf_set_option(bufnr1, "filetype", filetype)
+    vim.api.nvim_buf_set_option(bufnr2, "filetype", filetype)
+  end
+
+  return bufnr1, bufnr2
+end
+
+
 -- Setups diff files in windows
 ---@param node NuiTree.Node
 function GitDiff:_setup_diff_windows(node)
   local windows = self._windows
   local git = self._git
-  local filetype = vim.filetype.match { filename = node.text }
+  local filetype = plenary_filetype.detect(node.text, {fs_access=false})
 
   if node.status == SourceTree.GIT_STATUS.UNSTAGED then
-    -- Unstaged file
+    -- Workdir file
     local file_path = Path:new(git.path) / node.text
     file_path = vim.fn.fnameescape(file_path:make_relative())
 
@@ -437,6 +555,7 @@ function GitDiff:_setup_diff_windows(node)
     -- setup vim diff
     vim.schedule(function()
       vim.cmd.diffoff { bang = true }
+      self:_two_windows_layout()
       vim.fn.win_execute(windows[2], "edit " .. file_path)
       vim.api.nvim_win_set_buf(windows[1], bufnr)
       vim.fn.win_execute(windows[2], "diffthis")
@@ -451,10 +570,29 @@ function GitDiff:_setup_diff_windows(node)
 
     vim.schedule(function()
       vim.cmd.diffoff { bang = true }
+      self:_two_windows_layout()
       vim.api.nvim_win_set_buf(windows[2], bufnr2)
       vim.api.nvim_win_set_buf(windows[1], bufnr1)
       vim.fn.win_execute(windows[2], "diffthis")
       vim.fn.win_execute(windows[1], "diffthis")
+    end)
+  elseif node.status == SourceTree.GIT_STATUS.CONFLICT then
+    -- Workdir file
+    local file_path = Path:new(git.path) / node.text
+    file_path = vim.fn.fnameescape(file_path:make_relative())
+
+    -- Our and their side in conflict
+    local bufnr1, bufnr2 = self:_get_or_create_our_their_buffers(node.text, filetype)
+
+    vim.schedule(function()
+      vim.cmd.diffoff { bang = true }
+      self:_three_windows_layout()
+      vim.api.nvim_win_set_buf(windows[2], bufnr2)
+      vim.api.nvim_win_set_buf(windows[1], bufnr1)
+      vim.fn.win_execute(windows[3], "edit " .. file_path)
+      vim.fn.win_execute(windows[1], "diffthis")
+      vim.fn.win_execute(windows[2], "diffthis")
+      vim.fn.win_execute(windows[3], "diffthis")
     end)
   end
 end
@@ -469,7 +607,17 @@ function GitDiff:_setup_handlers()
     self:unmount()
   end, opts)
 
-  source_tree:map("n", { "l", "<cr>" }, "<c-w>l", opts)
+  source_tree:map("n", { "l", "<cr>" }, function()
+    if self._states.pane == Pane.TWO
+      and vim.api.nvim_win_is_valid(self._windows[1])
+    then
+      vim.api.nvim_set_current_win(self._windows[1])
+    elseif self._states.pane == Pane.THREE
+      and vim.api.nvim_win_is_valid(self._windows[3])
+    then
+      vim.api.nvim_set_current_win(self._windows[3])
+    end
+  end, opts)
 
   -- SourceTree handlers
   -- source_tree:on(event.BufWinLeave, function()
