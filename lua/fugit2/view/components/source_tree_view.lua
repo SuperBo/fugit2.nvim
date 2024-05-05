@@ -231,7 +231,7 @@ function SourceTree:update(status)
         id = "merged-" .. item.path,
         text = item.path,
         icon = icon,
-        status_icon = "U",
+        status_icon = utils.get_git_status_icon(git2.GIT_DELTA.CONFLICTED, ""),
         status = SOURCE_TREE_GIT_STATUS.CONFLICT,
         modified = modified
       })
@@ -245,7 +245,7 @@ function SourceTree:update(status)
           id = "staged-" .. item.path,
           text = item.path,
           icon = icon,
-          status_icon = utils.get_git_status_icon(item.index_status),
+          status_icon = utils.get_git_status_icon(item.index_status, ""),
           color = text_color,
           icon_color = icon_color,
           status = SOURCE_TREE_GIT_STATUS.STAGED,
@@ -260,7 +260,7 @@ function SourceTree:update(status)
           id = "unstaged-" .. item.path,
           text = item.path,
           icon = icon,
-          status_icon = utils.get_git_status_icon(item.worktree_status),
+          status_icon = utils.get_git_status_icon(item.worktree_status, ""),
           color = text_color,
           icon_color = icon_color,
           status = SOURCE_TREE_GIT_STATUS.UNSTAGED,

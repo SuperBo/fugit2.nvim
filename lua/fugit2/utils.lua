@@ -131,27 +131,16 @@ function M.get_git_namespace_icon(namespace)
   return ""
 end
 
+local _GIT_DELTA_ICONS = {
+  "󰆢 ", " ", " ", " ", " ", " ", " ", " ", nil, " ", " "
+}
+
 -- Returns git status icon
 ---@param status GIT_DELTA
+---@param default string return icon when no match
 ---@return string
-function M.get_git_status_icon(status)
-  if status == git2.GIT_DELTA.MODIFIED then
-    return " "
-  elseif status == git2.GIT_DELTA.ADDED then
-    return " "
-  elseif status == git2.GIT_DELTA.DELETED then
-    return " "
-  elseif status == git2.GIT_DELTA.RENAMED then
-    return " "
-  elseif status == git2.GIT_DELTA.UNTRACKED then
-    return " "
-  elseif status == git2.GIT_DELTA.CONFLICTED then
-    return " "
-  elseif status == git2.GIT_DELTA.IGNORED then
-    return " "
-  end
-
-  return ""
+function M.get_git_status_icon(status, default)
+  return _GIT_DELTA_ICONS[status+1] or default
 end
 
 ---Return ahead behind string

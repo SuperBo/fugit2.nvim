@@ -61,20 +61,18 @@ end
 ---@return string status_icon Status icon
 local function tree_node_colors(worktree_status, index_status, modified)
   local text_color, icon_color = "Fugit2Modifier", "Fugit2Modifier"
-  local status_icon = "  "
+  local status_icon = utils.get_git_status_icon(worktree_status, "  ")
 
   if worktree_status == git2.GIT_DELTA.CONFLICTED then
     text_color = "Fugit2Untracked"
     icon_color = "Fugit2Untracked"
-    status_icon = " "
   elseif worktree_status == git2.GIT_DELTA.UNTRACKED then
     text_color = "Fugit2Untracked"
     icon_color = "Fugit2Untracked"
-    status_icon = " "
   elseif worktree_status == git2.GIT_DELTA.IGNORED or index_status == git2.GIT_DELTA.IGNORED then
     text_color = "Fugit2Ignored"
     icon_color = "Fugit2Ignored"
-    status_icon = " "
+    status_icon = utils.get_git_status_icon(git2.GIT_DELTA.IGNORED, "  ")
   elseif index_status == git2.GIT_DELTA.UNMODIFIED then
     text_color = "Fugit2Unchanged"
     icon_color = "Fugit2Unstaged"
@@ -82,11 +80,10 @@ local function tree_node_colors(worktree_status, index_status, modified)
   elseif worktree_status == git2.GIT_DELTA.MODIFIED then
     text_color = "Fugit2Modified"
     icon_color = "Fugit2Staged"
-    status_icon = "󰱒 "
   else
     text_color = "Fugit2Staged"
     icon_color = "Fugit2Staged"
-    status_icon = "󰱒 "
+    status_icon = utils.get_git_status_icon(index_status, "󰱒 ")
   end
 
   if modified then
