@@ -82,6 +82,9 @@ local function status_tree_prepare_node(node)
     local text_width = left_align + strings.strdisplaywidth(text)
     local text_color = node.color
 
+    local insertions = node.insertions and string.format("+%d", node.insertions)
+    local deletions = node.deletions and string.format("-%d", node.deletions)
+
     if text_width > FILE_ENTRY_WIDTH then
       align = math.ceil(text_width / FILE_ENTRY_WIDTH) * FILE_ENTRY_WIDTH - 1
     end
@@ -89,8 +92,8 @@ local function status_tree_prepare_node(node)
     align = (
       align
       - (node.modified and 3 or 0)
-      - (node.insertions and node.insertions:len() + 1 or 0)
-      - (node.deletions and node.deletions:len() + 1 or 0)
+      - (insertions and insertions:len() or 0)
+      - (deletions and deletions:len() or 0)
     )
 
     if node.modified then
@@ -103,12 +106,11 @@ local function status_tree_prepare_node(node)
       line:append("[+]", text_color)
     end
 
-    if node.insertions then
-      line:append("+" .. node.insertions, "Fugit2Insertions")
+    if insertions then
+      line:append(insertions, "Fugit2Insertions")
     end
-
-    if node.deletions then
-      line:append("-" .. node.deletions, "Fugit2Deletions")
+    if deletions then
+      line:append(deletions, "Fugit2Deletions")
     end
 
     line:append(" " .. node.status_icon, node.icon_color)
@@ -267,8 +269,8 @@ function SourceTree:update(status, diff_head_to_index)
         local stats = stats_head_to_index[item.path]
         local insertions, deletions
         if stats then
-          insertions = stats.insertions > 0 and tostring(stats.insertions)
-          deletions = stats.deletions > 0 and tostring(stats.deletions)
+          insertions = stats.insertions
+          deletions = stats.deletions
         end
         git_staged[#git_staged + 1] = NuiTree.Node {
           id = "staged-" .. item.path,

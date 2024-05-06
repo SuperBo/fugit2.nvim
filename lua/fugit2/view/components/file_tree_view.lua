@@ -123,8 +123,8 @@ local function tree_node_data_from_item(item, bufs, stats_head_to_index)
   if item.index_status ~= git2.GIT_DELTA.UNMODIFIED and item.index_status ~= git2.GIT_DELTA.UNTRACKED then
     local stats = stats_head_to_index[item.path]
     if stats then
-      insertions = tostring(stats.insertions)
-      deletions = tostring(stats.deletions)
+      insertions = stats.insertions
+      deletions = stats.deletions
     end
   end
 
@@ -171,15 +171,15 @@ local function create_tree_prepare_node_fn(states)
       line:append(node:is_expanded() and "  " or "  ", "Fugit2SymbolicRef")
       line:append(node.text, "Fugit2SymbolicRef")
     else
-      -- local format_str = "%s %-" .. (states.padding - node:get_depth() * 2) .. "s"
-      -- line:append(string.format(format_str, node.icon, node.text), node.color)
+      local insertions = node.insertions and string.format(" +%d", node.insertions)
+      local deletions = node.deletions and string.format(" -%d", node.deletions)
 
       local left_align = (
         states.padding
         - node:get_depth() * 2
         - (node.modified and 4 or 0)
-        - (node.insertions and node.insertions:len() + 2 or 0)
-        - (node.deletions and node.deletions:len() + 2 or 0)
+        - (insertions and insertions:len() or 0)
+        - (deletions and deletions:len() or 0)
       )
       line:append(strings.align_str(node.icon .. " " .. node.text, left_align), node.color)
 
@@ -187,11 +187,11 @@ local function create_tree_prepare_node_fn(states)
         line:append(" [+]", node.color)
       end
 
-      if node.insertions then
-        line:append(" +" .. node.insertions, "Fugit2Insertions")
+      if insertions then
+        line:append(insertions, "Fugit2Insertions")
       end
-      if node.deletions then
-        line:append(" -" .. node.deletions, "Fugit2Deletions")
+      if deletions then
+        line:append(deletions, "Fugit2Deletions")
       end
 
       line:append(" " .. node.stage_icon .. " " .. node.wstatus .. node.istatus, node.stage_color)
@@ -477,8 +477,8 @@ function GitStatusTree:update_single_node(repo, node)
     if diff then
       local stats = diff:stats()
       if stats and stats.changed == 1 then
-        node.insertions = tostring(stats.insertions)
-        node.deletions = tostring(stats.deletions)
+        node.insertions = stats.insertions
+        node.deletions = stats.deletions
       end
     end
   else
