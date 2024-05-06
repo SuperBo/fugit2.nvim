@@ -11,7 +11,7 @@ local LogView = require "fugit2.view.components.commit_log_view"
 local StatusTreeView = require "fugit2.view.components.file_tree_view"
 
 local git2 = require "fugit2.git2"
-local utils = require "fugit2.utils"
+local notifier = require "fugit2.notifier"
 
 -- ===========
 -- | Classes |
@@ -398,7 +398,7 @@ function RebaseView:setup_handlers()
     end, opts)
   else
     commit_view:map("n", "b", function()
-      vim.notify("[Fugit2] Inmemory rebase doens't not support BREAK!", vim.log.levels.WARN)
+      notifier.warn("Inmemory rebase doens't not support BREAK!")
     end, opts)
   end
 
@@ -409,7 +409,7 @@ function RebaseView:setup_handlers()
     end, opts)
   else
     commit_view:map("n", "e", function()
-      vim.notify("[Fugit2] Inmemory rebase doens't not support EDIT!", vim.log.levels.WARN)
+      notifier.warn("Inmemory rebase doens't not support EDIT!")
     end, opts)
   end
 

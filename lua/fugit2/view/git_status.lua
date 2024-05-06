@@ -21,6 +21,7 @@ local UI = require "fugit2.view.components.menus"
 local git2 = require "fugit2.git2"
 local gpgme = require "fugit2.gpgme"
 local utils = require "fugit2.utils"
+local notifier = require "fugit2.notifier"
 
 -- ===================
 -- | Libgit2 options |
@@ -606,7 +607,7 @@ function GitStatus:_init_patch_views()
   local diff_apply_fn = function(diff_str, is_index)
     local diff, err = git2.Diff.from_buffer(diff_str)
     if not diff then
-      vim.notify("[Fugit2] Failed to construct git2 diff, code " .. err, vim.log.levels.ERROR)
+      notifier.error("Failed to construct git2 diff", err)
       return -1
     end
 
@@ -616,7 +617,7 @@ function GitStatus:_init_patch_views()
       err = self.repo:apply_workdir(diff)
     end
     if err ~= 0 then
-      vim.notify("[Fugit2] Failed to apply partial diff, code " .. err, vim.log.levels.ERROR)
+      notifier.error("Failed to apply partial diff", err)
       return err
     end
     return 0
@@ -654,7 +655,7 @@ function GitStatus:_init_patch_views()
   patch_unstaged:map("n", { "-", "s" }, function()
     local diff_str = patch_unstaged:get_diff_hunk()
     if not diff_str then
-      vim.notify("[Fugit2] Failed to get hunk", vim.log.levels.ERROR)
+      notifier.error("Failed to get hunk")
       return
     end
 
@@ -670,7 +671,7 @@ function GitStatus:_init_patch_views()
   self._prompts.discard_hunk_confirm:on_yes(function()
     local diff_str = patch_unstaged:get_diff_hunk_reversed()
     if not diff_str then
-      vim.notify("[Fugit2] Failed to get hunk", vim.log.levels.ERROR)
+      notifier.error("Failed to get hunk")
       return
     end
 
@@ -701,7 +702,7 @@ function GitStatus:_init_patch_views()
     else
       local diff_str = patch_staged:get_diff_hunk_reversed()
       if not diff_str then
-        vim.notify("[Fugit2] Failed to get revere hunk", vim.log.levels.ERROR)
+        notifier.error("Failed to get revere hunk")
         return
       end
       err = diff_apply_fn(diff_str, true)
@@ -790,7 +791,7 @@ function GitStatus:read_config()
 
   local config, err = self.repo:config()
   if not config then
-    vim.notify("[Fugit2] Failed to read config, err", err)
+    notifier.error("Failed to read config", err)
     return nil
   end
 
@@ -1230,18 +1231,18 @@ end
 ---@return string? prettified
 local function check_signature_message(signature, message)
   if not signature then
-    vim.notify("No default author", vim.log.levels.ERROR)
+    notifier.error("No default author")
     return nil
   end
 
   if message == "" then
-    vim.notify("Empty commit message", vim.log.levels.ERROR)
+    notifier.error("Empty commit message")
     return nil
   end
 
   local prettified, err = git2.message_prettify(message)
   if err ~= 0 then
-    vim.notify("Failed to clean message", vim.log.levels.ERROR)
+    notifier.error("Failed to clean message")
     return nil
   end
 
@@ -1351,17 +1352,16 @@ function GitStatus:_git_create_commit(message, args)
     -- callback func, called when finished
     async_utils.scheduler(function()
       if result.commit_id then
-        vim.notify(
-          string.format("[Fugit2] New %scommit %s", gpg_sign and "signed " or "", result.commit_id:tostring(8)),
-          vim.log.levels.INFO
-        )
+        notifier.info(string.format(
+          "[Fugit2] New %scommit %s",
+          gpg_sign and "signed " or "", result.commit_id:tostring(8)
+        ))
         self:hide_input(true)
         self:update()
         self:render()
       else
-        vim.notify(
-          string.format("[Fugit2] %s, code: %d", result.message or "Failed creating commit", result.err or 0),
-          vim.log.levels.ERROR
+        notifier.error(
+          result.message or "Failed creating commit", result.err or 0
         )
       end
     end)
@@ -1374,11 +1374,11 @@ function GitStatus:_git_extend_commit()
   self:write_index()
   local commit_id, err = self.repo:amend_extend(self.index)
   if commit_id then
-    vim.notify("[Fugit2] Extend HEAD " .. commit_id:tostring(8), vim.log.levels.INFO)
+    notifier.info("Extend HEAD " .. commit_id:tostring(8))
     self:update()
     self:render()
   else
-    vim.notify("Failed to extend HEAD, code: " .. err, vim.log.levels.ERROR)
+    notifier.error("Failed to extend HEAD", err)
   end
 end
 
@@ -1391,12 +1391,12 @@ function GitStatus:_git_reword_commit(message)
   if self._git.signature and prettified then
     local commit_id, err = self.repo:amend_reword(self._git.signature, prettified)
     if commit_id then
-      vim.notify("Reword HEAD " .. commit_id:tostring(8), vim.log.levels.INFO)
+      notifier.info("Reword HEAD " .. commit_id:tostring(8))
       self:hide_input(false)
       self:update()
       self:render()
     else
-      vim.notify("Failed to reword HEAD, code: " .. err, vim.log.levels.ERROR)
+      notifier.error("Failed to reword HEAD", err)
     end
   end
 end
@@ -1410,12 +1410,12 @@ function GitStatus:_git_amend_commit(message)
     self:write_index()
     local commit_id, err = self.repo:amend(self.index, self._git.signature, prettified)
     if commit_id then
-      vim.notify("Amend HEAD " .. commit_id:tostring(8), vim.log.levels.INFO)
+      notifier.info("Amend HEAD " .. commit_id:tostring(8))
       self:hide_input(true)
       self:update()
       self:render()
     else
-      vim.notify("Failed to amend commit, code: " .. err, vim.log.levels.ERROR)
+      notifier.error("Failed to amend commit", err)
     end
   end
 end
@@ -1436,7 +1436,7 @@ function GitStatus:_set_input_popup_commit_title(init_str, include_changes, noti
       end
     end
     if notify_empty and file_changed + insertions + deletions < 1 then
-      vim.notify("[Fugit2] Empty commit!", vim.log.levels.WARN)
+      notifier.warn("Empty commit!")
     end
   end
 
@@ -1550,12 +1550,12 @@ function GitStatus:update_patch(node)
     if node.wstatus ~= "-" and not found then
       diff, err = self.repo:diff_index_to_workdir(self.index, paths)
       if not diff then
-        vim.notify("Failed to get unstaged diff " .. err, vim.log.levels.ERROR)
+        notifier.error("Failed to get unstaged diff", err)
         goto git_status_update_patch_index
       end
       patches, err = diff:patches(false)
       if #patches == 0 then
-        vim.notify("Failed to get unstage patch " .. err, vim.log.levels.ERROR)
+        notifier.error("Failed to get unstage patch", err)
         goto git_status_update_patch_index
       end
       self._git.unstaged_diff[node.id] = patches[1]
@@ -1572,12 +1572,12 @@ function GitStatus:update_patch(node)
     if node.istatus ~= "-" and node.istatus ~= "?" and not found then
       diff, err = self.repo:diff_head_to_index(self.index, paths)
       if not diff then
-        vim.notify("Failed to get unstaged diff " .. err, vim.log.levels.ERROR)
+        notifier.error("Failed to get unstaged diff", err)
         goto git_status_update_patch_end
       end
       patches, err = diff:patches(false)
       if #patches == 0 then
-        vim.notify("Failed to get unstage patch " .. err, vim.log.levels.ERROR)
+        notifier.error("Failed to get unstage patch", err)
         goto git_status_update_patch_end
       end
       self._git.staged_diff[node.id] = patches[1]
@@ -1707,7 +1707,7 @@ function GitStatus:_init_branch_menu()
         self:unmount()
         vim.cmd { cmd = "FzfLua", args = { "git_branches" } }
       else
-        vim.notify "[Fugit2] No Telescope or FzfLua found!"
+        notifier.error("No Telescope or FzfLua found!")
       end
     end
   end)
@@ -1900,7 +1900,7 @@ function GitStatus:run_command(cmd, args, refresh)
   local queue = self._states.command_queue
 
   if #queue > COMMAND_QUEUE_MAX then
-    vim.notify("[Fugit2] Command queue is full!", vim.log.levels.ERROR)
+    notifier.error("Command queue is full!")
     return
   end
 
@@ -1916,7 +1916,7 @@ function GitStatus:run_command(cmd, args, refresh)
     error "[Fugit2] Can't create timer"
   end
 
-  vim.notify(string.format("[Fugit2] Enqueued command %s %s", cmd, args[1] or ""))
+  notifier.info(string.format("Enqueued command %s %s", cmd, args[1] or ""))
 
   local tick = 0
   timer:start(0, 250, function()
@@ -1992,7 +1992,7 @@ function GitStatus:_run_single_command(cmd, args, refresh)
       end
 
       if ret == 0 then
-        vim.notify(string.format("[Fugit2] Command %s %s SUCCESS", cmd, args[1] or ""), vim.log.levels.INFO)
+        notifier.info(string.format("Command %s %s SUCCESS", cmd, args[1] or ""))
         self:quit_command()
         if refresh then
           self:update()
@@ -2000,13 +2000,13 @@ function GitStatus:_run_single_command(cmd, args, refresh)
         end
       elseif ret == -3 then
         vim.api.nvim_buf_set_lines(bufnr, linenr, -1, true, { "CANCELLED" })
-        vim.notify(string.format("[Fugit2] Command %s %s CANCELLED!", cmd, args[1] or ""), vim.log.levels.ERROR)
+        notifier.error(string.format("Command %s %s CANCELLED!", cmd, args[1] or ""))
       elseif ret == -5 then
         vim.api.nvim_buf_set_lines(bufnr, linenr, -1, true, { "TIMEOUT" })
-        vim.notify(string.format("[Fugit2] Command %s %s TIMEOUT!", cmd, args[1] or ""), vim.log.levels.ERROR)
+        notifier.error(string.format("Command %s %s TIMEOUT!", cmd, args[1] or ""))
       else
         vim.api.nvim_buf_set_lines(bufnr, linenr, -1, true, { "FAILED " .. ret })
-        vim.notify(string.format("[Fugit2] Command %s %s FAILED!", cmd, args[1] or ""), vim.log.levels.ERROR)
+        notifier.error(string.format("Command %s %s FAILED!", cmd, args[1] or ""))
       end
     end),
     on_stdout = function(_, data)
@@ -2318,7 +2318,7 @@ function GitStatus:setup_handlers()
   ---- Write index
   file_tree:map("n", "w", function()
     if self.index:write() == 0 then
-      vim.notify("[Fugit2] Index saved", vim.log.levels.INFO)
+      notifier.info("Index saved")
     end
   end, map_options)
 
