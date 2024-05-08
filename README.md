@@ -127,13 +127,26 @@ Set libgit2_path value in config options like this, change corresponding version
 brew install libgit2
 ```
 
-Set libgit2_path value in config options like this if normal load doesn't work
+Set libgit2_path value in config options like this if you have problem loading libgit2 library with default settings.
+
+Mac Arm M1/M2/M3
 
 ```lua
 {
   'SuperBo/fugit2.nvim',
   opts = {
     libgit2_path = '/opt/homebrew/lib/libgit2.dylib',
+  },
+}
+```
+
+Mac Intel
+
+```lua
+{
+  'SuperBo/fugit2.nvim',
+  opts = {
+    libgit2_path = '/usr/local/opt/libgit2/lib/libgit2.dylib',
   },
 }
 ```
