@@ -20,5 +20,8 @@ vim.opt.rtp:append "."
 vim.opt.rtp:append(plenary_dir)
 vim.opt.rtp:append(nui_dir)
 
+local libgit2 = require "fugit2.libgit2"
+libgit2.load_library("libgit2")
+
 vim.cmd "runtime plugin/plenary.vim"
 require "plenary.busted"

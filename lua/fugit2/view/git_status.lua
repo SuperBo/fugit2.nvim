@@ -6,22 +6,22 @@ local NuiLayout = require "nui.layout"
 local NuiLine = require "nui.line"
 local NuiPopup = require "nui.popup"
 local NuiText = require "nui.text"
-local Object = require "nui.object"
 local Path = require "plenary.path"
 local PlenaryJob = require "plenary.job"
 local async = require "plenary.async"
 local async_utils = require "plenary.async.util"
 local event = require("nui.utils.autocmd").event
-local iterators = require "plenary.iterators"
 
+local GitStatusDiffBase = require "fugit2.view.git_base_view"
 local GitStatusTree = require "fugit2.view.components.file_tree_view"
 local LogView = require "fugit2.view.components.commit_log_view"
 local PatchView = require "fugit2.view.components.patch_view"
+local TreeBase = require "fugit2.view.components.base_tree_view"
 local UI = require "fugit2.view.components.menus"
 local git2 = require "fugit2.git2"
 local gpgme = require "fugit2.gpgme"
-local utils = require "fugit2.utils"
 local notifier = require "fugit2.notifier"
+local utils = require "fugit2.utils"
 
 -- ===================
 -- | Libgit2 options |
@@ -87,12 +87,8 @@ local SidePanel = {
   PATCH_VIEW = 1,
 }
 
----@class Fugit2GitStatusView
----@field info_popup NuiPopup
----@field input_popup NuiPopup
----@field repo GitRepository
----@field closed boolean
-local GitStatus = Object "Fugit2GitStatusView"
+---@class Fugit2GitStatusView: Fugit2GitStatusDiffBase
+local GitStatus = GitStatusDiffBase:extend "Fugit2GitStatusView"
 
 ---Inits GitStatus.
 ---@param ns_id integer
@@ -101,10 +97,7 @@ local GitStatus = Object "Fugit2GitStatusView"
 ---@param current_file string
 ---@param opts Fugit2Config
 function GitStatus:init(ns_id, repo, last_window, current_file, opts)
-  self.ns_id = -1
-  if ns_id then
-    self.ns_id = ns_id
-  end
+  GitStatusDiffBase.init(self, ns_id, repo)
 
   self.opts = opts
 
@@ -125,7 +118,7 @@ function GitStatus:init(ns_id, repo, last_window, current_file, opts)
   ---@field signature GitSignature?
   ---@field walker GitRevisionWalker?
   ---@field config GitConfig?
-  self._git = {
+  self._git = vim.tbl_extend("force", self._git, {
     head = nil,
     ahead = 0,
     behind = 0,
@@ -133,29 +126,20 @@ function GitStatus:init(ns_id, repo, last_window, current_file, opts)
     unstaged_diff = {},
     staged_diff = {},
     config = nil,
-  }
+  })
 
-  if repo ~= nil then
-    self.repo = repo
-    local index, sig, walker, err
+  if self.repo ~= nil then
+    local sig, walker
 
-    index, err = repo:index()
-    if index == nil then
-      error("[Fugit2] libgit2 Error " .. err)
-    end
-    self.index = index
-
-    sig, err = repo:signature_default()
+    sig, _ = self.repo:signature_default()
     if sig then
       self._git.signature = sig
     end
 
-    walker, err = repo:walker()
+    walker, _ = self.repo:walker()
     if walker then
       self._git.walker = walker
     end
-
-    self._git.path = vim.fn.fnamemodify(repo:repo_path(), ":p:h:h")
   else
     error "[Fugit2] Null repo"
   end
@@ -655,7 +639,7 @@ function GitStatus:_init_patch_views()
   patch_unstaged:map("n", { "-", "s" }, function()
     local diff_str = patch_unstaged:get_diff_hunk()
     if not diff_str then
-      notifier.error("Failed to get hunk")
+      notifier.error "Failed to get hunk"
       return
     end
 
@@ -671,7 +655,7 @@ function GitStatus:_init_patch_views()
   self._prompts.discard_hunk_confirm:on_yes(function()
     local diff_str = patch_unstaged:get_diff_hunk_reversed()
     if not diff_str then
-      notifier.error("Failed to get hunk")
+      notifier.error "Failed to get hunk"
       return
     end
 
@@ -702,7 +686,7 @@ function GitStatus:_init_patch_views()
     else
       local diff_str = patch_staged:get_diff_hunk_reversed()
       if not diff_str then
-        notifier.error("Failed to get revere hunk")
+        notifier.error "Failed to get revere hunk"
         return
       end
       err = diff_apply_fn(diff_str, true)
@@ -800,6 +784,7 @@ function GitStatus:read_config()
 end
 
 -- Updates git status.
+---@overload fun()
 function GitStatus:update()
   utils.list_clear(self._status_lines)
   -- clean cached menus
@@ -1028,6 +1013,7 @@ function GitStatus:update()
 end
 
 -- Renders git status
+---@overload fun()
 function GitStatus:render()
   vim.api.nvim_buf_set_option(self.info_popup.bufnr, "modifiable", true)
   vim.api.nvim_buf_set_option(self.info_popup.bufnr, "readonly", false)
@@ -1090,92 +1076,29 @@ function GitStatus:write_index()
   end
 end
 
----Add/reset file entries handler.
----@param is_visual_mode boolean whether this handler is called in visual mode.
----@param add boolean ennable add to index
----@param reset boolean enable reset from index
----@param discard boolean enable discard changes
----@return fun()
-function GitStatus:index_add_reset_handler(is_visual_mode, add, reset, discard)
+---@param node NuiTree.Node
+---@overload fun(node: NuiTree.Node)
+function GitStatus:_remove_cached_states(node)
+  -- remove cached diff
+  self._git.staged_diff[node.id] = nil
+  self._git.unstaged_diff[node.id] = nil
+end
+
+---@overload fun()
+function GitStatus:_refresh_views()
   local tree = self._views.files
-  local git = self._git
   local states = self._states
 
-  return function()
-    local nodes
-
-    if not is_visual_mode then
-      local node, _ = tree.tree:get_node()
-      nodes = iterators.iter { node }
-    else
-      local cursor_start = vim.fn.getpos("v")[2]
-      local cursor_end = vim.fn.getpos(".")[2]
-      if cursor_end < cursor_start then
-        cursor_start, cursor_end = cursor_end, cursor_start
-      end
-
-      nodes = iterators.range(cursor_start, cursor_end, 1):map(function(linenr)
-        local node = tree.tree:get_node(linenr)
-        return node
-      end)
-
-      vim.api.nvim_feedkeys(utils.KEY_ESC, "n", false)
-    end
-
-    nodes = nodes:filter(function(node)
-      return not node:has_children()
-    end)
-
-    local results = nodes
-      :map(function(node)
-        local is_updated, is_refresh
-        if discard then
-          is_updated, is_refresh = tree:index_checkout(self.repo, self.index, node)
-        else
-          is_updated, is_refresh = tree:index_add_reset(self.repo, self.index, add, reset, node)
-        end
-
-        if is_updated then
-          -- remove cached diff
-          git.staged_diff[node.id] = nil
-          git.unstaged_diff[node.id] = nil
-        end
-
-        return { is_updated, is_refresh }
-      end)
-      :tolist()
-
-    local updated = utils.list_any(function(r)
-      return r[1]
-    end, results)
-    local refresh = utils.list_any(function(r)
-      return r[2]
-    end, results)
-
-    if not updated then
-      return
-    end
-
-    if refresh then
-      self:update()
-      self:render()
-    else
-      tree:render()
-    end
-
-    git.index_updated = true
-
-    -- old node at current cursor maybe deleted
-    local node, linenr = tree.tree:get_node()
-    if node and linenr then
-      if states.side_panel == SidePanel.NONE then
-        states.last_patch_line = -1 -- remove cache behaviors
-      elseif states.side_panel == SidePanel.PATCH_VIEW then
-        states.patch_unstaged_shown, states.patch_staged_shown = self:update_patch(node)
-        if states.patch_unstaged_shown or states.patch_staged_shown then
-          self:show_patch_view(states.patch_unstaged_shown, states.patch_staged_shown)
-          states.last_patch_line = linenr
-        end
+  -- old node at current cursor maybe deleted after stage/unstage
+  local node, linenr = tree.tree:get_node()
+  if node and linenr then
+    if states.side_panel == SidePanel.NONE then
+      states.last_patch_line = -1 -- remove cache behaviors
+    elseif states.side_panel == SidePanel.PATCH_VIEW then
+      states.patch_unstaged_shown, states.patch_staged_shown = self:update_patch(node)
+      if states.patch_unstaged_shown or states.patch_staged_shown then
+        self:show_patch_view(states.patch_unstaged_shown, states.patch_staged_shown)
+        states.last_patch_line = linenr
       end
     end
   end
@@ -1231,18 +1154,18 @@ end
 ---@return string? prettified
 local function check_signature_message(signature, message)
   if not signature then
-    notifier.error("No default author")
+    notifier.error "No default author"
     return nil
   end
 
   if message == "" then
-    notifier.error("Empty commit message")
+    notifier.error "Empty commit message"
     return nil
   end
 
   local prettified, err = git2.message_prettify(message)
   if err ~= 0 then
-    notifier.error("Failed to clean message")
+    notifier.error "Failed to clean message"
     return nil
   end
 
@@ -1352,17 +1275,14 @@ function GitStatus:_git_create_commit(message, args)
     -- callback func, called when finished
     async_utils.scheduler(function()
       if result.commit_id then
-        notifier.info(string.format(
-          "[Fugit2] New %scommit %s",
-          gpg_sign and "signed " or "", result.commit_id:tostring(8)
-        ))
+        notifier.info(
+          string.format("[Fugit2] New %scommit %s", gpg_sign and "signed " or "", result.commit_id:tostring(8))
+        )
         self:hide_input(true)
         self:update()
         self:render()
       else
-        notifier.error(
-          result.message or "Failed creating commit", result.err or 0
-        )
+        notifier.error(result.message or "Failed creating commit", result.err or 0)
       end
     end)
   )
@@ -1436,7 +1356,7 @@ function GitStatus:_set_input_popup_commit_title(init_str, include_changes, noti
       end
     end
     if notify_empty and file_changed + insertions + deletions < 1 then
-      notifier.warn("Empty commit!")
+      notifier.warn "Empty commit!"
     end
   end
 
@@ -1707,7 +1627,7 @@ function GitStatus:_init_branch_menu()
         self:unmount()
         vim.cmd { cmd = "FzfLua", args = { "git_branches" } }
       else
-        notifier.error("No Telescope or FzfLua found!")
+        notifier.error "No Telescope or FzfLua found!"
       end
     end
   end)
@@ -1900,7 +1820,7 @@ function GitStatus:run_command(cmd, args, refresh)
   local queue = self._states.command_queue
 
   if #queue > COMMAND_QUEUE_MAX then
-    notifier.error("Command queue is full!")
+    notifier.error "Command queue is full!"
     return
   end
 
@@ -2286,29 +2206,39 @@ function GitStatus:setup_handlers()
   end, map_options)
 
   --- Space/[-]: Add or remove index
-  file_tree:map("n", { "-", "<space>" }, self:index_add_reset_handler(false, true, true, false), map_options)
+  file_tree:map(
+    "n",
+    { "-", "<space>" },
+    self:_index_add_reset_handler(false, TreeBase.IndexAction.ADD_RESET),
+    map_options
+  )
 
   --- [s]: stage file
-  file_tree:map("n", "s", self:index_add_reset_handler(false, true, false, false), map_options)
+  file_tree:map("n", "s", self:_index_add_reset_handler(false, TreeBase.IndexAction.ADD), map_options)
 
   --- [u]: unstage file
-  file_tree:map("n", "u", self:index_add_reset_handler(false, false, true, false), map_options)
+  file_tree:map("n", "u", self:_index_add_reset_handler(false, TreeBase.IndexAction.RESET), map_options)
 
   --- [D]/[x]: discard file changes
   -- file_tree:map("n", {"D", "x"}, self:index_add_reset_handler(false, false, false, true), map_options)
-  self._prompts.discard_confirm:on_yes(self:index_add_reset_handler(true, false, false, true))
+  self._prompts.discard_confirm:on_yes(self:_index_add_reset_handler(true, TreeBase.IndexAction.DISCARD))
   file_tree:map("n", { "D", "x" }, function()
     self._prompts.discard_confirm:show()
   end, map_options)
 
   --- Visual Space/[-]: Add remove for range
-  file_tree:map("v", { "-", "<space>" }, self:index_add_reset_handler(true, true, true, false), map_options)
+  file_tree:map(
+    "v",
+    { "-", "<space>" },
+    self:_index_add_reset_handler(true, TreeBase.IndexAction.ADD_RESET),
+    map_options
+  )
 
   --- Visual [s]: stage files in range
-  file_tree:map("v", "s", self:index_add_reset_handler(true, true, false, false), map_options)
+  file_tree:map("v", "s", self:_index_add_reset_handler(true, TreeBase.IndexAction.ADD), map_options)
 
   --- Visual [u]: unstage files in range
-  file_tree:map("v", "u", self:index_add_reset_handler(true, false, true, false), map_options)
+  file_tree:map("v", "u", self:_index_add_reset_handler(true, TreeBase.IndexAction.RESET), map_options)
 
   --- Visual [x][d]: discard files in range
   file_tree:map("v", { "x", "d" }, function()
@@ -2318,7 +2248,7 @@ function GitStatus:setup_handlers()
   ---- Write index
   file_tree:map("n", "w", function()
     if self.index:write() == 0 then
-      notifier.info("Index saved")
+      notifier.info "Index saved"
     end
   end, map_options)
 

@@ -10,9 +10,10 @@ local WebDevIcons = require "nvim-web-devicons"
 local plenary_filetype = require "plenary.filetype"
 local strings = require "plenary.strings"
 
+local TreeBase = require "fugit2.view.components.base_tree_view"
 local git2 = require "fugit2.git2"
-local utils = require "fugit2.utils"
 local notifier = require "fugit2.notifier"
+local utils = require "fugit2.utils"
 
 -- =================
 -- |  Status tree  |
@@ -332,20 +333,28 @@ function GitStatusTree:update(status, git_path, diff_head_to_index)
   self.tree:set_nodes(tree_construct_nodes(dir_tree, ""))
 end
 
--- Adds, stage unstage a node from index.
+-- Returns git path from a NuiTree.Node
+---@param node NuiTree.Node
+function GitStatusTree:_get_git_path(node)
+  return node.id
+end
+
+-- Adds, stage unstage or checkout a node from index.
 ---@param repo GitRepository
 ---@param index GitIndex
----@param add boolean enable add to index
----@param reset boolean enable reset from index
+---@param action Fugit2IndexAction
 ---@param node NuiTree.Node
 ---@return boolean updated Tree is updated or not.
 ---@return boolean refresh Whether needed to do full refresh.
-function GitStatusTree:index_add_reset(repo, index, add, reset, node)
+function GitStatusTree:index_add_reset_discard(repo, index, node, action)
   local err
   local updated = false
   local inplace = true -- whether can update status inplace
 
-  if add and node.alt_path and (node.wstatus == "R" or node.wstatus == "M") then
+  local add = bit.band(action, TreeBase.IndexAction.ADD)
+  local reset = bit.band(action, TreeBase.IndexAction.RESET)
+
+  if add ~= 0 and node.alt_path and (node.wstatus == "R" or node.wstatus == "M") then
     -- rename
     err = index:add_bypath(node.alt_path)
     if err ~= 0 then
@@ -361,7 +370,7 @@ function GitStatusTree:index_add_reset(repo, index, add, reset, node)
 
     updated = true
     inplace = false -- requires full refresh
-  elseif add and (node.wstatus == "?" or node.wstatus == "T" or node.wstatus == "M" or node.conflicted) then
+  elseif add ~= 0 and (node.wstatus == "?" or node.wstatus == "T" or node.wstatus == "M" or node.conflicted) then
     -- add to index if worktree status is in (UNTRACKED, MODIFIED, TYPECHANGE)
     err = index:add_bypath(node.id)
     if err ~= 0 then
@@ -370,7 +379,7 @@ function GitStatusTree:index_add_reset(repo, index, add, reset, node)
     end
 
     updated = true
-  elseif add and node.wstatus == "D" then
+  elseif add ~= 0 and node.wstatus == "D" then
     -- remove from index
     err = index:remove_bypath(node.id)
     if err ~= 0 then
@@ -379,7 +388,7 @@ function GitStatusTree:index_add_reset(repo, index, add, reset, node)
     end
 
     updated = true
-  elseif reset and node.alt_path and (node.istatus == "R" or node.istatus == "M") then
+  elseif reset ~= 0 and node.alt_path and (node.istatus == "R" or node.istatus == "M") then
     -- reset both paths if rename in index
     err = repo:reset_default { node.id, node.alt_path }
     if err ~= 0 then
@@ -389,7 +398,7 @@ function GitStatusTree:index_add_reset(repo, index, add, reset, node)
 
     updated = true
     inplace = false -- requires full refresh
-  elseif reset and node.istatus ~= "-" and node.istatus ~= "?" then
+  elseif reset ~= 0 and node.istatus ~= "-" and node.istatus ~= "?" then
     -- else reset if index status is not in (UNCHANGED, UNTRACKED, RENAMED)
     err = repo:reset_default { node.id }
     if err == git2.GIT_ERROR.GIT_EUNBORNBRANCH then
@@ -401,50 +410,26 @@ function GitStatusTree:index_add_reset(repo, index, add, reset, node)
     end
 
     updated = true
+  elseif action == TreeBase.IndexAction.DISCARD and node.wstatus ~= "-" then
+    err = repo:checkout_index(index, git2.GIT_CHECKOUT.FORCE, { node.id })
+    if err ~= 0 then
+      notifier.error("Git error when checkout from head", err)
+      return false, false
+    end
+
+    updated = true
+
+    if node.loaded then
+      vim.cmd.checktime(self:_get_git_path(node))
+    end
   end
 
   -- inplace update
   if updated and inplace then
     if self:update_single_node(repo, node) ~= 0 then
-      -- require full refresh if update failed
+      -- require full refresh if inplace update failed
       inplace = false
     end
-  end
-
-  return updated, not inplace
-end
-
--- Checkouts file from head, have the same effect as discard.
----@param repo GitRepository
----@param index GitIndex
----@param node NuiTree.Node
----@return boolean updated Tree is updated or not.
----@return boolean refresh Whether needed to do full refresh.
-function GitStatusTree:index_checkout(repo, index, node)
-  local err
-  local updated = false
-  local inplace = true -- whether can update status inplace
-
-  if node.wstatus ~= "-" then
-    -- err = repo:checkout_head({node.id})
-    err = repo:checkout_index(index, git2.GIT_CHECKOUT.FORCE, { node.id })
-    if err ~= 0 then
-      error("Git Error when checkout head: " .. err)
-    end
-    updated = true
-  end
-
-  -- inplace update
-  if updated then
-    if self:update_single_node(repo, node) ~= 0 then
-      -- require full refresh if update failed
-      inplace = false
-    end
-  end
-
-  -- update file buffer
-  if node.loaded then
-    vim.cmd.checktime(node.id)
   end
 
   return updated, not inplace
@@ -505,7 +490,7 @@ end
 
 ---@param width integer
 function GitStatusTree:set_width(width)
-  self.states.padding = width - 13
+  self.states.padding = width - 10
 end
 
 function GitStatusTree:render()

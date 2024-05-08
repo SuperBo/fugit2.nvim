@@ -4,12 +4,14 @@ local uv = vim.loop
 
 local NuiLine = require "nui.line"
 local NuiText = require "nui.text"
-local Object = require "nui.object"
 local Path = require "plenary.path"
 local plenary_filetype = require "plenary.filetype"
 local event = require("nui.utils.autocmd").event
 
+local GitStatus = require "fugit2.view.git_status"
+local GitStatusDiffBase = require "fugit2.view.git_base_view"
 local SourceTree = require "fugit2.view.components.source_tree_view"
+local TreeBase = require "fugit2.view.components.base_tree_view"
 local UI = require "fugit2.view.components.menus"
 local git2 = require "fugit2.git2"
 local notifier = require "fugit2.notifier"
@@ -24,13 +26,10 @@ local Pane = {
   THREE = 3, -- Pane in three way compare
 }
 
----@class Fugit2GitDiffView
----@field repo GitRepository
----@field index GitIndex
+---@class Fugit2GitDiffView: Fugit2GitStatusDiffBase
 ---@field head GitCommit?
----@field ns_id integer
 ---@field tabpage integer
-local GitDiff = Object "Fugit2GitDiffView"
+local GitDiff = GitStatusDiffBase:extend "Fugit2GitDiffView"
 
 ---Initializes GitDiffView
 ---@param ns_id integer Namespace id
@@ -38,22 +37,11 @@ local GitDiff = Object "Fugit2GitDiffView"
 ---@param index GitIndex?
 ---@param head_commit GitCommit?
 function GitDiff:init(ns_id, repo, index, head_commit)
-  self.ns_id = ns_id
-  self.repo = repo
-
-  if index then
-    self.index = index
-  else
-    local _index, err = repo:index()
-    if not _index then
-      error("[Fugit2] Can't create index from repo " .. err)
-    end
-    self.index = _index
-  end
+  GitStatusDiffBase.init(self, ns_id, repo, index)
 
   local _head_commit = head_commit
   if not head_commit then
-    local _commit, err = repo:head_commit()
+    local _commit, err = self.repo:head_commit()
     if not _commit and err ~= git2.GIT_ERROR.GIT_EUNBORNBRANCH then
       error("[Fugit2] Can't retrieve repo head " .. err)
     end
@@ -65,11 +53,11 @@ function GitDiff:init(ns_id, repo, index, head_commit)
   self._windows = {}
 
   -- git info
-  self._git = {
-    path = vim.fn.fnamemodify(repo:repo_path(), ":p:h:h"),
+  self._git = vim.tbl_extend("force", self._git, {
     head_name = "head::",
     head_tree = nil,
-  }
+    index_updated = false,
+  })
 
   if _head_commit then
     self._git.head_name = _head_commit:id():tostring(GIT_OID_LENGTH) .. "::"
@@ -88,7 +76,6 @@ function GitDiff:init(ns_id, repo, index, head_commit)
     -- file buffer cache
     buffers = {},
     last_line = -1,
-    index_updated = false,
     init_buffer = -1,
     active_node = nil,
   }
@@ -106,6 +93,7 @@ function GitDiff:mount()
   end
 end
 
+---@overload fun()
 function GitDiff:render()
   self._views.files:render()
 end
@@ -221,9 +209,9 @@ function GitDiff:_destroy()
   end
 
   -- write index back to disk
-  if self._states.index_updated and not self.index:in_memory() then
+  if self._git.index_updated and not self.index:in_memory() then
     self.index:write()
-    self._states.index_updated = false
+    self._git.index_updated = false
   end
 
   if vim.api.nvim_buf_is_valid(self._states.init_buffer) then
@@ -234,6 +222,7 @@ function GitDiff:_destroy()
 end
 
 -- Update info based on index
+---@overload fun()
 function GitDiff:update()
   -- Clears status
 
@@ -304,7 +293,7 @@ function GitDiff:_write_index(filepath, bufnr)
   vim.api.nvim_buf_set_option(bufnr, "modified", false)
 
   notifier.info(string.format("Saved %s to index", filepath))
-  self._states.index_updated = true
+  self._git.index_updated = true
   return true
 end
 
@@ -404,7 +393,7 @@ function GitDiff:_get_or_create_index_buffer(path, filetype)
   -- setup buffer event
   vim.api.nvim_create_autocmd({ event.BufModifiedSet }, {
     buffer = bufnr,
-    callback = function(e)
+    callback = function(_)
       self:_set_modified_path(bufnr, path)
     end,
   })
@@ -582,6 +571,46 @@ function GitDiff:_setup_diff_windows(node)
   end
 end
 
+-- Stage/unstage/discard file entries
+GitDiff._index_add_reset_discard = GitStatus._index_add_reset_discard
+
+---@param node NuiTree.Node
+---@overload fun(node: NuiTree.Node)
+function GitDiff:_remove_cached_states(node)
+  local path = node.text
+  local index_key = "index::" .. path
+  local ours_key = "our::" .. path
+  local their_key = "their::" .. path
+
+  for _, k in ipairs { index_key, ours_key, their_key } do
+    local buf = self._states.buffers[k]
+    if buf then
+      if vim.api.nvim_win_get_buf(self._windows[1]) == buf then
+        vim.api.nvim_win_set_buf(self._windows[1], self._states.init_buffer)
+      end
+      if vim.api.nvim_win_get_buf(self._windows[2]) == buf then
+        vim.api.nvim_win_set_buf(self._windows[2], self._states.init_buffer)
+      end
+
+      vim.api.nvim_buf_delete(buf, { force = true })
+      self._states.buffers[k] = nil
+    end
+  end
+end
+
+-- Updates other views after stage/unstage
+---@overload fun()
+function GitDiff:_refresh_views()
+  local node, linenr = self._views.files:get_node()
+  if not (node and linenr) then
+    return
+  end
+
+  self._states.last_line = linenr
+  self._states.active_node = node
+  self:_setup_diff_windows(node)
+end
+
 function GitDiff:_setup_handlers()
   local opts = { noremap = true, nowait = true }
   local windows = self._windows
@@ -615,6 +644,11 @@ function GitDiff:_setup_handlers()
     self._states.active_node = node
     self:_setup_diff_windows(node)
   end)
+
+  -- Stage/unstaged/discard
+  source_tree:map("n", "s", self:_index_add_reset_handler(false, TreeBase.IndexAction.ADD), opts)
+  source_tree:map("n", "u", self:_index_add_reset_handler(false, TreeBase.IndexAction.RESET), opts)
+  source_tree:map("n", { "-", "<space>" }, self:_index_add_reset_handler(false, TreeBase.IndexAction.ADD_RESET), opts)
 end
 
 return GitDiff

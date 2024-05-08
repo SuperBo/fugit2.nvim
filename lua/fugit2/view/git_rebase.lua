@@ -398,7 +398,7 @@ function RebaseView:setup_handlers()
     end, opts)
   else
     commit_view:map("n", "b", function()
-      notifier.warn("Inmemory rebase doens't not support BREAK!")
+      notifier.warn "Inmemory rebase doens't not support BREAK!"
     end, opts)
   end
 
@@ -409,7 +409,7 @@ function RebaseView:setup_handlers()
     end, opts)
   else
     commit_view:map("n", "e", function()
-      notifier.warn("Inmemory rebase doens't not support EDIT!")
+      notifier.warn "Inmemory rebase doens't not support EDIT!"
     end, opts)
   end
 
