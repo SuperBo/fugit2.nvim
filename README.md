@@ -43,16 +43,58 @@ For more information, you can refer to this https://libgit2.org/
 
 ```sh
 sudo apt-get install -y libgit2-1.1
-sudo ln -s /usr/lib/x86_64-linux-gnu/libgit2.so.1.1 /usr/local/lib/libgit2.so
-sudo ldconfig
+# sudo ln -s /usr/lib/x86_64-linux-gnu/libgit2.so.1.1 /usr/local/lib/libgit2.so
+# sudo ldconfig
+```
+
+Set libgit2_path value in config options like this
+
+```lua
+{
+  'SuperBo/fugit2.nvim',
+  opts = {
+    libgit2_path = 'libgit2.so.1.1',
+  },
+  ...
+}
 ```
 
 #### Ubuntu 23.10
 
 ```sh
 sudo apt-get install -y libgit2-1.5
-sudo ln -s /usr/lib/x86_64-linux-gnu/libgit2.so.1.5 /usr/local/lib/libgit2.so
-sudo ldconfig
+# sudo ln -s /usr/lib/x86_64-linux-gnu/libgit2.so.1.5 /usr/local/lib/libgit2.so
+# sudo ldconfig
+```
+
+Set libgit2_path value in config options like this
+
+```lua
+{
+  'SuperBo/fugit2.nvim',
+  opts = {
+    libgit2_path = 'libgit2.so.1.5',
+  },
+  ...
+}
+```
+
+#### Ubuntu 24.04
+
+```sh
+sudo apt-get install -y libgit2-1.7
+```
+
+Set libgit2_path value in config options like this
+
+```lua
+{
+  'SuperBo/fugit2.nvim',
+  opts = {
+    libgit2_path = 'libgit2.so.1.7',
+  },
+  ...
+}
 ```
 
 #### Arch Linux
@@ -61,10 +103,39 @@ sudo ldconfig
 sudo pacman -S libgit2
 ```
 
+### Fedora
+
+```sh
+yum install libgit2
+```
+
+Set libgit2_path value in config options like this, change corresponding version.
+
+```lua
+{
+  'SuperBo/fugit2.nvim',
+  opts = {
+    libgit2_path = 'libgit2.so.1.7',
+  },
+  ...
+}
+```
+
 #### Mac OS
 
 ```sh
 brew install libgit2
+```
+
+Set libgit2_path value in config options like this if normal load doesn't work
+
+```lua
+{
+  'SuperBo/fugit2.nvim',
+  opts = {
+    libgit2_path = '/opt/homebrew/lib/libgit2.dylib',
+  },
+}
 ```
 
 #### Windows
