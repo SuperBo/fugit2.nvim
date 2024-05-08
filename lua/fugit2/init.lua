@@ -1,7 +1,6 @@
 -- Fugit2 main module file
 local colors = require "fugit2.view.colors"
-local git2 = require "fugit2.git2"
-local ui = require "fugit2.view.ui"
+local libgit2 = require "fugit2.libgit2"
 
 ---@class Fugit2Config
 ---@field width integer|string main popup width
@@ -9,6 +8,7 @@ local ui = require "fugit2.view.ui"
 ---@field min_width integer
 ---@field content_width integer
 ---@field height integer|string main file popup height
+---@field libgit2_path string? path to libgit2 lib if not set via environments
 local config = {
   width = 100,
   min_width = 50,
@@ -34,6 +34,9 @@ M.setup = function(args)
 
   -- Validate
 
+  -- Load C Library
+  libgit2.load_library(M.config.libgit2_path)
+
   if M.namespace == 0 then
     M.namespace = vim.api.nvim_create_namespace "Fugit2"
     colors.set_hl(0)
@@ -51,6 +54,8 @@ local function open_repository()
   local repo = repos[cwd]
 
   if not repo then
+    local git2 = require "fugit2.git2"
+
     local err
     repo, err = git2.Repository.open(cwd, true)
     if repo then
@@ -73,6 +78,7 @@ end
 function M.git_status()
   local repo = open_repository()
   if repo then
+    local ui = require "fugit2.view.ui"
     ui.new_fugit2_status_window(M.namespace, repo, M.config):mount()
   end
 end
@@ -80,6 +86,7 @@ end
 function M.git_graph()
   local repo = open_repository()
   if repo then
+    local ui = require "fugit2.view.ui"
     ui.new_fugit2_graph_window(M.namespace, repo):mount()
   end
 end
@@ -87,6 +94,7 @@ end
 function M.git_diff()
   local repo = open_repository()
   if repo then
+    local ui = require "fugit2.view.ui"
     ui.new_fugit2_diff_view(M.namespace, repo):mount()
   end
 end

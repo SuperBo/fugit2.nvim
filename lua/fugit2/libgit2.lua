@@ -567,9 +567,12 @@ ffi.cdef [[
 
 ---@class Libgit2Module
 ---@field C ffi.namespace*
-local M = {
-  C = ffi.load "libgit2",
-}
+local M = {}
+
+---@param path string?
+M.load_library = function(path)
+  rawset(M, "C", ffi.load(path or "libgit2"))
+end
 
 M.uint32 = ffi.typeof "uint32_t"
 M.char_pointer = ffi.typeof "char*"
