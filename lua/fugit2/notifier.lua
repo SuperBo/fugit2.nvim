@@ -18,4 +18,9 @@ function M.error(msg, err)
   vim.notify(content, vim.log.levels.ERROR)
 end
 
+-- Notify warning message
+function M.warn(msg)
+  vim.notify("[Fugit2] " .. msg, vim.log.levels.WARN)
+end
+
 return M

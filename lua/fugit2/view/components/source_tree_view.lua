@@ -9,12 +9,22 @@ local WebDevIcons = require "nvim-web-devicons"
 local plenary_filetype = require "plenary.filetype"
 local strings = require "plenary.strings"
 
+local TreeBase = require "fugit2.view.components.base_tree_view"
 local git2 = require "fugit2.git2"
+local notifier = require "fugit2.notifier"
 local utils = require "fugit2.utils"
 
 -- ===================
 -- | Status Sections |
 -- ===================
+
+local CONFLICTS_ID = "#CONFLICT"
+local STAGED_ID = "#STAGED"
+local UNSTAGED_ID = "#UNSTAGED"
+
+local CONFLICTS_PREFIX = "merged-"
+local STAGED_PREFIX = "staged-"
+local UNSTAGED_PREFIX = "unstaged-"
 
 local FILE_ENTRY_WIDTH = 40
 local FILE_ENTRY_ALIGN = FILE_ENTRY_WIDTH - 1
@@ -67,14 +77,16 @@ end
 
 -- Prepares node in tree.
 ---@param node NuiTree.Node
----@return NuiLine
+---@return NuiLine?
 local function status_tree_prepare_node(node)
   local line = NuiLine()
   line:append(string.rep("  ", node:get_depth() - 1))
 
   if node:has_children() then
-    line:append(node:is_expanded() and " " or " ", node.color)
-    line:append(node.text, node.color)
+    local children = node:get_child_ids()
+    line:append(string.format("%s%s (%d)", node:is_expanded() and " " or " ", node.text, #children), node.color)
+  elseif node.is_header then
+    return nil
   else
     local left_align = node:get_depth() * 2
     local align = FILE_ENTRY_ALIGN
@@ -113,7 +125,8 @@ local function status_tree_prepare_node(node)
       line:append(deletions, "Fugit2Deletions")
     end
 
-    line:append(" " .. node.status_icon, node.icon_color)
+    local status_icon = " " .. utils.get_git_status_icon(node.git_status, "")
+    line:append(status_icon, node.icon_color)
 
     -- line:append(node.modified and "[+] " or "    ", node.color)
     -- line:append(node.stage_icon .. " " .. node.wstatus .. node.istatus, node.stage_color)
@@ -128,28 +141,31 @@ end
 ---@param unstaged GitStatusItem[]
 ---@return NuiTree.Node[] nodes List of nodes of tree
 local function status_tree_construct_nodes(merged, staged, unstaged)
-  local nodes = {}
-  local node
+  local conflicts_header = NuiTree.Node({
+    id = CONFLICTS_ID,
+    text = " Merged changes",
+    color = "Fugit2Untracked",
+    is_header = true,
+  }, merged)
+  conflicts_header:expand()
 
-  if #merged > 0 then
-    node = NuiTree.Node({ text = " Merged changes", color = "Fugit2Untracked" }, merged)
-    node:expand()
-    nodes[#nodes + 1] = node
-  end
+  local staged_header = NuiTree.Node({
+    id = STAGED_ID,
+    text = " Staged changes",
+    color = "Fugit2Staged",
+    is_header = true,
+  }, staged)
+  staged_header:expand()
 
-  if #staged > 0 then
-    node = NuiTree.Node({ text = " Staged changes", color = "Fugit2Staged" }, staged)
-    node:expand()
-    nodes[#nodes + 1] = node
-  end
+  local unstaged_header = NuiTree.Node({
+    id = UNSTAGED_ID,
+    text = "󰄷 Unstaged changes",
+    color = "Fugit2Unstaged",
+    is_header = true,
+  }, unstaged)
+  unstaged_header:expand()
 
-  if #unstaged > 0 then
-    node = NuiTree.Node({ text = "󰄷 Unstaged changes", color = "Fugit2Unstaged" }, unstaged)
-    node:expand()
-    nodes[#nodes + 1] = node
-  end
-
-  return nodes
+  return { conflicts_header, staged_header, unstaged_header }
 end
 
 -- Gets colors for a tree index node
@@ -175,7 +191,7 @@ end
 -- Initializes Git SourceTree
 ---@param ns_id integer
 function SourceTree:init(ns_id)
-  self.ns_id = ns_id
+  self.namespace = ns_id
 
   self.pane = NuiSplit {
     ns_id = ns_id,
@@ -250,22 +266,24 @@ function SourceTree:update(status, diff_head_to_index)
     local filename = vim.fs.basename(item.path)
     local extension = plenary_filetype.detect(filename, { fs_access = false })
     local icon = WebDevIcons.get_icon(filename, extension, { default = true })
-    local modified = bufs[item.path] and bufs[item.path].modified or false
+    local loaded = bufs[item.path]
+    local modified = loaded and bufs[item.path].modified or false
 
     if item.worktree_status == git2.GIT_DELTA.CONFLICTED or item.index_status == git2.GIT_DELTA.CONFLICTED then
       -- merge/conflicst
       git_merged[#git_merged + 1] = NuiTree.Node {
-        id = "merged-" .. item.path,
+        id = CONFLICTS_PREFIX .. item.path,
         text = item.path,
         icon = icon,
-        status_icon = utils.get_git_status_icon(git2.GIT_DELTA.CONFLICTED, ""),
         status = SOURCE_TREE_GIT_STATUS.CONFLICT,
+        git_status = git2.GIT_DELTA.CONFLICTED,
         modified = modified,
+        loaded = loaded,
       }
     else
       if item.index_status ~= git2.GIT_DELTA.UNMODIFIED and item.index_status ~= git2.GIT_DELTA.UNTRACKED then
         -- staged
-        local text_color, icon_color = tree_node_index_colors(item.worktree_status, modified)
+        local text_color, icon_color = tree_node_index_colors(item.index_status, modified)
         local stats = stats_head_to_index[item.path]
         local insertions, deletions
         if stats then
@@ -273,16 +291,17 @@ function SourceTree:update(status, diff_head_to_index)
           deletions = stats.deletions
         end
         git_staged[#git_staged + 1] = NuiTree.Node {
-          id = "staged-" .. item.path,
+          id = STAGED_PREFIX .. item.path,
           text = item.path,
           icon = icon,
-          status_icon = utils.get_git_status_icon(item.index_status, ""),
           color = text_color,
           icon_color = icon_color,
           status = SOURCE_TREE_GIT_STATUS.STAGED,
+          git_status = item.index_status,
           modified = modified,
           insertions = insertions,
           deletions = deletions,
+          loaded = loaded,
         }
       end
 
@@ -290,14 +309,15 @@ function SourceTree:update(status, diff_head_to_index)
         -- unstaged
         local text_color, icon_color = tree_node_worktree_colors(item.worktree_status, modified)
         git_unstaged[#git_unstaged + 1] = NuiTree.Node {
-          id = "unstaged-" .. item.path,
+          id = UNSTAGED_PREFIX .. item.path,
           text = item.path,
           icon = icon,
-          status_icon = utils.get_git_status_icon(item.worktree_status, ""),
           color = text_color,
           icon_color = icon_color,
           status = SOURCE_TREE_GIT_STATUS.UNSTAGED,
+          git_status = item.worktree_status,
           modified = modified,
+          loaded = loaded,
         }
       end
     end
@@ -314,6 +334,132 @@ function SourceTree:get_node(node_id)
   if node and not node:has_children() then
     return node, linenr
   end
+end
+
+-- Adds, stage unstage or checkout a node from index.
+---@param repo GitRepository
+---@param index GitIndex
+---@param action Fugit2IndexAction
+---@param node NuiTree.Node
+---@return boolean updated Tree is updated or not.
+---@return boolean refresh Whether needed to do full refresh.
+function SourceTree:index_add_reset_discard(repo, index, node, action)
+  local err
+  local updated = false
+  local inplace = true -- whether can update status inplace
+
+  local add = bit.band(action, TreeBase.IndexAction.ADD)
+  local reset = bit.band(action, TreeBase.IndexAction.RESET)
+
+  if add ~= 0 and node.status == SOURCE_TREE_GIT_STATUS.UNSTAGED then
+    -- add to index if node is in unstaged section
+    err = index:add_bypath(node.text)
+    if err ~= 0 then
+      notifier.error("Git error when adding to index", err)
+      return false, false
+    end
+
+    updated = true
+  elseif reset ~= 0 and node.status == SOURCE_TREE_GIT_STATUS.STAGED then
+    -- remove from index
+    err = repo:reset_default { node.text }
+    if err == git2.GIT_ERROR.GIT_EUNBORNBRANCH then
+      err = index:remove_bypath(node.text)
+    end
+    if err ~= 0 then
+      notifier.error("Git error when unstage from index", err)
+      return false, false
+    end
+
+    updated = true
+  elseif action == TreeBase.IndexAction.DISCARD then
+    --TODO
+  end
+
+  -- inplace update
+  if updated and inplace then
+    if self:update_single_node(repo, node) ~= 0 then
+      -- require full refresh if inplace update failed
+      inplace = false
+    end
+  end
+
+  return updated, not inplace
+end
+
+-- Returns git path from a NuiTree.Node
+---@param node NuiTree.Node
+function SourceTree:_get_git_path(node)
+  return node.text
+end
+
+-- Updates file node status info, usually called after stage/unstage
+---@param repo GitRepository
+---@param node NuiTree.Node
+---@return GIT_ERROR
+function SourceTree:update_single_node(repo, node)
+  local git_path = self:_get_git_path(node)
+  local worktree_status, index_status, err = repo:status_file(git_path)
+  if err ~= 0 then
+    return err
+  end
+
+  local tree = self.tree
+
+  local wstatus_new = git2.status_char_dash(worktree_status)
+  local istatus_new = git2.status_char_dash(index_status)
+
+  -- delete node when status == "--" and not conflicted
+  if wstatus_new == "-" and istatus_new == "-" then
+    tree:remove_node(node:get_id())
+
+    if node.status == SOURCE_TREE_GIT_STATUS.STAGED then
+      tree:remove_node("-" .. STAGED_PREFIX .. git_path)
+    elseif node.status == SOURCE_TREE_GIT_STATUS.UNSTAGED then
+      tree:remove_node("-" .. UNSTAGED_PREFIX .. git_path)
+    end
+
+    return 0
+  end
+
+  if
+    (node.status == SOURCE_TREE_GIT_STATUS.UNSTAGED and wstatus_new == "-")
+    or (node.status == SOURCE_TREE_GIT_STATUS.STAGED and (istatus_new == "-" or istatus_new == "?"))
+  then
+    tree:remove_node(node:get_id())
+  end
+
+  -- Add node to staged section
+  if index_status ~= git2.GIT_DELTA.UNMODIFIED and index_status ~= git2.GIT_DELTA.UNTRACKED then
+    local new_id = STAGED_ID .. git_path
+    local staged_node = self.tree:get_node("-" .. new_id)
+
+    if not staged_node then
+      node.id = new_id
+      node.status = SOURCE_TREE_GIT_STATUS.STAGED
+      node.color, node.icon_color = tree_node_index_colors(index_status, node.modified)
+      node.git_status = index_status
+
+      tree:add_node(node, "-" .. STAGED_ID)
+    end
+  end
+
+  -- Add node to unstaged section
+  if worktree_status ~= git2.GIT_DELTA.UNMODIFIED then
+    local new_id = UNSTAGED_PREFIX .. git_path
+    local unstaged_node = self.tree:get_node("-" .. new_id)
+
+    if not unstaged_node then
+      node.id = new_id
+      node.status = SOURCE_TREE_GIT_STATUS.UNSTAGED
+      node.color, node.icon_color = tree_node_worktree_colors(worktree_status, node.modified)
+      node.git_status = worktree_status
+
+      tree:add_node(node, "-" .. UNSTAGED_ID)
+    end
+  end
+
+  return 0
 end
 
 -- Renders status list/tree
