@@ -470,7 +470,7 @@ describe("reverse_hunk", function()
       old_lines = 5,
       new_start = 2,
       new_lines = 5,
-      header = "@@ -1,5 +2,5 @@ test_header" .. "\n",
+      header = "@@ -1,5 +2,5 @@ test_header\n",
     }
     local hunk_lines = vim.split(
       [[
@@ -525,5 +525,135 @@ describe("reverse_hunk", function()
     assert.array(reversed).has.no.holes()
     assert.equals(#hunk_lines, #reversed)
     assert.equals("@@ -1,10 +0,0 @@", reversed[1])
+  end)
+
+  it("gets line number at context line", function()
+    local hunk = {
+      old_start = 764,
+      old_lines = 6,
+      new_start = 788,
+      new_lines = 16,
+      header = "@@ -764,6 +788,16 @@ function GitStatus:_init_patch_views()\n",
+    }
+    local hunk_lines = vim.split(
+      [[
+@@ -764,6 +788,16 @@ function GitStatus:_init_patch_views()
+   patch_unstaged:map("v", { "d", "x" }, function()
+     self._prompts.discard_line_confirm:show()
+   end, opts)
++
++  -- Enter to jump to file
++  patch_unstaged:map("n", "<cr>", function()
++    local node, _ = tree:get_child_node_linenr()
++    local linenr = patch_unstaged:file_line()
++    if node then
++      self:unmount()
++      open_file(self._git.path, node.id, linenr)
++    end
++  end, opts)
+ end
+ 
+ -- Read git config
+      ]],
+      "\n",
+      { plain = true, trimempty = true }
+    )
+
+    local line0 = diff.file_line(hunk, hunk_lines, 0)
+    local line1 = diff.file_line(hunk, hunk_lines, 1)
+    local line2 = diff.file_line(hunk, hunk_lines, 2)
+    local line14 = diff.file_line(hunk, hunk_lines, 14)
+    local line15 = diff.file_line(hunk, hunk_lines, 15)
+    local line16 = diff.file_line(hunk, hunk_lines, 16)
+
+    assert.equals(788, line0)
+    assert.equals(788, line1)
+    assert.equals(789, line2)
+    assert.equals(801, line14)
+    assert.equals(802, line15)
+    assert.equals(803, line16)
+  end)
+
+  it("gets line number at added line", function()
+    local hunk = {
+      old_start = 764,
+      old_lines = 6,
+      new_start = 788,
+      new_lines = 16,
+      header = "@@ -764,6 +788,16 @@ function GitStatus:_init_patch_views()\n",
+    }
+    local hunk_lines = vim.split(
+      [[
+@@ -764,6 +788,16 @@ function GitStatus:_init_patch_views()
+   patch_unstaged:map("v", { "d", "x" }, function()
+     self._prompts.discard_line_confirm:show()
+   end, opts)
++
++  -- Enter to jump to file
++  patch_unstaged:map("n", "<cr>", function()
++    local node, _ = tree:get_child_node_linenr()
++    local linenr = patch_unstaged:file_line()
++    if node then
++      self:unmount()
++      open_file(self._git.path, node.id, linenr)
++    end
++  end, opts)
+ end
+ 
+ -- Read git config
+      ]],
+      "\n",
+      { plain = true, trimempty = true }
+    )
+
+    local line4 = diff.file_line(hunk, hunk_lines, 4)
+    local line6 = diff.file_line(hunk, hunk_lines, 6)
+    local line10 = diff.file_line(hunk, hunk_lines, 10)
+
+    assert.equals(791, line4)
+    assert.equals(793, line6)
+    assert.equals(797, line10)
+  end)
+
+  it("gets line number at removed line", function()
+    local hunk = {
+      old_start = 2194,
+      old_lines = 14,
+      new_start = 2228,
+      new_lines = 7,
+      header = "@@ -764,6 +788,16 @@ function GitStatus:_init_patch_views()\n",
+    }
+    local hunk_lines = vim.split(
+      [[
+@@ -2194,14 +2228,7 @@ function GitStatus:setup_handlers()
+     --   end
+     elseif node then
+       exit_fn()
+-      local cwd = vim.fn.getcwd()
+-      local current_file = vim.api.nvim_buf_get_name(0)
+-
+-      local file_path = Path:new(self._git.path) / vim.fn.fnameescape(node.id)
+-
+-      if tostring(file_path) ~= current_file then
+-        vim.cmd.edit(file_path:make_relative(cwd))
+-      end
++      open_file(self._git.path, node.id)
+     end
+   end, map_options)
+ 
+      ]],
+      "\n",
+      { plain = true, trimempty = true }
+    )
+
+    local line4 = diff.file_line(hunk, hunk_lines, 4)
+    local line6 = diff.file_line(hunk, hunk_lines, 6)
+    local line10 = diff.file_line(hunk, hunk_lines, 10)
+    local line12 = diff.file_line(hunk, hunk_lines, 12)
+
+    assert.equals(2231, line4)
+    assert.equals(2231, line6)
+    assert.equals(2231, line10)
+    assert.equals(2231, line12)
   end)
 end)

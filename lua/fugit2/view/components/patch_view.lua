@@ -201,7 +201,7 @@ local function get_hunk(offsets, cursor_row)
   return 0, 1
 end
 
----Gets current hunk based current cursor position
+---Gets current hunk based on current cursor position
 ---@return integer hunk_index
 ---@return integer hunk_offset
 ---@return integer cursor_row
@@ -239,6 +239,16 @@ function PatchView:prev_hunk_handler()
     end
     vim.api.nvim_win_set_cursor(self.popup.winid, { new_row, col })
   end
+end
+
+-- Get file linenr based on current hunk
+---@return integer
+function PatchView:get_file_line()
+  local hunk_idx, hunk_offset, row, _ = self:get_current_hunk()
+  local hunk_lines = vim.api.nvim_buf_get_lines(self.popup.bufnr, hunk_offset - 1, row, true)
+  local hunk_diff = self._hunk_diffs[hunk_idx]
+
+  return diff_utils.file_line(hunk_diff, hunk_lines, row - hunk_offset + 1)
 end
 
 ---@return string?

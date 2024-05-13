@@ -51,7 +51,7 @@ function M.parse_patch(patch)
   }
 end
 
----Creates a patch just incude one hunk
+---Creates a patch just include one hunk
 ---@param diff_header string[]
 ---@param hunk_header string
 ---@param hunk_lines string[]
@@ -245,7 +245,7 @@ end
 
 ---@param hunk_diffs GitDiffHunk[]
 ---@param hunk_segments string[][]
----@return string[] lines liens of merged string
+---@return string[] lines lines of merged string
 function M.merge_hunks(hunk_diffs, hunk_segments)
   local lines = {}
   local line_delta = 0
@@ -268,6 +268,28 @@ function M.merge_hunks(hunk_diffs, hunk_segments)
   end
 
   return lines
+end
+
+---@param hunk GitDiffHunk hunk information
+---@param hunk_lines string[] hunk content, including signature in the first line
+---@param offset integer offset from start of hunk header
+---@return integer liner line in original file
+function M.file_line(hunk, hunk_lines, offset)
+  local linenr = hunk.new_start
+
+  local is_prev_minus = false
+  local n = math.min(offset + 1, #hunk_lines)
+  for i = 3, n do
+    local char = hunk_lines[i]:sub(1, 1)
+
+    if not is_prev_minus then
+      linenr = linenr + 1
+    end
+
+    is_prev_minus = (char == "-") and true or false
+  end
+
+  return linenr
 end
 
 return M
