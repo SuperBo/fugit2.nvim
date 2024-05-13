@@ -62,6 +62,31 @@ local Menu = {
   FORGE = 8,
 }
 
+-- ======================
+-- | Helper static func |
+-- ======================
+
+---@param git_path string
+---@param git_file string
+---@param linenr integer?
+local function open_file(git_path, git_file, linenr)
+  local cwd = vim.fn.getcwd()
+  local current_file = vim.api.nvim_buf_get_name(0)
+
+  local file_path = Path:new(git_path) / vim.fn.fnameescape(git_file)
+
+  if tostring(file_path) ~= current_file then
+    local open_path = file_path:make_relative(cwd)
+    if linenr then
+      vim.cmd(string.format("edit %s|%d", open_path, linenr))
+    else
+      vim.cmd.edit(open_path)
+    end
+  elseif linenr then
+    vim.api.nvim_win_set_cursor(0, { linenr, 0 })
+  end
+end
+
 -- ===================
 -- | Main git status |
 -- ===================
@@ -764,6 +789,22 @@ function GitStatus:_init_patch_views()
   patch_unstaged:map("v", { "d", "x" }, function()
     self._prompts.discard_line_confirm:show()
   end, opts)
+
+  -- Enter to jump to file
+  local jump_file_fn = function(v)
+    local node, _ = tree:get_child_node_linenr()
+    local linenr = v:get_file_line()
+    if node then
+      self:unmount()
+      open_file(self._git.path, node.id, linenr)
+    end
+  end
+  patch_unstaged:map("n", "<cr>", function()
+    jump_file_fn(patch_unstaged)
+  end, opts)
+  patch_staged:map("n", "<cr>", function()
+    jump_file_fn(patch_staged)
+  end, opts)
 end
 
 -- Read git config
@@ -1275,9 +1316,7 @@ function GitStatus:_git_create_commit(message, args)
     -- callback func, called when finished
     async_utils.scheduler(function()
       if result.commit_id then
-        notifier.info(
-          string.format("[Fugit2] New %scommit %s", gpg_sign and "signed " or "", result.commit_id:tostring(8))
-        )
+        notifier.info(string.format("New %scommit %s", gpg_sign and "signed " or "", result.commit_id:tostring(8)))
         self:hide_input(true)
         self:update()
         self:render()
@@ -2194,14 +2233,7 @@ function GitStatus:setup_handlers()
     --   end
     elseif node then
       exit_fn()
-      local cwd = vim.fn.getcwd()
-      local current_file = vim.api.nvim_buf_get_name(0)
-
-      local file_path = Path:new(self._git.path) / vim.fn.fnameescape(node.id)
-
-      if tostring(file_path) ~= current_file then
-        vim.cmd.edit(file_path:make_relative(cwd))
-      end
+      open_file(self._git.path, node.id)
     end
   end, map_options)
 
