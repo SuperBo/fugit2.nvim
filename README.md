@@ -17,8 +17,9 @@ Git plugin for Neovim (based on libgit2).
 - ✔ Patch View.
 - ✔ Stage/Unstage hunkes in patch view.
 - ✔ Nice git graph.
+- ✔ Diff view.
+- ☐ TODO: Git blame.
 - ☐ TODO: In-memory rebase.
-- ☐ TODO: Diff view.
 - ☐ TODO: Remap default key binding.
 - ☐ TODO: Proper help menu.
 - ☐ TODO: Native branch popup.
@@ -27,7 +28,7 @@ Git plugin for Neovim (based on libgit2).
 
 Third party libraries:
   - Required: [Libgit2](#libgit2)
-  - Optional if use gpg signing: [GPGpme](#gpgme)
+  - Optional (if use gpg signing): [GPGpme](#gpgme)
 
 
 ### Libgit2
@@ -220,13 +221,39 @@ If you are using lazy, you can use this config
       dependencies = { 'stevearc/dressing.nvim' }
     },
   },
-  cmd = { 'Fugit2', 'Fugit2Graph' },
+  cmd = { 'Fugit2', 'Fugit2Diff', 'Fugit2Graph' },
+  keys = {
+    { '<leader>F', mode = 'n', '<cmd>Fugit2<cr>' }
+  }
+},
+```
+
+In case you want to use more stable [diffview.nvim](https://github.com/sindrets/diffview.nvim) for diff split view.
+
+<details>
+
+```lua
+{
+  'SuperBo/fugit2.nvim',
+  opts = {
+    width = 70,
+    external_diffview = true, -- tell fugit2 to use diffview.nvim instead of builtin implementation.
+  },
+  dependencies = {
+    'MunifTanjim/nui.nvim',
+    'nvim-tree/nvim-web-devicons',
+    'nvim-lua/plenary.nvim',
+    {
+      'chrisgrieser/nvim-tinygit', -- optional: for Github PR view
+      dependencies = { 'stevearc/dressing.nvim' }
+    },
+  },
+  cmd = { 'Fugit2', 'Fugit2Diff', 'Fugit2Graph' },
   keys = {
     { '<leader>F', mode = 'n', '<cmd>Fugit2<cr>' }
   }
 },
 {
-  -- optional: for diffview.nvim integration
   'sindrets/diffview.nvim',
   dependencies = { 'nvim-tree/nvim-web-devicons' },
   -- lazy, only load diffview by these commands
@@ -235,6 +262,9 @@ If you are using lazy, you can use this config
   }
 }
 ```
+
+</details>
+
 
 Default options dictionary
 
@@ -245,12 +275,15 @@ Default options dictionary
 ---@field min_width integer File view width when expand patch view
 ---@field content_width File view content width
 ---@field height integer|string Main popup height
+---@field libgit2_path string? path to libgit2 lib if not set via environments
+---@field external_diffview boolean whether to use external diffview.nvim or Fugit2 implementation
 local opts = {
   width = 100,
   min_width = 50,
   content_width = 60,
   max_width = "80%",
   height = "60%",
+  external_diffview = false,
 }
 ```
 

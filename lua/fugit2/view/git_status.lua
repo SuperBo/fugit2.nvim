@@ -1644,9 +1644,19 @@ function GitStatus:_init_diff_menu()
   m:on_submit(function(item_id, _)
     if item_id == "d" then
       local node, _ = self._views.files:get_child_node_linenr()
-      if node and vim.fn.exists ":DiffviewOpen" > 0 then
+      if not node then
+        return
+      end
+
+      if self.opts.external_diffview and vim.fn.exists ":DiffviewOpen" > 0 then
         self:unmount()
         vim.cmd { cmd = "DiffviewOpen", args = { "--selected-file=" .. vim.fn.fnameescape(node.id) } }
+      else
+        local ui = require "fugit2.view.ui"
+        self:unmount()
+        local diffview = ui.new_fugit2_diff_view(self.ns_id, self.repo)
+        diffview:mount()
+        diffview:focus_file(vim.fn.fnameescape(node.id))
       end
     end
   end)

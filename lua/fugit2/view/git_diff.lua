@@ -602,7 +602,8 @@ end
 ---@overload fun()
 function GitDiff:_refresh_views()
   local node, linenr = self._views.files:get_node()
-  if not (node and linenr) then
+
+  if not node or not linenr or linenr == self._states.last_line or not vim.api.nvim_win_is_valid(self._windows[2]) then
     return
   end
 
@@ -611,9 +612,16 @@ function GitDiff:_refresh_views()
   self:_setup_diff_windows(node)
 end
 
+---@param git_path string path to to git file, or current selected
+function GitDiff:focus_file(git_path)
+  local _, linenr = self._views.files:get_node_by_git_path(git_path)
+  if linenr then
+    self._views.files:set_cursor_line(linenr)
+  end
+end
+
 function GitDiff:_setup_handlers()
   local opts = { noremap = true, nowait = true }
-  local windows = self._windows
   local source_tree = self._views.files
 
   source_tree:map("n", { "q", "<esc>" }, function()
@@ -634,15 +642,7 @@ function GitDiff:_setup_handlers()
   -- end, opts)
 
   source_tree:on(event.CursorMoved, function()
-    local node, linenr = source_tree:get_node()
-
-    if not node or linenr == self._states.last_line or not vim.api.nvim_win_is_valid(windows[2]) then
-      return
-    end
-
-    self._states.last_line = linenr
-    self._states.active_node = node
-    self:_setup_diff_windows(node)
+    self:_refresh_views()
   end)
 
   -- Stage/unstaged/discard
