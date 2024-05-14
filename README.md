@@ -221,7 +221,7 @@ If you are using lazy, you can use this config
       dependencies = { 'stevearc/dressing.nvim' }
     },
   },
-  cmd = { 'Fugit2', 'Fugit2Graph' },
+  cmd = { 'Fugit2', 'Fugit2Diff', 'Fugit2Graph' },
   keys = {
     { '<leader>F', mode = 'n', '<cmd>Fugit2<cr>' }
   }

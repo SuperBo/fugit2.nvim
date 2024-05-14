@@ -603,10 +603,7 @@ end
 function GitDiff:_refresh_views()
   local node, linenr = self._views.files:get_node()
 
-  if not node or not linenr
-    or linenr == self._states.last_line
-    or not vim.api.nvim_win_is_valid(self._windows[2])
-  then
+  if not node or not linenr or linenr == self._states.last_line or not vim.api.nvim_win_is_valid(self._windows[2]) then
     return
   end
 

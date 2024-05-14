@@ -343,7 +343,7 @@ end
 ---@return integer? line_number
 function SourceTree:get_node_by_git_path(git_path)
   local node, linenr
-  for _, prefix in ipairs({CONFLICTS_PREFIX, STAGED_PREFIX, UNSTAGED_PREFIX}) do
+  for _, prefix in ipairs { CONFLICTS_PREFIX, STAGED_PREFIX, UNSTAGED_PREFIX } do
     local id = "-" .. prefix .. git_path
     node, linenr = self.tree:get_node(id)
     if node then
@@ -448,7 +448,7 @@ function SourceTree:update_single_node(repo, node)
 
   -- Add node to staged section
   if index_status ~= git2.GIT_DELTA.UNMODIFIED and index_status ~= git2.GIT_DELTA.UNTRACKED then
-    local new_id = STAGED_ID .. git_path
+    local new_id = STAGED_PREFIX .. git_path
     local staged_node = self.tree:get_node("-" .. new_id)
 
     if not staged_node then
@@ -458,6 +458,19 @@ function SourceTree:update_single_node(repo, node)
       node.git_status = index_status
 
       tree:add_node(node, "-" .. STAGED_ID)
+    else
+      -- update staged_node
+      staged_node.color, staged_node.icon_color = tree_node_index_colors(index_status, node.modified)
+      staged_node.git_status = index_status
+
+      local diff, _ = repo:diff_head_to_index(nil, { git_path })
+      if diff then
+        local stats = diff:stats()
+        if stats and stats.changed == 1 then
+          staged_node.insertions = stats.insertions
+          staged_node.deletions = stats.deletions
+        end
+      end
     end
   end
 
@@ -500,7 +513,7 @@ end
 
 ---@param linenr integer line number
 function SourceTree:set_cursor_line(linenr)
-  vim.api.nvim_win_set_cursor(self.pane.winid, {linenr, 0})
+  vim.api.nvim_win_set_cursor(self.pane.winid, { linenr, 0 })
 end
 
 ---@param buf_name string
