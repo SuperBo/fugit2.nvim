@@ -9,12 +9,14 @@ local libgit2 = require "fugit2.libgit2"
 ---@field content_width integer
 ---@field height integer|string main file popup height
 ---@field libgit2_path string? path to libgit2 lib if not set via environments
+---@field external_diffview boolean whether to use external diffview.nvim or Fugit2 implementation
 local config = {
   width = 100,
   min_width = 50,
   content_width = 60,
   max_width = "80%",
   height = "60%",
+  external_diffview = false,
 }
 
 ---@class Fugit2Module
@@ -91,11 +93,16 @@ function M.git_graph()
   end
 end
 
-function M.git_diff()
+---@param kwargs table arguments table
+function M.git_diff(kwargs)
   local repo = open_repository()
   if repo then
     local ui = require "fugit2.view.ui"
-    ui.new_fugit2_diff_view(M.namespace, repo):mount()
+    local diffview = ui.new_fugit2_diff_view(M.namespace, repo)
+    diffview:mount()
+    if kwargs["args"] then
+      diffview:focus_file(kwargs["args"])
+    end
   end
 end
 

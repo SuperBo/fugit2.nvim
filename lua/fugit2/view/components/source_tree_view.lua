@@ -326,14 +326,31 @@ function SourceTree:update(status, diff_head_to_index)
   self.tree:set_nodes(status_tree_construct_nodes(git_merged, git_staged, git_unstaged))
 end
 
----@return NuiTree.Node?
 ---@param node_id string?
+---@return NuiTree.Node?
 ---@return integer? line_number
 function SourceTree:get_node(node_id)
   local node, linenr = self.tree:get_node(node_id)
   if node and not node:has_children() then
     return node, linenr
   end
+  return nil, nil
+end
+
+-- Gets node by git name
+---@param git_path string
+---@return NuiTree.Node? nuitree node
+---@return integer? line_number
+function SourceTree:get_node_by_git_path(git_path)
+  local node, linenr
+  for _, prefix in ipairs({CONFLICTS_PREFIX, STAGED_PREFIX, UNSTAGED_PREFIX}) do
+    local id = "-" .. prefix .. git_path
+    node, linenr = self.tree:get_node(id)
+    if node then
+      return node, linenr
+    end
+  end
+  return node, linenr
 end
 
 -- Adds, stage unstage or checkout a node from index.
@@ -479,6 +496,11 @@ end
 
 function SourceTree:focus()
   vim.api.nvim_set_current_win(self.pane.winid)
+end
+
+---@param linenr integer line number
+function SourceTree:set_cursor_line(linenr)
+  vim.api.nvim_win_set_cursor(self.pane.winid, {linenr, 0})
 end
 
 ---@param buf_name string
