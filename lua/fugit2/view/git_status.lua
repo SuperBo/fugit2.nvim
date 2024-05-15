@@ -19,7 +19,7 @@ local PatchView = require "fugit2.view.components.patch_view"
 local TreeBase = require "fugit2.view.components.base_tree_view"
 local UI = require "fugit2.view.components.menus"
 local git2 = require "fugit2.git2"
-local gpgme = require "fugit2.gpgme"
+local git_gpg = require "fugit2.core.git_gpg"
 local notifier = require "fugit2.notifier"
 local utils = require "fugit2.utils"
 
@@ -1220,8 +1220,13 @@ function GitStatus:_git_create_commit(message, args)
   local gpg_sign = args and vim.tbl_contains(args, "--gpg-sign")
   local prettified = check_signature_message(self._git.signature, message)
 
-  if not self._git.signature or not prettified then
-    -- skip when not find signature or failed to prettified
+  if not self._git.signature then
+    notifier.error "Can not find git signature!"
+    return
+  end
+
+  if not prettified then
+    notifier.error "Can not prettify commit message!"
     return
   end
 
@@ -1238,85 +1243,23 @@ function GitStatus:_git_create_commit(message, args)
         commit_id, err = self.repo:create_commit(self.index, self._git.signature, prettified)
         result.commit_id = commit_id
         result.err = err
-        return
-      end
-
-      -- create commit with gpg sign
-      -- TODO: move to a common git2-gpg-helper lib library
-
-      local commit_content
-      commit_content, err = self.repo:create_commit_content(self.index, self._git.signature, prettified)
-      if not commit_content then
+      else
+        -- create commit with gpg sign
+        local config = self:read_config()
+        local keyid = config and config:get_string "user.signingkey" or nil
+        local err_msg
+        commit_id, err, err_msg =
+          git_gpg.create_commit_gpg(self.repo, self.index, self._git.signature, prettified, keyid)
+        result.commit_id = commit_id
         result.err = err
-        return
+        result.message = err_msg
       end
-
-      local context, keyid, config, signature, head
-
-      context, err = gpgme.new_context()
-      if not context then
-        result.err = err
-        result.message = "Failed to create GPGme context"
-        return
-      end
-
-      context:set_amor(true)
-
-      config = self:read_config()
-      keyid = config and config:get_string "user.signingkey"
-
-      if keyid then
-        local key
-        key, err = context:get_key(keyid, true)
-        if key then
-          err = context:add_signer(key)
-          if err ~= 0 then
-            result.err = err
-            result.message = "Failed to add gpg key " .. keyid
-            return
-          end
-        else
-          result.err = err
-          result.message = "Failed to get gpg key " .. keyid
-          return
-        end
-      end
-
-      signature, err = gpgme.sign_string_detach(context, commit_content)
-      if not signature then
-        result.err = err
-        result.message = "Failed to sign commit"
-        return
-      end
-
-      commit_id, err = self.repo:create_commit_with_signature(commit_content, signature, nil)
-
-      if not commit_id then
-        result.err = err
-        return
-      end
-
-      head, err = self.repo:head()
-      if not head then
-        result.err = err
-        result.message = "Failed to get head"
-        return
-      end
-
-      _, err = head:set_target(commit_id, utils.lines_head(prettified))
-      if err ~= 0 then
-        result.err = err
-        result.message = "Failed to reset head"
-        return
-      end
-
-      result.commit_id = commit_id
     end,
 
     -- callback func, called when finished
     async_utils.scheduler(function()
       if result.commit_id then
-        notifier.info(string.format("New %scommit %s", gpg_sign and "signed " or "", result.commit_id:tostring(8)))
+        notifier.info(string.format("New %s commit %s", gpg_sign and "signed" or "", result.commit_id:tostring(8)))
         self:hide_input(true)
         self:update()
         self:render()
@@ -1329,53 +1272,110 @@ end
 
 ---Extends HEAD commit
 ---add files in index to HEAD commit
-function GitStatus:_git_extend_commit()
+---@param args string[]?
+function GitStatus:_git_extend_commit(args)
+  local gpg_sign = args and vim.tbl_contains(args, "--gpg-sign")
+
   self:write_index()
-  local commit_id, err = self.repo:amend_extend(self.index)
+
+  local commit_id, err, err_msg
+  if not gpg_sign then
+    commit_id, err = self.repo:amend_extend(self.index)
+  else
+    -- extend commit with gpg sign
+    local config = self:read_config()
+    local keyid = config and config:get_string "user.signingkey" or nil
+    commit_id, err, err_msg = git_gpg.extend_commit_gpg(self.repo, self.index, keyid)
+  end
+
   if commit_id then
     notifier.info("Extend HEAD " .. commit_id:tostring(8))
     self:update()
     self:render()
   else
-    notifier.error("Failed to extend HEAD", err)
+    err_msg = (err_msg and err_msg ~= "") and err_msg or "Failed to extend HEAD"
+    notifier.error(err_msg, err)
   end
 end
 
 ---Reword HEAD commit
 ---change commit message of HEAD commit
 ---@param message string commit message
-function GitStatus:_git_reword_commit(message)
-  local prettified = check_signature_message(self._git.signature, message)
+---@param args string[]?
+function GitStatus:_git_reword_commit(message, args)
+  local gpg_sign = args and vim.tbl_contains(args, "--gpg-sign")
 
-  if self._git.signature and prettified then
-    local commit_id, err = self.repo:amend_reword(self._git.signature, prettified)
-    if commit_id then
-      notifier.info("Reword HEAD " .. commit_id:tostring(8))
-      self:hide_input(false)
-      self:update()
-      self:render()
-    else
-      notifier.error("Failed to reword HEAD", err)
-    end
+  local signature = self._git.signature
+  if not signature then
+    notifier.error "Can not find git signature!"
+    return
+  end
+
+  local prettified = check_signature_message(signature, message)
+  if not prettified then
+    notifier.error "Can not prettify commit message!"
+    return
+  end
+
+  local commit_id, err, err_msg
+  if not gpg_sign then
+    commit_id, err = self.repo:amend_reword(signature, prettified)
+  else
+    -- reword commit with gpg sign
+    local config = self:read_config()
+    local keyid = config and config:get_string "user.signingkey" or nil
+    commit_id, err, err_msg = git_gpg.reword_commit_gpg(self.repo, signature, prettified, keyid)
+  end
+
+  if commit_id then
+    notifier.info("Reword HEAD " .. commit_id:tostring(8))
+    self:hide_input(false)
+    self:update()
+    self:render()
+  else
+    err_msg = (err_msg and err_msg ~= "") and err_msg or "Failed to reword HEAD"
+    notifier.error(err_msg, err)
   end
 end
 
 ---Amend HEAD commit
 ---add files from index and also change message or HEAD commit
 ---@param message string
-function GitStatus:_git_amend_commit(message)
-  local prettified = check_signature_message(self._git.signature, message)
-  if self._git.signature and prettified then
-    self:write_index()
-    local commit_id, err = self.repo:amend(self.index, self._git.signature, prettified)
-    if commit_id then
-      notifier.info("Amend HEAD " .. commit_id:tostring(8))
-      self:hide_input(true)
-      self:update()
-      self:render()
-    else
-      notifier.error("Failed to amend commit", err)
-    end
+---@param args string[]?
+function GitStatus:_git_amend_commit(message, args)
+  local gpg_sign = args and vim.tbl_contains(args, "--gpg-sign")
+
+  local signature = self._git.signature
+  if not signature then
+    notifier.error "Can not find git signature!"
+    return
+  end
+
+  local prettified = check_signature_message(signature, message)
+  if not prettified then
+    notifier.error "Can not prettify commit message!"
+    return
+  end
+
+  self:write_index()
+
+  local commit_id, err, err_msg
+  if not gpg_sign then
+    commit_id, err = self.repo:amend(self.index, self._git.signature, prettified)
+  else
+    local config = self:read_config()
+    local keyid = config and config:get_string "user.signingkey" or nil
+    commit_id, err, err_msg = git_gpg.amend_commit_gpg(self.repo, self.index, signature, prettified, keyid)
+  end
+
+  if commit_id then
+    notifier.info("Amend HEAD " .. commit_id:tostring(8))
+    self:hide_input(true)
+    self:update()
+    self:render()
+  else
+    err_msg = (err_msg and err_msg ~= "") and err_msg or "Failed to amend HEAD"
+    notifier.error(err_msg, err)
   end
 end
 
@@ -1421,20 +1421,23 @@ function GitStatus:commit_create(args)
   vim.cmd.startinsert()
 end
 
-function GitStatus:commit_extend()
+---@param args string[]
+function GitStatus:commit_extend(args)
   self._states.commit_mode = CommitMode.EXTEND
 
   if self._git.ahead == 0 then
+    self._states.commit_args = args
     self._prompts.amend_confirm:show()
-    return
+  else
+    self:_git_extend_commit(args)
   end
-
-  self:_git_extend_commit()
 end
 
 ---@param is_reword boolean reword only mode
-function GitStatus:commit_amend(is_reword)
+---@param args string[]
+function GitStatus:commit_amend(is_reword, args)
   self._states.commit_mode = is_reword and CommitMode.REWORD or CommitMode.AMEND
+  self._states.commit_args = args
 
   if self._git.ahead == 0 then
     self._prompts.amend_confirm:show()
@@ -1455,7 +1458,7 @@ function GitStatus:amend_confirm_yes_handler()
   return function()
     local mode = self._states.commit_mode
     if mode == CommitMode.EXTEND then
-      self:_git_extend_commit()
+      self:_git_extend_commit(self._states.commit_args)
     elseif mode == CommitMode.REWORD or mode == CommitMode.AMEND then
       if mode == CommitMode.REWORD then
         self:_set_input_popup_commit_title("Reword HEAD", false, false)
@@ -1475,11 +1478,11 @@ function GitStatus:_init_commit_menu()
     if item_id == "c" then
       self:commit_create(args["args"])
     elseif item_id == "e" then
-      self:commit_extend()
+      self:commit_extend(args["args"])
     elseif item_id == "r" then
-      self:commit_amend(true)
+      self:commit_amend(true, args["args"])
     elseif item_id == "a" then
-      self:commit_amend(false)
+      self:commit_amend(false, args["args"])
     elseif item_id == "g" then
       self._menus[Menu.COMMIT]:unmount()
       self:unmount()
@@ -2312,9 +2315,9 @@ function GitStatus:setup_handlers()
     if states.commit_mode == CommitMode.CREATE then
       self:_git_create_commit(message, states.commit_args)
     elseif states.commit_mode == CommitMode.REWORD then
-      self:_git_reword_commit(message)
+      self:_git_reword_commit(message, states.commit_args)
     elseif states.commit_mode == CommitMode.AMEND then
-      self:_git_amend_commit(message)
+      self:_git_amend_commit(message, states.commit_args)
     end
 
     states.commit_args = nil
