@@ -1674,10 +1674,21 @@ function GitStatus:_init_branch_menu()
     if item_id == "b" then
       if vim.fn.exists ":Telescope" > 0 then
         self:unmount()
-        vim.cmd { cmd = "Telescope", args = { "git_branches" } }
+        vim.cmd {
+          cmd = "Telescope",
+          args = {
+            "git_branches",
+            "cwd=" .. vim.fn.fnameescape(self._git.path),
+        }}
       elseif vim.fn.exists ":FzfLua" > 0 then
         self:unmount()
-        vim.cmd { cmd = "FzfLua", args = { "git_branches" } }
+        vim.cmd {
+          cmd = "FzfLua",
+          args = {
+            "git_branches",
+            "cwd=" .. vim.fn.fnameescape(self._git.path),
+          }
+        }
       else
         notifier.error "No Telescope or FzfLua found!"
       end
