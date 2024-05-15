@@ -344,6 +344,7 @@ ffi.cdef [[
   int git_commit_lookup_prefix(git_commit **commit, git_repository *repo, const git_oid *id, size_t len);
   void git_commit_free(git_commit *commit);
   const git_signature * git_commit_author(const git_commit *commit);
+  const git_signature * git_commit_committer(const git_commit *commit);
   const git_oid * git_commit_id(const git_commit *commit);
   git_repository * git_commit_owner(const git_commit *commit);
   const char * git_commit_message(const git_commit *commit);
@@ -523,6 +524,7 @@ ffi.cdef [[
   void git_tree_free(git_tree *tree);
   size_t git_tree_entrycount(const git_tree *tree);
   int git_tree_entry_bypath(git_tree_entry **out, const git_tree *root, const char *path);
+  const git_oid * git_tree_id(const git_tree *tree);
 
   const git_oid * git_tree_entry_id(const git_tree_entry *entry);
   void git_tree_entry_free(git_tree_entry *entry);
@@ -625,7 +627,9 @@ M.git_commit_double_pointer = ffi.typeof "git_commit*[1]"
 ---@type ffi.ctype* git_commit *
 M.git_commit_pointer = ffi.typeof "git_commit*"
 ---@type ffi.ctype* git_commit * array
-M.git_commit_constant_pointer_array = ffi.typeof "const git_commit*[?]"
+M.git_commit_pointer_array = ffi.typeof "git_commit*[?]"
+---@type ffi.ctype* const git_commit **
+M.git_commit_const_double_pointer = ffi.typeof "const git_commit**"
 
 ---@type ffi.ctype* git_blob **
 M.git_blob_double_pointer = ffi.typeof "git_blob*[1]"

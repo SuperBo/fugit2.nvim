@@ -12,7 +12,7 @@ end
 ---@parm err integer?
 function M.error(msg, err)
   local content = "[Fugit2] " .. msg
-  if err ~= nil then
+  if err ~= nil and err ~= 0 then
     content = content .. string.format(", error code: %d", err)
   end
   vim.notify(content, vim.log.levels.ERROR)

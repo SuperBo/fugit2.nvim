@@ -589,6 +589,12 @@ function Tree.new(git_tree)
   return tree
 end
 
+-- Gets the id of a tree.
+function Tree:id()
+  local oid =  libgit2.C.git_tree_id(self.tree)
+  return ObjectId.borrow(oid)
+end
+
 function Tree:nentries()
   return libgit2.C.git_tree_entrycount(self.tree)
 end
@@ -707,8 +713,29 @@ end
 
 ---@return string
 function Commit:author()
-  local sig = libgit2.C.git_commit_author(self.commit)
-  return ffi.string(sig.name)
+  local author = libgit2.C.git_commit_author(self.commit)
+  return ffi.string(author.name)
+end
+
+
+---@return string
+function Commit:committer()
+  local committer = libgit2.C.git_commit_committer(self.commit)
+  return ffi.string(committer.name)
+end
+
+
+---@return GitSignature
+function Commit:author_signature()
+  local author = libgit2.C.git_commit_author(self.commit)
+  return Signature.borrow(ffi.cast(libgit2.git_signature_pointer, author))
+end
+
+
+---@return GitSignature
+function Commit:committer_signature()
+  local committer = libgit2.C.git_commit_committer(self.commit)
+  return Signature.borrow(ffi.cast(libgit2.git_signature_pointer, committer))
 end
 
 
@@ -1112,6 +1139,11 @@ function Signature.new(git_signature)
   return signature
 end
 
+function Signature.borrow(git_signature)
+  local signature = { sign = libgit2.git_signature_pointer(git_signature) }
+  setmetatable(signature, Signature)
+  return signature
+end
 
 ---@return string
 function Signature:name()
@@ -2697,7 +2729,7 @@ function Repository:_create_commit_head_tree_parents(index)
     end
 
     if parent then
-      parents = libgit2.git_commit_constant_pointer_array(1)
+      parents = libgit2.git_commit_double_pointer()
       parents[0] = parent.commit
     end
   end
@@ -2733,11 +2765,11 @@ function Repository:create_commit(index, signature, message)
   err = libgit2.C.git_commit_create(
     git_oid,
     self.repo, "HEAD",
-    signature.sign[0], signature.sign[0],
+    signature.sign, signature.sign,
     nil, message,
     tree[0],
     parents and 1 or 0,
-    parents
+    parents and ffi.cast(libgit2.git_commit_const_double_pointer, parents) or nil
   )
   libgit2.C.git_tree_free(tree[0])
   if err ~= 0 then
@@ -2763,11 +2795,11 @@ function Repository:create_commit_content(index, signature, message)
   err = libgit2.C.git_commit_create_buffer(
     buf,
     self.repo,
-    signature.sign[0], signature.sign[0],
+    signature.sign, signature.sign,
     nil, message,
     tree[0],
     parents and 1 or 0,
-    parents
+    parents and ffi.cast(libgit2.git_commit_const_double_pointer, parents) or nil
   )
   libgit2.C.git_tree_free(tree[0])
 
@@ -2834,26 +2866,25 @@ function Repository:amend_extend(index)
   return self:amend(index, nil, nil)
 end
 
----Amends an existing commit by replacing only non-NULL values.
 ---@param index GitIndex?
----@param signature GitSignature?
----@param message string?
----@return GitObjectId?
+---@param no_tree boolean don't find tree
+---@return GitCommit?
+---@return ffi.cdata*? tree tree used in ammend
 ---@return GIT_ERROR
-function Repository:amend(index, signature, message)
+function Repository:_amend_commit_head_tree_parents(index, no_tree)
   -- get head as parent commit
   local head, head_commit, err
   head, err = self:head()
   if not head then
-    return nil, err
+    return nil, nil, err
   end
   head_commit, err = head:peel_commit()
   if not head_commit then
-    return nil, err
+    return nil, nil, err
   end
 
-  if not (index or signature or message) then
-    return head_commit:id(), 0
+  if no_tree then
+    return head_commit, nil, 0
   end
 
   local tree = nil
@@ -2861,14 +2892,41 @@ function Repository:amend(index, signature, message)
     local tree_id
     tree_id, err = index:write_tree()
     if not tree_id then
-      return nil, err
+      return nil, nil, err
     end
 
     tree = libgit2.git_tree_double_pointer()
     err = libgit2.C.git_tree_lookup(tree, self.repo, tree_id.oid)
     if err ~= 0 then
-      return nil, err
+      return nil, nil, err
     end
+  else
+    tree = libgit2.git_tree_double_pointer()
+    err = libgit2.C.git_commit_tree(tree, head_commit.commit)
+    if err ~= 0 then
+      return nil, nil, err
+    end
+  end
+
+  return head_commit, tree, 0
+end
+
+---Amends an existing commit by replacing only non-NULL values.
+---@param index GitIndex?
+---@param signature GitSignature?
+---@param message string?
+---@return GitObjectId?
+---@return GIT_ERROR
+function Repository:amend(index, signature, message)
+  local no_tree = not (index or signature or message)
+
+  local head_commit, tree, err = self:_amend_commit_head_tree_parents(index, no_tree)
+  if not head_commit then
+    return nil, err
+  end
+
+  if no_tree then
+    return head_commit:id(), 0
   end
 
   local sig = signature and signature.sign or nil
@@ -2891,6 +2949,68 @@ function Repository:amend(index, signature, message)
   end
 
   return ObjectId.borrow(git_oid), 0
+end
+
+-- Creates amend commit as string
+---@param index GitIndex?
+---@param author GitSignature?
+---@param committer GitSignature?
+---@param message string?
+---@return string? git_commit_content
+---@return string? git_commit_message
+---@return GIT_ERROR err
+function Repository:amend_commit_content(index, author, committer, message)
+  local head_commit, tree, err = self:_amend_commit_head_tree_parents(index, false)
+  if not head_commit then
+    return nil, nil, err
+  end
+
+  author = author or head_commit:author_signature()
+  committer = committer or head_commit:committer_signature()
+  message = message or head_commit:message()
+
+  local parents
+  local nparents = head_commit:nparents()
+  if nparents > 0 then
+    parents = libgit2.git_commit_pointer_array(nparents)
+    for i = 0,nparents-1 do
+      parents[i] = nil
+      err = libgit2.C.git_commit_parent(parents + i, head_commit.commit, i)
+    end
+  end
+
+  local buf = libgit2.git_buf()
+  err = libgit2.C.git_commit_create_buffer(
+    buf,
+    self.repo,
+    author.sign,
+    committer.sign,
+    nil, message,
+    tree ~= nil and tree[0] or nil,
+    nparents,
+    ffi.cast(libgit2.git_commit_const_double_pointer, parents)
+  )
+
+  if tree ~= nil then
+    libgit2.C.git_tree_free(tree[0])
+  end
+
+  if parents ~= nil then
+    for i = 0,nparents-1 do
+      if parents[i] ~= nil then
+        libgit2.C.git_commit_free(parents[i])
+      end
+    end
+  end
+
+  if err ~= 0 then
+    libgit2.C.git_buf_dispose(buf)
+    return nil, nil, err
+  end
+
+  local commit_str = ffi.string(buf[0].ptr, buf[0].size)
+  libgit2.C.git_buf_dispose(buf)
+  return commit_str, message, 0
 end
 
 
