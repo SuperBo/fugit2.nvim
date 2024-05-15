@@ -1956,6 +1956,7 @@ function GitStatus:_run_single_command(cmd, args, refresh)
   local job = PlenaryJob:new {
     command = cmd,
     args = args,
+    cwd = self._git.path,
     on_exit = vim.schedule_wrap(function(_, ret)
       table.remove(queue, 1)
       self._states.job = nil -- TODO: change this line
