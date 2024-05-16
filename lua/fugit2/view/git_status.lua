@@ -824,6 +824,26 @@ function GitStatus:read_config()
   return config
 end
 
+-- Read gpg config use_ssh and keyid
+---@return boolean use_ssh
+---@return string? keyid
+function GitStatus:read_gpg_config()
+  local config = self:read_config()
+  if not config then
+    return false, nil
+  end
+
+  local keyid = config:get_string "user.signingkey" or nil
+  local use_ssh = (config:get_string "gpg.format" == "ssh")
+
+  if not use_ssh and self._git.signature then
+    -- get committer info as key id
+    keyid = tostring(self._git.signature)
+  end
+
+  return use_ssh, keyid
+end
+
 -- Updates git status.
 ---@overload fun()
 function GitStatus:update()
@@ -1245,11 +1265,10 @@ function GitStatus:_git_create_commit(message, args)
         result.err = err
       else
         -- create commit with gpg sign
-        local config = self:read_config()
-        local keyid = config and config:get_string "user.signingkey" or nil
+        local use_ssh, keyid = self:read_gpg_config()
         local err_msg
         commit_id, err, err_msg =
-          git_gpg.create_commit_gpg(self.repo, self.index, self._git.signature, prettified, keyid)
+          git_gpg.create_commit_gpg(self.repo, self.index, self._git.signature, prettified, use_ssh, keyid)
         result.commit_id = commit_id
         result.err = err
         result.message = err_msg
@@ -1259,7 +1278,7 @@ function GitStatus:_git_create_commit(message, args)
     -- callback func, called when finished
     async_utils.scheduler(function()
       if result.commit_id then
-        notifier.info(string.format("New %s commit %s", gpg_sign and "signed" or "", result.commit_id:tostring(8)))
+        notifier.info(string.format("New %scommit %s", gpg_sign and "signed " or "", result.commit_id:tostring(8)))
         self:hide_input(true)
         self:update()
         self:render()
@@ -1283,9 +1302,8 @@ function GitStatus:_git_extend_commit(args)
     commit_id, err = self.repo:amend_extend(self.index)
   else
     -- extend commit with gpg sign
-    local config = self:read_config()
-    local keyid = config and config:get_string "user.signingkey" or nil
-    commit_id, err, err_msg = git_gpg.extend_commit_gpg(self.repo, self.index, keyid)
+    local use_ssh, keyid = self:read_gpg_config()
+    commit_id, err, err_msg = git_gpg.extend_commit_gpg(self.repo, self.index, use_ssh, keyid)
   end
 
   if commit_id then
@@ -1322,9 +1340,8 @@ function GitStatus:_git_reword_commit(message, args)
     commit_id, err = self.repo:amend_reword(signature, prettified)
   else
     -- reword commit with gpg sign
-    local config = self:read_config()
-    local keyid = config and config:get_string "user.signingkey" or nil
-    commit_id, err, err_msg = git_gpg.reword_commit_gpg(self.repo, signature, prettified, keyid)
+    local use_ssh, keyid = self:read_gpg_config()
+    commit_id, err, err_msg = git_gpg.reword_commit_gpg(self.repo, signature, prettified, use_ssh, keyid)
   end
 
   if commit_id then
@@ -1363,9 +1380,8 @@ function GitStatus:_git_amend_commit(message, args)
   if not gpg_sign then
     commit_id, err = self.repo:amend(self.index, self._git.signature, prettified)
   else
-    local config = self:read_config()
-    local keyid = config and config:get_string "user.signingkey" or nil
-    commit_id, err, err_msg = git_gpg.amend_commit_gpg(self.repo, self.index, signature, prettified, keyid)
+    local use_ssh, keyid = self:read_gpg_config()
+    commit_id, err, err_msg = git_gpg.amend_commit_gpg(self.repo, self.index, signature, prettified, use_ssh, keyid)
   end
 
   if commit_id then
@@ -1679,7 +1695,8 @@ function GitStatus:_init_branch_menu()
           args = {
             "git_branches",
             "cwd=" .. vim.fn.fnameescape(self._git.path),
-        }}
+          },
+        }
       elseif vim.fn.exists ":FzfLua" > 0 then
         self:unmount()
         vim.cmd {
@@ -1687,7 +1704,7 @@ function GitStatus:_init_branch_menu()
           args = {
             "git_branches",
             "cwd=" .. vim.fn.fnameescape(self._git.path),
-          }
+          },
         }
       else
         notifier.error "No Telescope or FzfLua found!"
