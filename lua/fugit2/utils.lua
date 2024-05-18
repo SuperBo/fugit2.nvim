@@ -19,6 +19,9 @@ M.LINUX_SIGNALS = {
 ---@type string
 M.KEY_ESC = vim.api.nvim_replace_termcodes("<esc>", true, false, true)
 
+-- temp dir
+M.TMPDIR = os.getenv "TMPDIR" or "/tmp/"
+
 ---@param str string
 function M.lines_head(str)
   local newline = str:find("\n", 1, true)

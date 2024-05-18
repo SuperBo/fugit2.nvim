@@ -1,11 +1,25 @@
 ---Module contains libgit2 with gpgme integration
 
+local uv = vim.loop
 local PlenaryJob = require "plenary.job"
 
 local gpgme = require "fugit2.gpgme"
 local utils = require "fugit2.utils"
 
 local M = {}
+
+---@param keyid string
+---@return boolean whether is literal key
+---@return string key
+local function is_literal_ssh_key(keyid)
+  if vim.startswith(keyid, "key::") then
+    return true, keyid:sub(6)
+  elseif vim.startswith(keyid, "ssh-") then
+    return true, keyid
+  end
+
+  return false, keyid
+end
 
 ---@param keyid string?
 ---@return GPGmeContext?
@@ -33,6 +47,60 @@ local function create_gpgme_context(keyid)
   end
 
   return context, 0, ""
+end
+
+---@param buf string
+---@param keyid string signing_key
+---@return string? signed
+---@return integer err
+---@return string err_msg
+local function sign_buffer_ssh(buf, keyid)
+  local key_file, err_msg, err_name
+
+  local is_literal, key = is_literal_ssh_key(keyid)
+  if is_literal then
+    -- make tmp file
+    local path, nbytes
+    key_file, path, err_name = uv.fs_mkstemp(utils.TMPDIR .. ".git_signing_key_tmpXXXXXX")
+    if not key_file then
+      return nil, 0, "Can't create temp file " .. err_name
+    end
+
+    nbytes, err_msg, err_name = uv.fs_write(key_file, key, 0)
+    if not nbytes then
+      uv.fs_close(key_file)
+      os.remove(path)
+      return nil, 0, "Can't write to temp file " .. err_name
+    end
+
+    keyid = path
+  end
+
+  local ssh_keygen_args = { "-Y", "sign", "-n", "git", "-f", keyid }
+  if is_literal then
+    ssh_keygen_args[#ssh_keygen_args + 1] = "-U"
+  end
+
+  local job = PlenaryJob:new {
+    command = "ssh-keygen",
+    args = ssh_keygen_args,
+    enable_recording = true,
+    writer = buf,
+  }
+  local result, err = job:sync(2000, 200) -- wait upto 2 seconds
+
+  if key_file then
+    uv.fs_close(key_file)
+    os.remove(keyid)
+  end
+
+  if err ~= 0 then
+    result = job:stderr_result()
+    local stderr = #result > 0 and result[1] or ""
+    return nil, err, stderr
+  end
+
+  return table.concat(result, "\n"), 0, ""
 end
 
 ---@param repo GitRepository
@@ -86,20 +154,11 @@ end
 ---@return integer err
 ---@return string err_msg
 local function create_commit_with_ssh(repo, commit_content, msg, keyid)
-  local job = PlenaryJob:new {
-    command = "ssh-keygen",
-    args = { "-Y", "sign", "-n", "git", "-f", keyid },
-    enable_recording = true,
-    writer = commit_content,
-  }
-  local result, err = job:sync(2000, 200) -- wait upto 2 seconds
-  if err ~= 0 then
-    result = job:stderr_result()
-    local stderr = #result > 0 and result[1] or ""
-    return nil, err, "Failed to sign commit with ssh, " .. stderr
+  local ssh_sign, err, err_msg = sign_buffer_ssh(commit_content, keyid)
+  if not ssh_sign then
+    return nil, err, "Failed to sign commit with ssh, " .. err_msg
   end
 
-  local ssh_sign = table.concat(result, "\n")
   return create_commit_with_sign(repo, commit_content, ssh_sign, msg)
 end
 
