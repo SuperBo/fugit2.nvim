@@ -9,9 +9,20 @@ local BranchView = require "fugit2.view.components.branch_tree_view"
 local LogView = require "fugit2.view.components.commit_log_view"
 local git2 = require "fugit2.git2"
 local utils = require "fugit2.utils"
+local notifier = require "fugit2.notifier"
+
 
 local BRANCH_WINDOW_WIDTH = 36
 local GIT_OID_LENGTH = 16
+
+
+---@enum Fugit2GitGraphEntity
+local ENTITY = {
+  BRANCH_LOCAL = 1,
+  BRANCH_REMOTE = 2,
+  BRANCH_LOCAL_REMOTE = 3,
+  TAG = 4,
+}
 
 ---@class Fugit2GitGraphView
 ---@field branch_popup NuiPopup Branch popup.
@@ -28,7 +39,9 @@ function GitGraph:init(ns_id, repo)
     error "[Fugit2] Null repo"
   end
 
-  self.views = {
+  self.ns_id = ns_id
+
+  self._views = {
     branch = BranchView(ns_id, BRANCH_WINDOW_WIDTH),
     log = LogView(ns_id, " 󱁉 Commits Log ", true),
   }
@@ -60,14 +73,17 @@ function GitGraph:init(ns_id, repo)
       size = { width = "80%", height = "80%" },
     },
     NuiLayout.Box({
-      NuiLayout.Box(self.views.branch.popup, { size = BRANCH_WINDOW_WIDTH }),
-      NuiLayout.Box(self.views.log.popup, { grow = 1 }),
+      NuiLayout.Box(self._views.branch.popup, { size = BRANCH_WINDOW_WIDTH }),
+      NuiLayout.Box(self._views.log.popup, { grow = 1 }),
     }, { dir = "row" })
   )
-  self._last_branch_linenr = -1
+  self._states = {
+    entity = ENTITY.BRANCH_LOCAL,
+    last_branch_linenr = -1
+  }
 
   self:setup_handlers()
-  self:update()
+  -- self:update()
 end
 
 ---Updates git branch and commits.
@@ -79,20 +95,50 @@ function GitGraph:update()
   local repo = self.repo
   local git = self._git
 
-  -- Gets all branches ,head and remote default branch
-  local branches, default_branch, remote, head, err
+  -- Gets all branches, head and remote default branch
+  local default_branch, remote, head, err
 
   head, _ = repo:head()
   if not head then
-    vim.notify("[Fugit2] Failed to get repo head!", vim.log.levels.ERROR)
+    notifier.error("Failed to get repo head!")
     return
   end
 
-  branches, err = repo:branches(true, false)
-  if branches then
-    self.views.branch:update(branches, head.name)
+  local entity_type = self._states.entity
+  if entity_type > 0 and entity_type < ENTITY.TAG then
+    self._views.branch:set_branch_title()
+
+    local branches
+
+    if entity_type == ENTITY.BRANCH_LOCAL then
+      branches, err = repo:branches(true, false)
+    elseif entity_type == ENTITY.BRANCH_REMOTE then
+      branches, err = repo:branches(false, true)
+    elseif entity_type == ENTITY.BRANCH_LOCAL_REMOTE then
+      branches, err = repo:branches(true, true)
+    end
+
+    if branches then
+      self._views.branch:update_branches(branches, head.name)
+    else
+      notifier.error("Failed to get branches list", err)
+      return
+    end
+  elseif self._states.entity == ENTITY.TAG then
+    self._views.branch:set_tag_title()
+
+    local tags
+    tags, err = repo:tag_list()
+    if tags then
+      table.sort(tags, function(a, b) return a > b end)
+      self._views.branch:update_tags(tags)
+    else
+      notifier.error("Failed to get git tags", err)
+      return
+    end
   else
-    vim.notify("[Fugit2] Failed to get branches list, error: " .. err, vim.log.levels.ERROR)
+    notifier.error("Wrong Git entity")
+    return
   end
 
   remote, err = repo:remote_default()
@@ -114,12 +160,12 @@ function GitGraph:update()
     git.remote_icons[remote_name] = r and utils.get_git_icon(r.url) or nil
   end)
 
-  if self._last_branch_linenr == -1 then
+  if self._states.last_branch_linenr == -1 then
     self:update_log(head.name)
   else
-    local node, linenr = self.views.branch:get_child_node_linenr()
+    local node, linenr = self._views.branch:get_child_node_linenr()
     if node and linenr then
-      self._last_branch_linenr = linenr
+      self._states.last_branch_linenr = linenr
       self:update_log(node.id)
     end
   end
@@ -137,7 +183,7 @@ function GitGraph:update_log(refname)
   tip = self._git.refs[refname]
   commit_list = self._git.commits[tip]
   if tip and commit_list then
-    self.views.log:update(commit_list, self._git.remote_icons)
+    self._views.log:update(commit_list, self._git.remote_icons)
     return
   elseif not tip then
     oid, _ = self.repo:reference_name_to_id(refname)
@@ -151,7 +197,7 @@ function GitGraph:update_log(refname)
 
     commit_list = self._git.commits[tip]
     if commit_list then
-      self.views.log:update(commit_list, self._git.remote_icons)
+      self._views.log:update(commit_list, self._git.remote_icons)
       return
     end
   end
@@ -222,36 +268,43 @@ function GitGraph:update_log(refname)
 
   -- cache commits list with head oid
   self._git.commits[tip] = commit_list
-  self.views.log:update(commit_list, self._git.remote_icons)
+  self._views.log:update(commit_list, self._git.remote_icons)
 end
 
 -- Renders content for NuiGitGraph.
 function GitGraph:render()
-  self.views.branch:render()
-  self.views.log:render()
+  self._views.branch:render()
+  self._views.log:render()
 end
 
 function GitGraph:mount()
+  self:update()
   self._layout:mount()
-  local linenr = self.views.branch:scroll_to_active_branch()
+  self:render()
+  local linenr = self._views.branch:scroll_to_active_branch()
   if linenr then
-    self._last_branch_linenr = linenr
+    self._states.last_branch_linenr = linenr
   end
 end
 
 function GitGraph:unmount()
   self._layout:unmount()
+  self.ns_id = nil
+  self._views = nil
+  self.repo = nil
+  self._git = nil
+  self._layout = nil
 end
 
 ---Set callback to be called when user select commit
 ---@param callback fun(commit: Fugit2GitGraphCommitNode)
 function GitGraph:on_commit_select(callback)
-  local log_view = self.views.log
+  local log_view = self._views.log
   self._commit_select_fn = callback
 
   -- commit select
   log_view:map("n", { "<cr>", "<space>" }, function()
-    local commit = self.views.log:get_commit()
+    local commit = self._views.log:get_commit()
     if commit then
       self:unmount()
       callback(commit)
@@ -262,7 +315,7 @@ end
 ---Set call be called when user select branch
 ---@param callback fun(branch: string)
 function GitGraph:on_branch_select(callback)
-  local branch_view = self.views.branch
+  local branch_view = self._views.branch
   self._branch_select_fn = callback
 
   -- branch select
@@ -279,15 +332,13 @@ end
 -- Setups keymap handlers
 function GitGraph:setup_handlers()
   local map_options = { noremap = true, nowait = true }
-  local log_view = self.views.log
-  local branch_view = self.views.branch
+  local log_view = self._views.log
+  local branch_view = self._views.branch
 
   -- exit func
   local exit_fn = function()
     self.repo:free_walker() -- free cached walker
     self:unmount()
-    self.views = nil
-    self._git = nil
   end
   log_view:map("n", "q", exit_fn, map_options)
   log_view:map("n", "<esc>", exit_fn, map_options)
@@ -315,8 +366,8 @@ function GitGraph:setup_handlers()
   -- move cursor
   branch_view:on(event.CursorMoved, function()
     local node, linenr = branch_view:get_child_node_linenr()
-    if node and linenr and linenr ~= self._last_branch_linenr then
-      self._last_branch_linenr = linenr
+    if node and linenr and linenr ~= self._states.last_branch_linenr then
+      self._states.last_branch_linenr = linenr
       self:update_log(node.id)
       self:render()
     end

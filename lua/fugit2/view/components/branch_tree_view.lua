@@ -7,6 +7,7 @@ local NuiTree = require "nui.tree"
 local Object = require "nui.object"
 
 local utils = require "fugit2.utils"
+local git2 = require "fugit2.git2"
 
 -- ===============
 -- | Branch Tree |
@@ -21,13 +22,14 @@ local GitBranchTree = Object "Fugit2GitBranchTree"
 
 ---@param ns_id integer
 ---@param width integer?
-function GitBranchTree:init(ns_id, width)
+---@param enter boolean
+function GitBranchTree:init(ns_id, width, enter)
   self.ns_id = ns_id
   self.width = width or BRANCH_ENTRY_PADDING
 
   self.popup = NuiPopup {
     ns_id = ns_id,
-    enter = false,
+    enter = enter and true or false,
     border = {
       style = "rounded",
       padding = { top = 0, bottom = 0, left = 1, right = 1 },
@@ -77,11 +79,22 @@ function GitBranchTree._prepare_node(padding)
       local format_str = "%s %-" .. (padding - node:get_depth() * 2) .. "s%s"
       line:append(string.format(format_str, "󱓏", node.text, "󱕦"), "Fugit2BranchHead")
     else
-      line:append("󰘬 " .. node.text)
+      local icon = utils.get_git_namespace_icon(git2.reference_name_namespace(node.id))
+      line:append(icon .. node.text)
     end
 
     return line
   end
+end
+
+function GitBranchTree:set_branch_title()
+  local title = NuiText(" 󰳐 Branches ", "Fugit2FloatTitle")
+  self.popup.border:set_text("top", title)
+end
+
+function GitBranchTree:set_tag_title()
+  local title = NuiText("  Tags ", "Fugit2FloatTitle")
+  self.popup.border:set_text("top", title)
 end
 
 function GitBranchTree:winid()
@@ -132,10 +145,20 @@ end
 
 ---@param branches GitBranch[]
 ---@param active_branch string?
-function GitBranchTree:update(branches, active_branch)
+function GitBranchTree:update_branches(branches, active_branch)
   local dir_tree = utils.build_dir_tree(branch_path, branches)
   local nodes = utils.build_nui_tree_nodes(branch_node(active_branch), dir_tree)
   self._active_branch = active_branch
+  self.tree:set_nodes(nodes)
+end
+
+---@param tags string[]
+function GitBranchTree:update_tags(tags)
+  local nodes = {}
+  for i, t in ipairs(tags) do
+    nodes[i] = NuiTree.Node({ id = "refs/tags/" .. t, text = t })
+  end
+  self._active_branch = nil
   self.tree:set_nodes(nodes)
 end
 

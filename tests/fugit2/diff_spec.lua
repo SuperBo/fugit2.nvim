@@ -1,3 +1,5 @@
+-- Test  diff util module
+
 local context = require "plenary.context_manager"
 local diff = require "fugit2.diff"
 local git2 = require "fugit2.git2"

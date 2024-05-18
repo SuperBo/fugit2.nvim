@@ -543,6 +543,7 @@ ffi.cdef [[
   int git_tag_lookup(git_tag **out, git_repository *repo, const git_oid *id);
   const char * git_tag_name(const git_tag *tag);
   void git_tag_free(git_tag *tag);
+  int git_tag_list(git_strarray *tag_names, git_repository *repo);
 
   int git_annotated_commit_from_ref(git_annotated_commit **out, git_repository *repo, const git_reference *ref);
   int git_annotated_commit_from_revspec(git_annotated_commit **out, git_repository *repo, const char *revspec);

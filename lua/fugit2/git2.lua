@@ -2187,6 +2187,29 @@ function Repository:branches(locals, remotes)
 end
 
 
+-- Listings tags of a repo.
+---@return string[]?
+---@return GIT_ERROR
+function Repository:tags()
+  local tag_names = libgit2.git_strarray()
+
+  local err = libgit2.C.git_tag_list(tag_names, self.repo)
+  if err ~= 0 then
+    return nil, err
+  end
+
+  local tags = {}
+  local ntags = tonumber(tag_names[0].count) or 0
+  for i = 0,ntags-1 do
+    tags[i+1] = ffi.string(tag_names[0].strings[i])
+  end
+
+  libgit2.C.git_strarray_dispose(tag_names)
+
+  return tags, 0
+end
+
+
 -- Calculates ahead and behind information.
 ---@param local_commit GitObjectId The commit which is considered the local or current state.
 ---@param upstream_commit GitObjectId The commit which is considered upstream.
