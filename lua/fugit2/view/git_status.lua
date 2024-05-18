@@ -825,12 +825,11 @@ function GitStatus:read_config()
 end
 
 -- Read gpg config use_ssh and keyid
----@return boolean use_ssh
----@return string? keyid
+---@return Fugit2GitGPGConfig
 function GitStatus:read_gpg_config()
   local config = self:read_config()
   if not config then
-    return false, nil
+    return { use_ssh = false }
   end
 
   local keyid = config:get_string "user.signingkey" or nil
@@ -841,7 +840,11 @@ function GitStatus:read_gpg_config()
     keyid = tostring(self._git.signature)
   end
 
-  return use_ssh, keyid
+  return {
+    use_ssh = use_ssh,
+    keyid = keyid,
+    program = config:get_string "gpg.ssh.program" or nil,
+  }
 end
 
 -- Updates git status.
@@ -1265,10 +1268,10 @@ function GitStatus:_git_create_commit(message, args)
         result.err = err
       else
         -- create commit with gpg sign
-        local use_ssh, keyid = self:read_gpg_config()
+        local conf = self:read_gpg_config()
         local err_msg
         commit_id, err, err_msg =
-          git_gpg.create_commit_gpg(self.repo, self.index, self._git.signature, prettified, use_ssh, keyid)
+          git_gpg.create_commit_gpg(self.repo, self.index, self._git.signature, prettified, conf)
         result.commit_id = commit_id
         result.err = err
         result.message = err_msg
@@ -1302,8 +1305,8 @@ function GitStatus:_git_extend_commit(args)
     commit_id, err = self.repo:amend_extend(self.index)
   else
     -- extend commit with gpg sign
-    local use_ssh, keyid = self:read_gpg_config()
-    commit_id, err, err_msg = git_gpg.extend_commit_gpg(self.repo, self.index, use_ssh, keyid)
+    local conf = self:read_gpg_config()
+    commit_id, err, err_msg = git_gpg.extend_commit_gpg(self.repo, self.index, conf)
   end
 
   if commit_id then
@@ -1340,8 +1343,8 @@ function GitStatus:_git_reword_commit(message, args)
     commit_id, err = self.repo:amend_reword(signature, prettified)
   else
     -- reword commit with gpg sign
-    local use_ssh, keyid = self:read_gpg_config()
-    commit_id, err, err_msg = git_gpg.reword_commit_gpg(self.repo, signature, prettified, use_ssh, keyid)
+    local conf = self:read_gpg_config()
+    commit_id, err, err_msg = git_gpg.reword_commit_gpg(self.repo, signature, prettified, conf)
   end
 
   if commit_id then
@@ -1380,8 +1383,8 @@ function GitStatus:_git_amend_commit(message, args)
   if not gpg_sign then
     commit_id, err = self.repo:amend(self.index, self._git.signature, prettified)
   else
-    local use_ssh, keyid = self:read_gpg_config()
-    commit_id, err, err_msg = git_gpg.amend_commit_gpg(self.repo, self.index, signature, prettified, use_ssh, keyid)
+    local conf = self:read_gpg_config()
+    commit_id, err, err_msg = git_gpg.amend_commit_gpg(self.repo, self.index, signature, prettified, conf)
   end
 
   if commit_id then

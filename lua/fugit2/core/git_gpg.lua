@@ -8,6 +8,11 @@ local utils = require "fugit2.utils"
 
 local M = {}
 
+---@class Fugit2GitGPGConfig
+---@field use_ssh boolean
+---@field keyid string?
+---@field program string?
+
 ---@param keyid string
 ---@return boolean whether is literal key
 ---@return string key
@@ -51,10 +56,11 @@ end
 
 ---@param buf string
 ---@param keyid string signing_key
+---@param program string?
 ---@return string? signed
 ---@return integer err
 ---@return string err_msg
-local function sign_buffer_ssh(buf, keyid)
+local function sign_buffer_ssh(buf, keyid, program)
   local key_file, err_msg, err_name
 
   local is_literal, key = is_literal_ssh_key(keyid)
@@ -82,7 +88,7 @@ local function sign_buffer_ssh(buf, keyid)
   end
 
   local job = PlenaryJob:new {
-    command = "ssh-keygen",
+    command = program or "ssh-keygen",
     args = ssh_keygen_args,
     enable_recording = true,
     writer = buf,
@@ -150,11 +156,12 @@ end
 ---@param commit_content string
 ---@param msg string
 ---@param keyid string
+---@param program string?
 ---@return GitObjectId?
 ---@return integer err
 ---@return string err_msg
-local function create_commit_with_ssh(repo, commit_content, msg, keyid)
-  local ssh_sign, err, err_msg = sign_buffer_ssh(commit_content, keyid)
+local function create_commit_with_ssh(repo, commit_content, msg, keyid, program)
+  local ssh_sign, err, err_msg = sign_buffer_ssh(commit_content, keyid, program)
   if not ssh_sign then
     return nil, err, "Failed to sign commit with ssh, " .. err_msg
   end
@@ -167,20 +174,19 @@ end
 ---@param index GitIndex
 ---@param signature GitSignature
 ---@param msg string commit message
----@param use_ssh boolean,
----@param keyid string? signing key id
+---@param config Fugit2GitGPGConfig
 ---@return GitObjectId?
 ---@return integer err_code
 ---@return string err_msg
-function M.create_commit_gpg(repo, index, signature, msg, use_ssh, keyid)
+function M.create_commit_gpg(repo, index, signature, msg, config)
   local context, commit_content, err, err_msg
 
-  if use_ssh and not keyid then
+  if config.use_ssh and not config.keyid then
     return nil, -1, "user.signingkey is need when gpg.format is ssh"
   end
 
-  if not use_ssh then
-    context, err, err_msg = create_gpgme_context(keyid)
+  if not config.use_ssh then
+    context, err, err_msg = create_gpgme_context(config.keyid)
     if not context then
       return nil, err, err_msg
     end
@@ -191,10 +197,10 @@ function M.create_commit_gpg(repo, index, signature, msg, use_ssh, keyid)
     return nil, err, "Failed to create git commit content"
   end
 
-  if not use_ssh and context then
+  if not config.use_ssh and context then
     return create_commit_with_context(repo, context, commit_content, msg)
-  elseif keyid then
-    return create_commit_with_ssh(repo, commit_content, msg, keyid)
+  elseif config.keyid then
+    return create_commit_with_ssh(repo, commit_content, msg, config.keyid, config.program)
   end
 
   return nil, -1, "unknown error"
@@ -205,20 +211,19 @@ end
 ---@param index GitIndex?
 ---@param signature GitSignature?
 ---@param msg string? commit message
----@param use_ssh boolean use ssh signing instead of gpg
----@param keyid string? signing key id
+---@param config Fugit2GitGPGConfig
 ---@return GitObjectId?
 ---@return integer err_code
 ---@return string err_msg
-function M.amend_commit_gpg(repo, index, signature, msg, use_ssh, keyid)
+function M.amend_commit_gpg(repo, index, signature, msg, config)
   local context, commit_content, err, err_msg
 
-  if use_ssh and not keyid then
+  if config.use_ssh and not config.keyid then
     return nil, -1, "user.signingkey is need when gpg.format is ssh"
   end
 
-  if not use_ssh then
-    context, err, err_msg = create_gpgme_context(keyid)
+  if not config.use_ssh then
+    context, err, err_msg = create_gpgme_context(config.keyid)
     if not context then
       return nil, err, err_msg
     end
@@ -229,10 +234,10 @@ function M.amend_commit_gpg(repo, index, signature, msg, use_ssh, keyid)
     return nil, err, "Failed to create git commit content"
   end
 
-  if not use_ssh and context then
+  if not config.use_ssh and context then
     return create_commit_with_context(repo, context, commit_content, msg)
-  elseif keyid then
-    return create_commit_with_ssh(repo, commit_content, msg, keyid)
+  elseif config.keyid then
+    return create_commit_with_ssh(repo, commit_content, msg, config.keyid, config.program)
   end
 
   return nil, -1, "unknown error"
@@ -242,25 +247,23 @@ end
 ---@param repo GitRepository
 ---@param signature GitSignature?
 ---@param msg string? commit message
----@param use_ssh boolean use ssh signing instead of gpg
----@param keyid string? signing key id
+---@param config Fugit2GitGPGConfig
 ---@return GitObjectId?
 ---@return integer err_code
 ---@return string err_msg
-function M.reword_commit_gpg(repo, signature, msg, use_ssh, keyid)
-  return M.amend_commit_gpg(repo, nil, signature, msg, use_ssh, keyid)
+function M.reword_commit_gpg(repo, signature, msg, config)
+  return M.amend_commit_gpg(repo, nil, signature, msg, config)
 end
 
 -- Extend commit with gpg signing
 ---@param repo GitRepository
 ---@param index GitIndex
----@param use_ssh boolean use ssh signing instead of gpg
----@param keyid string? signing key id
+---@param config Fugit2GitGPGConfig
 ---@return GitObjectId?
 ---@return integer err_code
 ---@return string err_msg
-function M.extend_commit_gpg(repo, index, use_ssh, keyid)
-  return M.amend_commit_gpg(repo, index, nil, nil, use_ssh, keyid)
+function M.extend_commit_gpg(repo, index, config)
+  return M.amend_commit_gpg(repo, index, nil, nil, config)
 end
 
 return M
