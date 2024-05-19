@@ -1,3 +1,5 @@
+local table_clear = require("table.clear")
+
 local NuiLine = require "nui.line"
 local NuiText = require "nui.text"
 local NuiTree = require "nui.tree"
@@ -471,9 +473,10 @@ end
 ---@generic T
 ---@param lst T[]
 function M.list_clear(lst)
-  for i = #lst, 1, -1 do
-    lst[i] = nil
-  end
+  -- for i = #lst, 1, -1 do
+  --   lst[i] = nil
+  -- end
+  table_clear(lst)
   return lst
 end
 

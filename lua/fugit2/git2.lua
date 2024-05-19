@@ -1,4 +1,5 @@
 local ffi = require "ffi"
+local table_new = require "table.new"
 local libgit2 = require "fugit2.libgit2"
 local stat = require "fugit2.core.stat"
 
@@ -763,8 +764,8 @@ end
 -- Gets the oids of all parents
 ---@return GitObjectId[]
 function Commit:parent_oids()
-  local parents = {}
   local nparents = self:nparents()
+  local parents = table_new(nparents, 0)
   if nparents < 1 then
     return parents
   end
@@ -1496,10 +1497,10 @@ end
 ---@return GitDiffPatchItem[]
 ---@return GIT_ERROR
 function Diff:patches(sort_case_sensitive)
-  local patches = {}
+  local num_deltas = tonumber(libgit2.C.git_diff_num_deltas(self.diff)) or 0
+  local patches = table_new(num_deltas, 0)
   local err = 0
 
-  local num_deltas = tonumber(libgit2.C.git_diff_num_deltas(self.diff))
   for i=0,num_deltas-1 do
     local delta = libgit2.C.git_diff_get_delta(self.diff, i)
 
@@ -2190,7 +2191,7 @@ end
 -- Listings tags of a repo.
 ---@return string[]?
 ---@return GIT_ERROR
-function Repository:tags()
+function Repository:tag_list()
   local tag_names = libgit2.git_strarray()
 
   local err = libgit2.C.git_tag_list(tag_names, self.repo)
@@ -2198,8 +2199,9 @@ function Repository:tags()
     return nil, err
   end
 
-  local tags = {}
   local ntags = tonumber(tag_names[0].count) or 0
+  local tags = table_new(ntags, 0)
+
   for i = 0,ntags-1 do
     tags[i+1] = ffi.string(tag_names[0].strings[i])
   end
@@ -2458,8 +2460,9 @@ function Repository:remote_list()
     return nil, err
   end
 
-  local remotes = {} --[[@as string[] ]]
   local num_remotes = tonumber(strarr[0].count) or 0
+  local remotes = table_new(num_remotes, 0)
+
   for i = 0,num_remotes-1 do
     remotes[i+1] = ffi.string(strarr[0].strings[i])
   end
@@ -2604,9 +2607,9 @@ function Repository:status()
     return nil, err
   end
 
-  local n_entry = tonumber(libgit2.C.git_status_list_entrycount(status[0]))
+  local n_entry = tonumber(libgit2.C.git_status_list_entrycount(status[0])) or 0
   ---@type GitStatusItem[]
-  local status_list = {}
+  local status_list = table_new(n_entry, 0)
 
   -- Iterate through git status list
   for i = 0,n_entry-1 do
