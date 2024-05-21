@@ -67,7 +67,7 @@ local function sign_buffer_ssh(buf, keyid, program)
   if is_literal then
     -- make tmp file
     local path, nbytes
-    key_file, path, err_name = uv.fs_mkstemp(utils.TMPDIR .. ".git_signing_key_tmpXXXXXX")
+    key_file, path, err_name = uv.fs_mkstemp(tostring(utils.TMPDIR / ".git_signing_key_tmpXXXXXX"))
     if not key_file then
       return nil, 0, "Can't create temp file " .. err_name
     end

@@ -1,6 +1,8 @@
 local NuiLine = require "nui.line"
 local NuiText = require "nui.text"
 local NuiTree = require "nui.tree"
+local Path = require "plenary.path"
+
 local git2 = require "fugit2.git2"
 
 ---@class Fugit2Utils
@@ -20,7 +22,7 @@ M.LINUX_SIGNALS = {
 M.KEY_ESC = vim.api.nvim_replace_termcodes("<esc>", true, false, true)
 
 -- temp dir
-M.TMPDIR = os.getenv "TMPDIR" or "/tmp/"
+M.TMPDIR = Path:new(os.getenv "TMPDIR" or "/tmp/")
 
 ---@param str string
 function M.lines_head(str)
