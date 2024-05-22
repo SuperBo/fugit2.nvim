@@ -1,4 +1,4 @@
-local table_clear = require("table.clear")
+local table_clear = require "table.clear"
 
 local NuiLine = require "nui.line"
 local NuiText = require "nui.text"
