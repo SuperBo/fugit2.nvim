@@ -8,13 +8,11 @@ local iter = require "plenary.iterators"
 local BranchView = require "fugit2.view.components.branch_tree_view"
 local LogView = require "fugit2.view.components.commit_log_view"
 local git2 = require "fugit2.git2"
-local utils = require "fugit2.utils"
 local notifier = require "fugit2.notifier"
-
+local utils = require "fugit2.utils"
 
 local BRANCH_WINDOW_WIDTH = 36
 local GIT_OID_LENGTH = 16
-
 
 ---@enum Fugit2GitGraphEntity
 local ENTITY = {
@@ -31,6 +29,8 @@ local ENTITY = {
 ---@field repo GitRepository
 local GitGraph = Object "Fugit2GitGraphView"
 
+GitGraph.ENTITY = ENTITY
+
 ---Inits NuiGitGraph.
 ---@param ns_id integer
 ---@param repo GitRepository
@@ -41,10 +41,15 @@ function GitGraph:init(ns_id, repo)
 
   self.ns_id = ns_id
 
-  self._views = {
+  local views = {
     branch = BranchView(ns_id, BRANCH_WINDOW_WIDTH),
     log = LogView(ns_id, " 󱁉 Commits Log ", true),
   }
+  if self._views then
+    self._views = vim.tbl_extend("keep", views, self._views)
+  else
+    self._views = views
+  end
 
   self.repo = repo
 
@@ -79,7 +84,8 @@ function GitGraph:init(ns_id, repo)
   )
   self._states = {
     entity = ENTITY.BRANCH_LOCAL,
-    last_branch_linenr = -1
+    last_branch_linenr = -1,
+    contents = {},
   }
 
   self:setup_handlers()
@@ -100,7 +106,7 @@ function GitGraph:update()
 
   head, _ = repo:head()
   if not head then
-    notifier.error("Failed to get repo head!")
+    notifier.error "Failed to get repo head!"
     return
   end
 
@@ -120,6 +126,8 @@ function GitGraph:update()
 
     if branches then
       self._views.branch:update_branches(branches, head.name)
+      self._states.contents = branches
+      self._states.active = head.name
     else
       notifier.error("Failed to get branches list", err)
       return
@@ -130,14 +138,17 @@ function GitGraph:update()
     local tags
     tags, err = repo:tag_list()
     if tags then
-      table.sort(tags, function(a, b) return a > b end)
+      table.sort(tags, function(a, b)
+        return a > b
+      end)
+      self._states.contents = tags
       self._views.branch:update_tags(tags)
     else
       notifier.error("Failed to get git tags", err)
       return
     end
   else
-    notifier.error("Wrong Git entity")
+    notifier.error "Wrong Git entity"
     return
   end
 
@@ -169,6 +180,11 @@ function GitGraph:update()
       self:update_log(node.id)
     end
   end
+end
+
+-- Clear log commits
+function GitGraph:clear_log()
+  self._views.log:clear()
 end
 
 ---Updates log commits
@@ -291,6 +307,7 @@ function GitGraph:unmount()
   self._layout:unmount()
   self.ns_id = nil
   self._views = nil
+  self._states = nil
   self.repo = nil
   self._git = nil
   self._layout = nil

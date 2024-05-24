@@ -25,6 +25,7 @@ M.link_colors = {
   Fugit2Count = "Number",
   Fugit2Insertions = "diffAdded",
   Fugit2Deletions = "diffRemoved",
+  Fugit2Match = "Type",
   Fugit2WindowHelp = "Comment",
   Fugit2MenuHead = "Function",
   Fugit2MenuKey = "Keyword",

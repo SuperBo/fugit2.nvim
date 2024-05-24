@@ -160,6 +160,12 @@ function CommitLogView:winid()
   return self.popup.winid
 end
 
+-- Clear buffer content
+function CommitLogView:clear()
+  self._commits = {}
+  self._commit_lines = {}
+end
+
 ---Updates buffer content with commit log
 ---@param commits Fugit2GitGraphCommitNode[]
 ---@param remote_icons { [string]: string }

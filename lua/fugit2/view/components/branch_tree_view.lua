@@ -6,14 +6,18 @@ local NuiText = require "nui.text"
 local NuiTree = require "nui.tree"
 local Object = require "nui.object"
 
-local utils = require "fugit2.utils"
 local git2 = require "fugit2.git2"
+local utils = require "fugit2.utils"
 
 -- ===============
 -- | Branch Tree |
 -- ===============
 
 local BRANCH_ENTRY_PADDING = 49
+
+---@class Fugit2GitBranchMatch
+---@field text string
+---@field pos integer[]
 
 ---@class Fugit2GitBranchTree
 ---@field bufnr integer
@@ -80,7 +84,25 @@ function GitBranchTree._prepare_node(padding)
       line:append(string.format(format_str, "󱓏", node.text, "󱕦"), "Fugit2BranchHead")
     else
       local icon = utils.get_git_namespace_icon(git2.reference_name_namespace(node.id))
-      line:append(icon .. node.text)
+      line:append(icon)
+
+      if not node.pos then
+        line:append(node.text)
+      else
+        -- Render for matches
+        local prev_j = 1
+        local raw_text = node.text
+        for _, j in ipairs(node.pos) do
+          if j > prev_j then
+            line:append(raw_text:sub(prev_j, j - 1))
+          end
+          line:append(raw_text:sub(j, j), "Fugit2Match")
+          prev_j = j + 1
+        end
+        if prev_j <= raw_text:len() then
+          line:append(raw_text:sub(prev_j))
+        end
+      end
     end
 
     return line
@@ -152,18 +174,47 @@ function GitBranchTree:update_branches(branches, active_branch)
   self.tree:set_nodes(nodes)
 end
 
+---@param branches table[]
+function GitBranchTree:update_branches_match(branches)
+  local nodes = {}
+  for i, bm in ipairs(branches) do
+    nodes[i] = NuiTree.Node {
+      id = bm.branch.name,
+      type = bm.branch.type,
+      text = bm.branch.shorthand,
+      pos = bm.pos,
+    }
+  end
+  self._active_branch = nil
+  self.tree:set_nodes(nodes)
+end
+
 ---@param tags string[]
 function GitBranchTree:update_tags(tags)
   local nodes = {}
   for i, t in ipairs(tags) do
-    nodes[i] = NuiTree.Node({ id = "refs/tags/" .. t, text = t })
+    nodes[i] = NuiTree.Node { id = "refs/tags/" .. t, text = t }
+  end
+  self._active_branch = nil
+  self.tree:set_nodes(nodes)
+end
+
+---@param tags Fugit2GitBranchMatch
+function GitBranchTree:update_tags_match(tags)
+  local nodes = {}
+  for i, tm in ipairs(tags) do
+    nodes[i] = NuiTree.Node {
+      id = "refs/tags/" .. tm.text,
+      text = tm.text,
+      pos = tm.pos,
+    }
   end
   self._active_branch = nil
   self.tree:set_nodes(nodes)
 end
 
 function GitBranchTree:render()
-  self.tree:render()
+  self.tree:render(1)
 end
 
 ---@return NuiTree.Node? node
@@ -200,6 +251,18 @@ function GitBranchTree:get_child_node_linenr()
   end
 
   return node, linenr
+end
+
+function GitBranchTree:set_cursor(linenr, col)
+  if vim.api.nvim_win_is_valid(self.popup.winid) then
+    local line_count = vim.api.nvim_buf_line_count(self.popup.bufnr)
+    local new_line = math.min(math.max(linenr, 1), line_count)
+    vim.api.nvim_win_set_cursor(self.popup.winid, { new_line, col })
+  end
+end
+
+function GitBranchTree:get_cursor()
+  return vim.api.nvim_win_get_cursor(self.popup.winid)
 end
 
 return GitBranchTree
