@@ -487,6 +487,7 @@ ffi.cdef [[
   int git_branch_upstream_remote(git_buf *buf, git_repository *repo, const char *refname);
   int git_branch_upstream_name(git_buf *out, git_repository *repo, const char *refname);
   int git_branch_lookup(git_reference **out, git_repository *repo, const char *branch_name, unsigned int branch_type);
+  int git_branch_create(git_reference **out, git_repository *repo, const char *branch_name, const git_commit *target, int force);
 
   int git_repository_open_ext(git_repository **out, const char *path, unsigned int flags, const char *ceiling_dirs);
   void git_repository_free(git_repository *repo);
@@ -498,6 +499,7 @@ ffi.cdef [[
   int git_repository_index(git_index **out, git_repository *repo);
   int git_repository_config(git_config **out, git_repository *repo);
   int git_repository_set_head(git_repository *repo, const char *refname);
+  int git_repository_set_head_detached(git_repository *repo, const git_oid *committish);
 
   void git_index_free(git_index *index);
   int git_index_read(git_index *index, int force);

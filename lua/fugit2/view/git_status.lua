@@ -15,7 +15,6 @@ local event = require("nui.utils.autocmd").event
 local GitStatusDiffBase = require "fugit2.view.git_base_view"
 local GitStatusTree = require "fugit2.view.components.file_tree_view"
 local LogView = require "fugit2.view.components.commit_log_view"
-local PatchView = require "fugit2.view.components.patch_view"
 local TreeBase = require "fugit2.view.components.base_tree_view"
 local UI = require "fugit2.view.components.menus"
 local git2 = require "fugit2.git2"
@@ -48,6 +47,12 @@ local CommitMode = {
   REWORD = 2,
   EXTEND = 3,
   AMEND = 4,
+}
+
+---@enum Fugit2GitStatusBranchMode
+local BranchMode = {
+  CREATE = 1,
+  CREATE_CHECKOUT = 2,
 }
 
 ---@enum Fugit2GitStatusMenu
@@ -204,29 +209,6 @@ function GitStatus:init(ns_id, repo, last_window, current_file, opts)
     buf_options = buf_readonly_opts,
   }
 
-  self.input_popup = NuiPopup {
-    ns_id = ns_id,
-    enter = true,
-    focusable = true,
-    border = {
-      style = "rounded",
-      padding = default_padding,
-      text = {
-        top = NuiText(" Create commit ", "Fugit2MessageHeading"),
-        top_align = "left",
-        bottom = NuiText("[Ctrl-c][󱊷 ][q]uit, [Ctrl 󰌑 ][󰌑 ]", "FloatFooter"),
-        bottom_align = "right",
-      },
-    },
-    win_options = {
-      winhighlight = win_hl,
-    },
-    buf_options = {
-      modifiable = true,
-      filetype = "gitcommit",
-    },
-  }
-
   self.command_popup = NuiPopup {
     ns_id = ns_id,
     enter = true,
@@ -265,16 +247,6 @@ function GitStatus:init(ns_id, repo, last_window, current_file, opts)
 
   -- setup others
 
-  vim.api.nvim_buf_set_extmark(self.input_popup.bufnr, self.ns_id, 0, 0, {
-    id = 1,
-    end_row = 0,
-    virt_text = {
-      { "commit message", "Comment" },
-    },
-    virt_text_pos = "right_align",
-    virt_text_hide = true,
-  })
-
   ---@type NuiLine[]
   self._status_lines = {}
 
@@ -304,6 +276,8 @@ function GitStatus:init(ns_id, repo, last_window, current_file, opts)
   -- state variables for UI
   ---@class Fugit2GitStatusInternal
   ---@field last_window integer
+  ---@field branch_mode Fugit2GitStatusBranchMode
+  ---@field branch_ref string?
   ---@field commit_mode Fugit2GitStatusCommitMode
   ---@field commit_args string[]?
   ---@field side_panel Fugit2GitStatusSidePanel
@@ -320,6 +294,7 @@ function GitStatus:init(ns_id, repo, last_window, current_file, opts)
   self._states = {
     last_window = last_window,
     current_file = current_file,
+    branch_mode = BranchMode.CREATE,
     commit_mode = CommitMode.CREATE,
     side_panel = SidePanel.NONE,
     file_entry_width = opts.content_width,
@@ -427,8 +402,12 @@ function GitStatus:_init_menus(menu_type)
   elseif menu_type == Menu.BRANCH then
     menu_title = NuiText(" Branching ", title_hl)
     menu_items = {
-      { texts = { NuiText("Checkout", head_hl) } },
-      { texts = { NuiText "Branch/revision" }, key = "b" },
+      { texts = { NuiText(" 󱀱 Checkout ", head_hl) } },
+      { texts = { NuiText "Branch/Revision" }, key = "b" },
+      { texts = { NuiText "Local" }, key = "l" },
+      { texts = { NuiText "New branch" }, key = "c" },
+      { texts = { NuiText("  Create ", head_hl) } },
+      { texts = { NuiText "New branch" }, key = "n" },
     }
     --   NuiMenu.separator(NuiText("Checkout", head_hl), menu_item_align),
     --   NuiMenu.item(NuiLine { NuiText("b ", key_hl), NuiText("Branch/revision") }, { id = "b" }),
@@ -551,6 +530,8 @@ end
 
 ---Inits Patch View popup
 function GitStatus:_init_patch_views()
+  local PatchView = require "fugit2.view.components.patch_view"
+
   local patch_unstaged = PatchView(self.ns_id, "Unstaged", "Fugit2Unstaged")
   local patch_staged = PatchView(self.ns_id, "Staged", "Fugit2Staged")
   local opts = { noremap = true, nowait = true }
@@ -1126,7 +1107,12 @@ function GitStatus:unmount()
 
   self._menus = {}
   self.command_popup:unmount()
-  self.input_popup:unmount()
+  if self.input_popup then
+    self.input_popup:unmount()
+  end
+  if self.branch_input then
+    self.branch_input:unmount()
+  end
   self._layout:unmount()
 
   vim.api.nvim_set_current_win(self._states.last_window)
@@ -1148,7 +1134,6 @@ function GitStatus:_remove_cached_states(node)
   self._git.unstaged_diff[node.id] = nil
 end
 
----@overload fun()
 function GitStatus:_refresh_views()
   local tree = self._views.files
   local states = self._states
@@ -1169,26 +1154,71 @@ function GitStatus:_refresh_views()
 end
 
 function GitStatus:focus_input()
+  local input_popup = self:get_input_popup()
+
   self._layout:update(NuiLayout.Box({
     NuiLayout.Box(self.info_popup, { size = 6 }),
-    NuiLayout.Box(self.input_popup, { size = 6 }),
+    NuiLayout.Box(input_popup, { size = 6 }),
     NuiLayout.Box(self._boxes.main_row, { dir = "row", grow = 1 }),
   }, { dir = "col" }))
-  vim.api.nvim_set_current_win(self.input_popup.winid)
+  vim.api.nvim_set_current_win(input_popup.winid)
+end
+
+function GitStatus:focus_command()
+  self._layout:update(NuiLayout.Box({
+    NuiLayout.Box(self.info_popup, { size = 6 }),
+    NuiLayout.Box(self.command_popup, { size = 6 }),
+    NuiLayout.Box(self._boxes.main_row, { dir = "row", grow = 1 }),
+  }, { dir = "col" }))
 end
 
 function GitStatus:focus_file()
   self._views.files:focus()
 end
 
+function GitStatus:focus_branch_input()
+  local input = self:get_branch_input()
+
+  self._layout:update(NuiLayout.Box({
+    NuiLayout.Box(self.info_popup, { size = 6 }),
+    NuiLayout.Box(input, { size = 3 }),
+    NuiLayout.Box(self._boxes.main_row, { dir = "row", grow = 1 }),
+  }, { dir = "col" }))
+end
+
+-- Creates branch from ref
+---@param ref string reference name to create from
+---@param checkout boolean checkout new branch
+function GitStatus:create_branch(ref, checkout)
+  local mode = checkout and BranchMode.CREATE_CHECKOUT or BranchMode.CREATE
+
+  self._states.branch_mode = mode
+  self._states.branch_ref = ref
+
+  local title = NuiLine()
+  title:append(checkout and " Create and checkout branch from " or " Create branch from ", "Fugit2MessageHeading")
+  title:append(git2.reference_name_shorthand(ref) .. " ", "Fugit2BranchHead")
+
+  self:get_branch_input().border:set_text("top", title, "left")
+
+  self:focus_branch_input()
+  vim.cmd.startinsert()
+end
+
 ---Hides input popup
----@param back_to_main boolean Reset back to main layout
-function GitStatus:hide_input(back_to_main)
-  vim.api.nvim_buf_set_lines(self.input_popup.bufnr, 0, -1, true, {})
+---@param reset_to_main boolean Reset back to main layout
+function GitStatus:hide_input(reset_to_main)
+  if self.input_popup then
+    vim.api.nvim_buf_set_lines(self.input_popup.bufnr, 0, -1, true, {})
+  end
+
+  if self.branch_input then
+    vim.api.nvim_buf_set_lines(self.branch_input.bufnr, -2, -1, true, { "" })
+  end
 
   local layout = self._layout
 
-  if back_to_main or self._states.side_panel == SidePanel.NONE then
+  if reset_to_main or self._states.side_panel == SidePanel.NONE then
     self._states.side_panel = SidePanel.NONE
     layout:update(self._layout_opts.main, self._boxes.main)
   else
@@ -1426,7 +1456,8 @@ function GitStatus:_set_input_popup_commit_title(init_str, include_changes, noti
     insertions > 0 and string.format(" +%d", insertions) or "",
     deletions > 0 and string.format(" -%d", deletions) or ""
   )
-  self.input_popup.border:set_text("top", NuiText(title, "Fugit2MessageHeading"), "left")
+
+  self:get_input_popup().border:set_text("top", NuiText(title, "Fugit2MessageHeading"), "left")
 end
 
 ---@param args string[]
@@ -1637,6 +1668,205 @@ function GitStatus:hide_patch_view()
   end
 end
 
+-- ======================
+-- | Commit input popup |
+-- ======================
+
+---@return NuiPopup
+function GitStatus:_init_input_popup()
+  local default_padding = {
+    top = 0,
+    bottom = 0,
+    left = 1,
+    right = 1,
+  }
+  local win_hl = "Normal:Normal,FloatBorder:FloatBorder"
+
+  local input_popup = NuiPopup {
+    ns_id = self.ns_id,
+    enter = true,
+    focusable = true,
+    border = {
+      style = "rounded",
+      padding = default_padding,
+      text = {
+        top = NuiText(" Create commit ", "Fugit2MessageHeading"),
+        top_align = "left",
+        bottom = NuiText("[Ctrl-c][󱊷 ][q]uit, [Ctrl 󰌑 ][󰌑 ]", "FloatFooter"),
+        bottom_align = "right",
+      },
+    },
+    win_options = {
+      winhighlight = win_hl,
+    },
+    buf_options = {
+      modifiable = true,
+      filetype = "gitcommit",
+    },
+  }
+
+  vim.api.nvim_buf_set_extmark(input_popup.bufnr, self.ns_id, 0, 0, {
+    id = 1,
+    end_row = 0,
+    virt_text = {
+      { "commit message", "Comment" },
+    },
+    virt_text_pos = "right_align",
+    virt_text_hide = true,
+  })
+
+  local opts = { noremap = true, nowait = true }
+  local states = self._states
+
+  input_popup:map("n", { "q", "<esc>" }, function()
+    self:hide_input(false)
+  end, opts)
+
+  input_popup:map("i", "<C-c>", "<esc>q", { nowait = true })
+
+  local input_enter_fn = function()
+    local message = vim.trim(table.concat(vim.api.nvim_buf_get_lines(self.input_popup.bufnr, 0, -1, true), "\n"))
+    if states.commit_mode == CommitMode.CREATE then
+      self:_git_create_commit(message, states.commit_args)
+    elseif states.commit_mode == CommitMode.REWORD then
+      self:_git_reword_commit(message, states.commit_args)
+    elseif states.commit_mode == CommitMode.AMEND then
+      self:_git_amend_commit(message, states.commit_args)
+    end
+
+    states.commit_args = nil
+  end
+  input_popup:map("n", "<cr>", input_enter_fn, opts)
+  input_popup:map("i", "<C-cr>", function()
+    vim.cmd.stopinsert()
+    input_enter_fn()
+  end, opts)
+
+  return input_popup
+end
+
+function GitStatus:get_input_popup()
+  local input = self.input_popup
+  if input then
+    return input
+  end
+
+  input = self:_init_input_popup()
+  self.input_popup = input
+  return input
+end
+
+-- ======================
+-- | Branch input popup |
+-- ======================
+
+---@return NuiPopup
+function GitStatus:_init_branch_input()
+  local default_padding = {
+    top = 0,
+    bottom = 0,
+    left = 1,
+    right = 1,
+  }
+  local win_hl = "Normal:Normal,FloatBorder:FloatBorder"
+  local input = NuiPopup {
+    ns_id = self.ns_id,
+    enter = true,
+    focusable = true,
+    border = {
+      style = "rounded",
+      padding = default_padding,
+      text = {
+        top = NuiText(" Create branch ", "Fugit2MessageHeading"),
+        top_align = "left",
+        bottom = NuiText("[Ctrl-c][󱊷 ][q]uit, [Ctrl 󰌑 ][󰌑 ]", "FloatFooter"),
+        bottom_align = "right",
+      },
+    },
+    win_options = {
+      winhighlight = win_hl,
+    },
+    buf_options = {
+      modifiable = true,
+      buftype = "prompt",
+    },
+  }
+
+  -- Create branch
+  vim.fn.prompt_setprompt(input.bufnr, " ")
+  vim.fn.prompt_setcallback(input.bufnr, function(name)
+    if name == "" then
+      notifier.warn "Emtpy branch name"
+      return
+    end
+
+    if not self._states.branch_ref then
+      notifier.error "Empty branch reference name"
+      self:hide_input(false)
+      return
+    end
+
+    local ref, err = self.repo:reference_lookup(self._states.branch_ref)
+    if not ref then
+      notifier.error("Fail to look up reference", err)
+      self:hide_input(false)
+      return
+    end
+
+    local commit
+    commit, err = ref:peel_commit()
+    if not commit then
+      notifier.error("Failed to convert reference to commit", err)
+      self:hide_input(false)
+      return
+    end
+
+    ref, err = self.repo:create_branch(name, commit, false)
+    if not ref then
+      notifier.error("Can't create new branch", err)
+      self:hide_input(false)
+      return
+    end
+
+    if self._states.branch_mode == BranchMode.CREATE_CHECKOUT then
+      err = self.repo:checkout(ref.name)
+      if err ~= 0 then
+        notifier.error("Can't checkout " .. ref.name, err)
+      else
+        notifier.info("Created and checked out " .. ref:shorthand())
+      end
+    else
+      notifier.info("New branch " .. ref:shorthand())
+    end
+
+    self:hide_input(true)
+    self:update()
+    self:render()
+  end)
+
+  local exit_fn = function()
+    self:hide_input(false)
+  end
+
+  local opts = { nowait = true, noremap = true }
+
+  vim.fn.prompt_setinterrupt(input.bufnr, exit_fn)
+  input:map("n", { "<esc>", "q" }, exit_fn, opts)
+
+  return input
+end
+
+function GitStatus:get_branch_input()
+  local input = self.branch_input
+  if input then
+    return input
+  end
+
+  input = self:_init_branch_input()
+  self.branch_input = input
+  return input
+end
+
 -- ================
 -- |  Forge Menu |
 -- ===============
@@ -1674,9 +1904,8 @@ function GitStatus:_init_diff_menu()
         self:unmount()
         vim.cmd { cmd = "DiffviewOpen", args = { "--selected-file=" .. vim.fn.fnameescape(node.id) } }
       else
-        local ui = require "fugit2.view.ui"
         self:unmount()
-        local diffview = ui.new_fugit2_diff_view(self.ns_id, self.repo)
+        local diffview = (require "fugit2.view.ui").new_fugit2_diff_view(self.ns_id, self.repo)
         diffview:mount()
         diffview:focus_file(vim.fn.fnameescape(node.id))
       end
@@ -1689,29 +1918,43 @@ end
 ---@return Fugit2UITransientMenu
 function GitStatus:_init_branch_menu()
   local m = self:_init_menus(Menu.BRANCH)
+
+  local checkout_fn = function(ref)
+    local err = self.repo:checkout(ref)
+    if err ~= 0 then
+      notifier.error("Failed to checkout " .. git2.reference_name_shorthand(ref), err)
+    else
+      notifier.info("Checked out " .. git2.reference_name_shorthand(ref))
+      self:update()
+      self:render()
+    end
+    self:focus_file()
+  end
+
   m:on_submit(function(item_id, _)
+    local GitPick = require "fugit2.view.git_pick"
+
     if item_id == "b" then
-      if vim.fn.exists ":Telescope" > 0 then
-        self:unmount()
-        vim.cmd {
-          cmd = "Telescope",
-          args = {
-            "git_branches",
-            "cwd=" .. vim.fn.fnameescape(self._git.path),
-          },
-        }
-      elseif vim.fn.exists ":FzfLua" > 0 then
-        self:unmount()
-        vim.cmd {
-          cmd = "FzfLua",
-          args = {
-            "git_branches",
-            "cwd=" .. vim.fn.fnameescape(self._git.path),
-          },
-        }
-      else
-        notifier.error "No Telescope or FzfLua found!"
-      end
+      local pick_view = GitPick(self.ns_id, self.repo, GitPick.ENTITY.BRANCH_LOCAL_REMOTE, " Checkout branch/revision ")
+      pick_view:on_submit(checkout_fn)
+      pick_view:mount()
+    elseif item_id == "l" then
+      local pick_view = GitPick(self.ns_id, self.repo, GitPick.ENTITY.BRANCH_LOCAL, " Checkout branch ")
+      pick_view:on_submit(checkout_fn)
+      pick_view:mount()
+    elseif item_id == "c" then
+      local pick_view =
+        GitPick(self.ns_id, self.repo, GitPick.ENTITY.BRANCH_LOCAL_REMOTE, " Create and checkout branch from ")
+      pick_view:on_submit(function(ref)
+        self:create_branch(ref, true)
+      end)
+      pick_view:mount()
+    elseif item_id == "n" then
+      local pick_view = GitPick(self.ns_id, self.repo, GitPick.ENTITY.BRANCH_LOCAL_REMOTE, " Create brannch from ")
+      pick_view:on_submit(function(ref)
+        self:create_branch(ref, false)
+      end)
+      pick_view:mount()
     end
   end)
   return m
@@ -1951,11 +2194,7 @@ function GitStatus:_run_single_command(cmd, args, refresh)
   local bufnr = self.command_popup.bufnr
   local queue = self._states.command_queue
 
-  self._layout:update(NuiLayout.Box({
-    NuiLayout.Box(self.info_popup, { size = 6 }),
-    NuiLayout.Box(self.command_popup, { size = 6 }),
-    NuiLayout.Box(self._boxes.main_row, { dir = "row", grow = 1 }),
-  }, { dir = "col" }))
+  self:focus_command()
 
   local cmd_line = "❯ " .. cmd .. " " .. table.concat(args, " ")
   local winid = self.command_popup.winid
@@ -2334,28 +2573,6 @@ function GitStatus:setup_handlers()
 
   -- Amend confirm
   self._prompts.amend_confirm:on_yes(self:amend_confirm_yes_handler())
-
-  -- Message input
-  self.input_popup:map("n", { "q", "<esc>" }, function()
-    self:hide_input(false)
-  end, map_options)
-
-  self.input_popup:map("i", "<c-c>", "<esc>q", { nowait = true })
-
-  local input_enter_fn = function()
-    local message = vim.trim(table.concat(vim.api.nvim_buf_get_lines(self.input_popup.bufnr, 0, -1, true), "\n"))
-    if states.commit_mode == CommitMode.CREATE then
-      self:_git_create_commit(message, states.commit_args)
-    elseif states.commit_mode == CommitMode.REWORD then
-      self:_git_reword_commit(message, states.commit_args)
-    elseif states.commit_mode == CommitMode.AMEND then
-      self:_git_amend_commit(message, states.commit_args)
-    end
-
-    states.commit_args = nil
-  end
-  self.input_popup:map("n", "<cr>", input_enter_fn, map_options)
-  self.input_popup:map("i", "<c-cr>", "<esc><cr>", { nowait = true })
 
   -- Command popup
   self.command_popup:map("n", { "q", "<esc>" }, function()

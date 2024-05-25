@@ -1,6 +1,4 @@
 -- Fugit2 main module file
-local colors = require "fugit2.view.colors"
-local libgit2 = require "fugit2.libgit2"
 
 ---@class Fugit2Config
 ---@field width integer|string main popup width
@@ -37,11 +35,11 @@ M.setup = function(args)
   -- Validate
 
   -- Load C Library
-  libgit2.load_library(M.config.libgit2_path)
+  require("fugit2.libgit2").load_library(M.config.libgit2_path)
 
   if M.namespace == 0 then
     M.namespace = vim.api.nvim_create_namespace "Fugit2"
-    colors.set_hl(0)
+    require("fugit2.view.colors").set_hl(0)
   end
 end
 

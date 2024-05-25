@@ -1,7 +1,7 @@
 local ffi = require "ffi"
-local table_new = require "table.new"
 local libgit2 = require "fugit2.libgit2"
 local stat = require "fugit2.core.stat"
+local table_new = require "table.new"
 
 --- Libgit2 init
 local libgit2_init_count = 0
@@ -361,6 +361,12 @@ function Object.new(git_object)
   return object
 end
 
+function Object.borrow(git_object)
+  local object = { obj = libgit2.git_object_pointer(git_object) }
+  setmetatable(object, Object)
+  return object
+end
+
 -- Get the id (SHA1) of a repository object.
 ---@return GitObjectId
 function Object:id()
@@ -588,6 +594,12 @@ function Tree.new(git_tree)
 
   ffi.gc(tree.tree, libgit2.C.git_tree_free)
   return tree
+end
+
+-- Cast Tree to GitObject, the reference still be owned by main Tree.
+---@return GitObject
+function Tree:as_object()
+  return Object.borrow(ffi.cast(libgit2.git_object_pointer, self.tree))
 end
 
 -- Gets the id of a tree.
@@ -2097,6 +2109,24 @@ function Repository:head_commit()
 end
 
 
+-- Makes the repository HEAD point to the specified reference.
+---@param refname string
+---@return GIT_ERROR
+function Repository:set_head(refname)
+  local err = libgit2.C.git_repository_set_head(self.repo, refname)
+  return err
+end
+
+
+-- Makes the repository HEAD directly point to the Commit.
+---@param oid GitObjectId
+---@return GIT_ERROR
+function Repository:set_head_detached(oid)
+  local err = libgit2.C.git_repository_set_head_detached(self.repo, oid.oid)
+  return err
+end
+
+
 -- Gets GitCommit signature
 ---@param oid GitObjectId
 ---@param field string? GPG sign field
@@ -2139,6 +2169,25 @@ function Repository:head_tree()
   end
 
   return Tree.new(ffi.cast(libgit2.git_tree_pointer, git_object[0])), 0
+end
+
+
+-- Creates a new branch pointing at a target commit
+---@param name string
+---@param target GitCommit
+---@param force boolean
+---@return GitReference? Reference to created branch
+---@return GIT_ERROR
+function Repository:create_branch(name, target, force)
+  local git_ref = libgit2.git_reference_double_pointer()
+  local is_force = force and 1 or 0
+
+  local err = libgit2.C.git_branch_create(git_ref, self.repo, name, target.commit, is_force)
+  if err ~= 0 then
+    return nil, err
+  end
+
+  return Reference.new(git_ref[0]), 0
 end
 
 
@@ -2323,13 +2372,11 @@ function Repository:reset_default(paths)
   end
 end
 
-
--- Updates files in the working tree to match the content of the index.
----@param index GitIndex? Repository index, can be null
 ---@param strategy GIT_CHECKOUT?
----@param paths string[] file paths to be checkout
----@return GIT_ERROR
-function Repository:checkout_index(index, strategy, paths)
+---@param paths string[]? file paths to be checkout
+---@return ffi.cdata* opts GIT_CHECKOUT_OPTION
+---@return ffi.cdata* c_paths GIT_STR_ARRAY
+local function prepare_checkout_opts(strategy, paths)
   local c_paths
   local opts = libgit2.git_checkout_options(libgit2.GIT_CHECKOUT_OPTIONS_INIT)
 
@@ -2337,11 +2384,23 @@ function Repository:checkout_index(index, strategy, paths)
     opts[0].checkout_strategy = strategy
   end
 
-  if #paths > 0 then
+  if paths and #paths > 0 then
     c_paths = libgit2.const_char_pointer_array(#paths, paths)
     opts[0].paths.strings = c_paths
     opts[0].paths.count = #paths
   end
+
+  return opts, c_paths
+end
+
+
+-- Updates files in the working tree to match the content of the index.
+---@param index GitIndex? Repository index, can be null
+---@param strategy GIT_CHECKOUT?
+---@param paths string[]? file paths to be checkout
+---@return GIT_ERROR
+function Repository:checkout_index(index, strategy, paths)
+  local opts, c_paths = prepare_checkout_opts(strategy, paths)
 
   local err = libgit2.C.git_checkout_index(
     self.repo,
@@ -2355,24 +2414,70 @@ end
 -- Updates files in the index and the working tree to match
 -- the content of the commit pointed at by HEAD.
 ---@param strategy GIT_CHECKOUT?
----@param paths string[] files paths to be checkout
+---@param paths string[]? files paths to be checkout
 ---@return GIT_ERROR
 function Repository:checkout_head(strategy, paths)
-  local c_paths
-  local opts = libgit2.git_checkout_options(libgit2.GIT_CHECKOUT_OPTIONS_INIT)
-
-  if strategy ~= nil then
-    opts[0].checkout_strategy = strategy
-  end
-
-  if #paths > 0 then
-    c_paths = libgit2.const_char_pointer_array(#paths, paths)
-    opts[0].paths.strings = c_paths
-    opts[0].paths.count = #paths
-  end
+  local opts, c_paths = prepare_checkout_opts(strategy, paths)
 
   local err = libgit2.C.git_checkout_head(self.repo, opts)
   return err
+end
+
+
+-- Updates files in the index and working tree to match
+-- the content of the tree pointed at by the treeish.
+---@param tree GitObject Tree like object
+---@param strategy GIT_CHECKOUT?
+---@param paths string[]? files paths to be checkout
+---@return GIT_ERROR
+function Repository:checkout_tree(tree, strategy, paths)
+  local opts, c_paths = prepare_checkout_opts(strategy, paths)
+
+  local err = libgit2.C.git_checkout_tree(self.repo, tree.obj, opts)
+  return err
+end
+
+
+-- Checkout the given reference using the given strategy, and update the HEAD.
+-- The default strategy is SAFE | RECREATE_MISSING.
+-- If no reference is given, checkout from the index.
+---@param refname string
+---@param strategy GIT_CHECKOUT?
+---@param paths string[]? files paths to be checkout
+---@return GIT_ERROR
+function Repository:checkout(refname, strategy, paths)
+  -- Case 1: Checkout index
+  if not refname then
+    return self:checkout_index(nil, strategy, paths)
+  end
+
+  -- Case 2: Checkout head
+  if refname == "HEAD" then
+    return self:checkout_head(strategy, paths)
+  end
+
+  -- Case 3: Reference name
+  local ref, err = self:reference_lookup(refname)
+  if not ref then
+    return err
+  end
+
+  local tree
+  tree, err = ref:peel_tree()
+  if not tree then
+    return err
+  end
+
+  err = self:checkout_tree(tree:as_object(), strategy, paths)
+  if err ~= 0 then
+    return err
+  end
+
+  if not paths or #paths == 0 then
+    return self:set_head(refname)
+  end
+
+  return 0
 end
 
 

@@ -1,7 +1,3 @@
-local GitDiff = require "fugit2.view.git_diff"
-local GitGraph = require "fugit2.view.git_graph"
-local GitStatus = require "fugit2.view.git_status"
-
 ---@classs Fugit2UIModule
 local M = {}
 
@@ -20,6 +16,8 @@ function M.new_fugit2_status_window(namespace, repo, opts)
   local current_win = vim.api.nvim_get_current_win()
   local current_file = vim.fn.fnamemodify(vim.api.nvim_buf_get_name(0), ":.")
 
+  local GitStatus = require "fugit2.view.git_status"
+
   local status = GitStatus(namespace, repo, current_win, current_file, opts)
   last_status_window = status
   return status
@@ -31,6 +29,7 @@ end
 ---@return NuiLayout
 function M.new_fugit2_graph_window(namespace, repo)
   -- Status content
+  local GitGraph = require "fugit2.view.git_graph"
   local graph = GitGraph(namespace, repo)
   graph:render()
 
@@ -41,6 +40,7 @@ end
 ---@param namespace integer Nvim namespace
 ---@return Fugit2GitDiffView
 function M.new_fugit2_diff_view(namespace, repo)
+  local GitDiff = require "fugit2.view.git_diff"
   local diffview = GitDiff(namespace, repo, nil, nil)
   return diffview
 end

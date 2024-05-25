@@ -197,4 +197,6 @@ function GitPick:setup_handlers()
   end, opts)
 end
 
+GitPick.ENTITY = ENTITY
+
 return GitPick
