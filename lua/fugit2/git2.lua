@@ -95,7 +95,6 @@ Config.__index = Config
 ---@field include_depth integer
 ---@field level GIT_CONFIG_LEVEL
 
-
 ---@class GitRepository
 ---@field repo ffi.cdata* libgit2 struct git_repository*
 ---@field path string git repository path
@@ -126,6 +125,30 @@ Tree.__index = Tree
 ---@field entry ffi.cdata* libgit2 git_tree_entry*
 local TreeEntry = {}
 TreeEntry.__index = TreeEntry
+
+---@class GitBlame
+---@field blame ffi.cdata* libgit2 git_blame *
+local Blame = {}
+Blame.__index = Blame
+
+---@class GitBlameHunk
+---@field hunk ffi.cdata* libgit2 git_blame_hunk *
+---@field num_lines integer
+---@field final_start_line_number integer
+---@field orig_start_line_number integer
+---@field boundary boolean true iff the hunk has been tracked to a boundary commit.
+local BlameHunk = {}
+BlameHunk.__index = BlameHunk
+
+---@class GitBlameOptions
+---@field first_parent boolean? reachable following only the first parents.
+---@field use_mailmap boolean? use mailmap file to map author and committer names and email.
+---@field ignore_whitespace boolean? ignore whitespace differences
+---@field min_match_characters integer? default value is 20
+---@field newest_commit GitObjectId?  id of the newest commit to consider.
+---@field oldest_commit GitObjectId? id of the oldest commit to consider.
+---@field min_line integer? The first line in the file to blame, 1-th based.
+---@field max_line integer? last line in the file to blame. The default is the last line of the file.
 
 ---@class GitCommit
 ---@field commit ffi.cdata* libgit2 git_commit pointer
@@ -386,7 +409,7 @@ end
 -- ======================
 
 
----Creates new lbigit2 oid, then copy value from old oid.
+---Creates new libgit2 oid, then copy value from old oid.
 ---@param oid GitObjectId
 ---@return GitObjectId?
 ---@return GIT_ERROR
@@ -401,7 +424,7 @@ function ObjectId.from(oid)
   return ObjectId.borrow(git_object_id), 0
 end
 
----Creates new lbigit2 oid, then copy value from old oid.
+---Creates new libgit2 oid, then copy value from old oid.
 ---@param git_oid ffi.cdata*
 ---@return GitObjectId? Objectid
 ---@return GIT_ERROR
@@ -689,6 +712,103 @@ function AnnotatedCommit.new(git_commit)
 end
 
 
+-- =================
+-- | Blame methods |
+-- =================
+
+
+-- Inits GitBlame object
+function Blame.new(git_blame)
+  local blame = { blame = libgit2.git_blame_pointer(git_blame) }
+  setmetatable(blame, Blame)
+
+  ffi.gc(blame.blame, libgit2.C.git_blame_free)
+  return blame
+end
+
+-- Gets blame data for a file that has been modified in memory
+-- Self is the pre-calculated blame for the in-odb history of the file.
+---@param buf string
+---@return GitBlame?
+---@return GIT_ERROR
+function Blame:blame_buffer(buf)
+  local git_blame = libgit2.git_blame_double_pointer()
+  local err = libgit2.C.git_blame_buffer(git_blame, self.blame, buf, buf:len())
+  if err ~= 0 then
+    return nil, err
+  end
+
+  return Blame.new(git_blame[0]), 0
+end
+
+---@return integer
+function Blame:nhunks()
+  local count = libgit2.C.git_blame_get_hunk_count(self.blame)
+  return tonumber(count) or 0
+end
+
+---@param i integer hunk index
+---@return GitBlameHunk?
+function Blame:hunk(i)
+  local blame = libgit2.C.git_blame_get_hunk_byindex(self.blame, i)
+  return blame ~= nil and BlameHunk.borrow(blame) or nil
+end
+
+---@param line integer line number, 1-th based index
+---@return GitBlameHunk?
+function Blame:hunk_byline(line)
+  local blame = libgit2.C.git_blame_get_hunk_byline(self.blame, line)
+  return blame ~= nil and BlameHunk.borrow(blame) or nil
+end
+
+
+-- =====================
+-- | BlameHunk methods |
+-- =====================
+
+
+---@return GitBlameHunk
+function BlameHunk.borrow(git_blame_hunk)
+  ---@type GitBlameHunk
+  local hunk = {
+    hunk                    = libgit2.git_blame_hunk_pointer(git_blame_hunk),
+    num_lines               = tonumber(git_blame_hunk["lines_in_hunk"]) or 0,
+    final_start_line_number = tonumber(git_blame_hunk["final_start_line_number"]) or 0,
+    orig_start_line_number  = tonumber(git_blame_hunk["orig_start_line_number"]) or 0,
+    boundary                = (git_blame_hunk["boundary"] == 1)
+  }
+  setmetatable(hunk, BlameHunk)
+  return hunk
+end
+
+---@return GitSignature?
+function BlameHunk:final_signature()
+  local sig = self.hunk["final_signature"]
+  return sig ~= nil and Signature.borrow(sig) or nil
+end
+
+---@return GitSignature?
+function BlameHunk:orig_signature()
+  local sig = self.hunk["orig_signature"]
+  return sig ~= nil and Signature.borrow(sig) or nil
+end
+
+---@return GitObjectId
+function BlameHunk:final_commit_id()
+  return ObjectId.borrow(self.hunk["final_commit_id"])
+end
+
+---@return GitObjectId
+function BlameHunk:orig_commit_id()
+  return ObjectId.borrow(self.hunk["orig_commit_id"])
+end
+
+---@return string
+function BlameHunk:orig_path()
+  return ffi.string(self.hunk["orig_path"])
+end
+
+
 -- ====================
 -- | Commit functions |
 -- ====================
@@ -716,11 +836,26 @@ function Commit:id()
 end
 
 
+---@return osdate
+function Commit:time()
+  local time = tonumber(libgit2.C.git_commit_time(self.commit))
+  return os.date("*t", time) --[[@as osdate>]]
+end
+
+
 -- Gets GitCommit messages.
 ---@return string
 function Commit:message()
   local c_char = libgit2.C.git_commit_message(self.commit)
   return vim.trim(ffi.string(c_char))
+end
+
+
+-- Gets the short "summary" of the git commit message.
+---@ return string
+function Commit:summary()
+  local c_char = libgit2.C.git_commit_summary(self.commit)
+  return ffi.string(c_char)
 end
 
 
@@ -757,6 +892,7 @@ end
 function Commit:nparents()
   return libgit2.C.git_commit_parentcount(self.commit)
 end
+
 
 -- Gets the specified parent of the commit.
 ---@param i integer Parent index (0-based)
@@ -2074,6 +2210,84 @@ function Repository:annotated_commit_from_revspec(revspec)
 end
 
 
+---@param opts GitBlameOptions
+---@return ffi.cdata*? blame_opts libgit2 git_blame_options[1]
+---@return GIT_ERROR
+local function init_blame_options(opts)
+  local blame_opts = libgit2.git_blame_options()
+  local err = libgit2.C.git_blame_options_init(blame_opts, libgit2.GIT_BLAME_OPTIONS_VERSION)
+  if err ~= 0 then
+    return nil, err
+  end
+
+  local flags = 0
+
+  if opts.first_parent then
+    flags = bit.bor(flags, libgit2.GIT_BLAME.FIRST_PARENT)
+  end
+
+  if opts.use_mailmap then
+    flags = bit.bor(flags, libgit2.GIT_BLAME.USE_MAILMAP)
+  end
+
+  if opts.ignore_whitespace then
+    flags = bit.bor(flags, libgit2.GIT_BLAME.IGNORE_WHITESPACE)
+  end
+
+  blame_opts[0].flags = flags
+
+  if opts.min_match_characters then
+    blame_opts[0].min_match_characters = opts.min_match_characters
+  end
+
+  if opts.newest_commit then
+    err = libgit2.C.git_oid_cpy(blame_opts[0].newest_commit, opts.newest_commit.oid)
+    if err ~= 0 then
+      return nil, err
+    end
+  end
+
+  if opts.oldest_commit then
+    err = libgit2.C.git_oid_cpy(blame_opts[0].oldest_commit, opts.oldest_commit.oid)
+    if err ~= 0 then
+      return nil, err
+    end
+  end
+
+  if opts.min_line then
+    blame_opts[0].min_line = opts.min_line
+  end
+
+  if opts.max_line then
+    blame_opts[0].max_line = opts.max_line
+  end
+
+  return blame_opts, 0
+end
+
+
+-- Gets the blame for a single file.
+---@param path string git path
+---@param opts GitBlameOptions
+---@return GitBlame? GitBlame info
+---@return GIT_ERROR err error code
+function Repository:blame_file(path, opts)
+  local blame_opts, err = init_blame_options(opts)
+  if not blame_opts then
+    return nil, err
+  end
+
+  local git_blame = libgit2.git_blame_double_pointer()
+
+  err = libgit2.C.git_blame_file(git_blame, self.repo, path, blame_opts)
+  if err ~= 0 then
+    return nil, err
+  end
+
+  return Blame.new(git_blame[0]), 0
+end
+
+
 ---Retrieves reference pointed at by HEAD.
 ---@return GitReference?
 ---@return GIT_ERROR
@@ -2317,7 +2531,7 @@ end
 ---@param oid GitObjectId
 ---@return GitCommit?
 ---@return GIT_ERROR
-function Repository:commit_lookup (oid)
+function Repository:commit_lookup(oid)
   local c_commit = libgit2.git_commit_double_pointer()
 
   local err = libgit2.C.git_commit_lookup(c_commit, self.repo, oid.oid)
@@ -3371,7 +3585,8 @@ function Repository:apply(diff, workdir, index)
     return 0
   end
 
-  local opts = libgit2.git_apply_options(libgit2.GIT_APPLY_OPTIONS_INIT)
+  local opts = libgit2.git_apply_options()
+  libgit2.C.git_apply_options_init(opts, libgit2.GIT_APPLY_OPTIONS_VERSION)
   local location = 0
   if workdir then
     location = bit.bor(location, libgit2.GIT_APPLY_LOCATION.WORKDIR)
@@ -3561,9 +3776,10 @@ local M = {}
 
 M.Config = Config
 M.Diff = Diff
-M.Repository = Repository
-M.Reference = Reference
 M.IndexEntry = IndexEntry
+M.ObjectId = ObjectId
+M.Reference = Reference
+M.Repository = Repository
 
 
 M.GIT_BRANCH = libgit2.GIT_BRANCH
@@ -3580,15 +3796,16 @@ M.GIT_REFERENCE_NAMESPACE = GIT_REFERENCE_NAMESPACE
 
 
 M.head = Repository.head
-M.status = Repository.status
+M.init_blame_options = init_blame_options
+M.message_prettify = message_prettify
+M.reference_name_namespace = reference_name_namespace
+M.reference_name_remote = reference_name_remote
+M.reference_name_shorthand = reference_name_shorthand
 M.set_opts = libgit2_set_opts
+M.status = Repository.status
 M.status_char = status_char
 M.status_char_dash = status_char_dash
 M.status_string = status_string
-M.message_prettify = message_prettify
-M.reference_name_namespace = reference_name_namespace
-M.reference_name_shorthand = reference_name_shorthand
-M.reference_name_remote = reference_name_remote
 
 
 function M.destroy()
