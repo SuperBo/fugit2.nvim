@@ -2,6 +2,7 @@
 
 local NuiLayout = require "nui.layout"
 local Object = require "nui.object"
+local async = require "plenary.async"
 local event = require("nui.utils.autocmd").event
 local iter = require "plenary.iterators"
 
@@ -89,7 +90,14 @@ function GitGraph:init(ns_id, repo)
   }
 
   self:setup_handlers()
-  -- self:update()
+
+  local update_fn = async.wrap(function(callback)
+    self:update()
+    return callback()
+  end, 1)
+  async.run(update_fn, function()
+    self:render()
+  end)
 end
 
 ---Updates git branch and commits.
@@ -294,9 +302,7 @@ function GitGraph:render()
 end
 
 function GitGraph:mount()
-  self:update()
   self._layout:mount()
-  self:render()
   local linenr = self._views.branch:scroll_to_active_branch()
   if linenr then
     self._states.last_branch_linenr = linenr

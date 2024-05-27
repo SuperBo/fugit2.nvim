@@ -1,5 +1,5 @@
-local libgit2 = require "fugit2.libgit2"
 local git2 = require "fugit2.git2"
+local libgit2 = require "fugit2.libgit2"
 
 libgit2.load_library()
 

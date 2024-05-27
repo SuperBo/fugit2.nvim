@@ -5,8 +5,9 @@ local uv = vim.loop
 local NuiLine = require "nui.line"
 local NuiText = require "nui.text"
 local Path = require "plenary.path"
-local plenary_filetype = require "plenary.filetype"
+local async = require "plenary.async"
 local event = require("nui.utils.autocmd").event
+local plenary_filetype = require "plenary.filetype"
 
 local GitStatus = require "fugit2.view.git_status"
 local GitStatusDiffBase = require "fugit2.view.git_base_view"
@@ -115,8 +116,14 @@ function GitDiff:_post_mount()
   self:_setup_handlers()
 
   source_tree:focus()
-  self:update()
-  self:render()
+
+  local update_fn = async.wrap(function(callback)
+    self:update()
+    return callback()
+  end, 1)
+  async.run(update_fn, function()
+    self:render()
+  end)
 end
 
 -- Unmount Diffview remove buffers

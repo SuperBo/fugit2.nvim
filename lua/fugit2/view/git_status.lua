@@ -304,15 +304,15 @@ function GitStatus:init(ns_id, repo, last_window, current_file, opts)
   -- keymaps
   self:setup_handlers()
 
-  async.run(
-    function()
-      self:update()
-    end, -- get git content
-    async_utils.scheduler(function()
-      self:render()
-      self:scroll_to_active_file()
-    end)
-  )
+  local update_fn = async.wrap(function(callback)
+    self:update()
+    return callback()
+  end, 1)
+
+  async.run(update_fn, function()
+    self:render()
+    self:scroll_to_active_file()
+  end)
 end
 
 ---@param git Fugit2GitStatusGitStates
@@ -1080,7 +1080,7 @@ function GitStatus:scroll_to_active_file()
   local current_file = self._states.current_file
   local _, linenr = self._views.files.tree:get_node("-" .. current_file)
   if linenr then
-    vim.api.nvim_win_set_cursor(0, { linenr, 1 })
+    vim.schedule(function() vim.api.nvim_win_set_cursor(0, { linenr, 1 }) end)
   end
 end
 
