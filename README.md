@@ -137,6 +137,8 @@ Please refer to [Usage Guide](https://github.com/SuperBo/fugit2.nvim/wiki/%E2%8C
 
 ## Credits
 
+Very special thanks to these plugins and their authors.
+
 - [nvim-tiny](https://github.com/chrisgrieser/nvim-tinygit) for Github integration.
 - [diffview.nvim](https://github.com/sindrets/diffview.nvim) for Diffview integration.
 - [nui.nvim](https://github.com/MunifTanjim/nui.nvim) for his great Nvim UI library.
@@ -147,3 +149,4 @@ Please refer to [Usage Guide](https://github.com/SuperBo/fugit2.nvim/wiki/%E2%8C
 - [magit](https://magit.vc/) for a great Git client.
 - [neogit](https://github.com/NeogitOrg/neogit) for great Neovim git client.
 - [vim-flog](https://github.com/rbong/vim-flog) for beautiful git graph.
+- [blame.nvim](https://github.com/FabijanZulj/blame.nvim) for git blame inspiration.

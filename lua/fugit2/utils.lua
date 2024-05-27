@@ -24,7 +24,22 @@ M.LINUX_SIGNALS = {
 M.KEY_ESC = vim.api.nvim_replace_termcodes("<esc>", true, false, true)
 
 -- temp dir
-M.TMPDIR = Path:new(os.getenv "TMPDIR" or "/tmp/")
+M.TMPDIR = Path:new(os.getenv "TMPDIR" or "/tmp")
+
+M.LOADING_CHARS = {
+  " ",
+  " ",
+  " ",
+  " ",
+  " ",
+  " ",
+  " ",
+  " ",
+  " ",
+  " ",
+  " ",
+  " ",
+}
 
 ---@param str string
 function M.lines_head(str)

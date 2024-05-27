@@ -38,11 +38,21 @@ end
 
 -- Creates Fugit2 DiffView tab.
 ---@param namespace integer Nvim namespace
+---@param repo GitRepository
 ---@return Fugit2GitDiffView
 function M.new_fugit2_diff_view(namespace, repo)
   local GitDiff = require "fugit2.view.git_diff"
   local diffview = GitDiff(namespace, repo, nil, nil)
   return diffview
+end
+
+-- Creates Fugit2 BlameView
+---@param namespace integer Nvim namespace
+---@param repo GitRepository
+function M.new_fugit2_blame_view(namespace, repo)
+  local bufnr = vim.api.nvim_get_current_buf()
+  local blameview = require "fugit2.view.git_blame"(namespace, repo, bufnr)
+  return blameview
 end
 
 return M
