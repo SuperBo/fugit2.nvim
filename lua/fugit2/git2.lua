@@ -2,6 +2,7 @@ local ffi = require "ffi"
 local libgit2 = require "fugit2.libgit2"
 local stat = require "fugit2.core.stat"
 local table_new = require "table.new"
+local uv = vim.uv or vim.loop
 
 --- Libgit2 init
 local libgit2_init_count = 0
@@ -2285,6 +2286,54 @@ function Repository:blame_file(path, opts)
   end
 
   return Blame.new(git_blame[0]), 0
+end
+
+
+-- Get blame for single file but run in async
+---@param callback fun(b: GitBlame?, e: GIT_ERROR)
+function Repository:blame_file_async(path, opts, callback)
+  local blame_opts, err = init_blame_options(opts)
+  if not blame_opts then
+    callback(nil, err)
+    return
+  end
+
+  local work_fn = function(lib, repo_ptr, p, opts_ptr)
+    local lg2 = require "fugit2.libgit2"
+    lg2.load_library(lib)
+    local ffi_ = require "ffi"
+
+    local repo = ffi_.cast(lg2.git_repository_pointer, repo_ptr)
+    local o = ffi_.cast("git_blame_options*", opts_ptr)
+    local git_blame = lg2.git_blame_double_pointer()
+
+    local e = lg2.C.git_blame_file(git_blame, repo, p, o)
+    if e ~= 0 then
+      return nil, e
+    end
+
+    return tonumber(ffi_.cast(lg2.pointer_t, git_blame[0])), 0
+  end
+
+  local after_work_fn = function(ptr, e)
+    if not ptr then
+      return nil, e
+    end
+
+    local blame = Blame.new(ffi.cast(libgit2.git_blame_pointer, ptr))
+    callback(blame, 0)
+  end
+
+
+  local config = require "fugit2".config
+
+  local work = uv.new_work(work_fn, after_work_fn)
+  work:queue(
+    config.libgit2_path,
+    tonumber(ffi.cast(libgit2.pointer_t, self.repo)),
+    path,
+    tonumber(ffi.cast(libgit2.pointer_t, blame_opts))
+  )
 end
 
 

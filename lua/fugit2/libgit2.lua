@@ -611,10 +611,13 @@ local M = {}
 
 ---@param path string?
 M.load_library = function(path)
-  rawset(M, "C", ffi.load(path or "libgit2"))
+  if not M.C then
+    rawset(M, "C", ffi.load(path or "libgit2"))
+  end
 end
 
 M.uint32 = ffi.typeof "uint32_t"
+M.pointer_t = ffi.typeof "intptr_t"
 M.char_pointer = ffi.typeof "char*"
 M.char_array = ffi.typeof "char[?]"
 M.const_char_pointer_array = ffi.typeof "const char *[?]"
