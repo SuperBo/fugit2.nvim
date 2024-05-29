@@ -66,6 +66,58 @@ function Diff:in_months()
   return self.years * 12 + self.months
 end
 
+-- Format ago string
+---@param n integer
+---@param unit string
+local function format_ago(n, unit)
+  if n == 1 then
+    if unit == "year" then
+      return "last year"
+    elseif unit == "month" then
+      return "last month"
+    elseif unit == "day" then
+      return "yesterday"
+    elseif unit == "week" then
+      return "last week"
+    end
+  end
+
+  return string.format("%d %s%s ago", n, unit, n > 1 and "s" or "")
+end
+
+-- Print time in ago format
+---@return string
+function Diff:ago()
+  if self.years > 0 then
+    return format_ago(self.years, "year")
+  end
+
+  if self.months > 0 then
+    return format_ago(self.months, "month")
+  end
+
+  local total_days = math.abs(self.total_days)
+
+  if total_days >= 7 then
+    local weeks = self:in_weeks()
+    return format_ago(weeks, "week")
+  end
+
+  if total_days > 0 then
+    return format_ago(total_days, "day")
+  end
+
+  if self.hours > 0 then
+    return format_ago(self.hours, "hour")
+  end
+
+  if self.minutes > 0 then
+    return format_ago(self.minutes, "minute")
+  end
+
+  return format_ago(self.seconds, "second")
+end
+
 -- ===============
 -- | Main module |
 -- ===============

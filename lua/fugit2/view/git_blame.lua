@@ -4,19 +4,26 @@ local Object = require "nui.object"
 local keymap = require "nui.utils.keymap"
 local table_new = require "table.new"
 local uv = vim.uv or vim.loop
+local NuiLine = require "nui.line"
+local NuiText = require "nui.text"
+local strings = require "plenary.strings"
 
 local event = require("nui.utils.autocmd").event
 local notifier = require "fugit2.notifier"
+local pendulum = require "fugit2.core.pendulum"
 local utils = require "fugit2.utils"
 
+pendulum.init()
+
 local WIDTH = 45
+local HEADER_START = "▇ "
 
 ---@class Fugit2GitBlameHunk
 ---@field commit GitCommit?
 ---@field author_name string
 ---@field author_email string
 ---@field oid string
----@field date osdate?
+---@field date osdateparam?
 ---@field message string
 ---@field num_lines integer
 ---@field start_linenr integer
@@ -42,6 +49,8 @@ function GitBlame:init(ns_id, repo, file_bufnr)
     file_path = file_path,
     commits = {} --[[@as { [string]: GitCommit }]],
     hunks = {} --[[@as Fugit2GitBlameHunk[] ]],
+    hunk_indices = {} --[[@as integer[] ]],
+    authors_map = {} --[[@as {[string]: integer} ]],
   }
 
   -- TODO: concat git_path_to_bufname
@@ -78,20 +87,25 @@ end
 ---@param commits { [string]: GitCommit }
 ---@param blame GitBlame
 ---@return Fugit2GitBlameHunk[]
+---@return integer[] hunk_indices
 ---@return integer total_lines
+---@return { [string]: integer } authors_map
 local function git_blame_to_hunks(repo, file_path, commits, blame)
   local nhunks = blame:nhunks()
 
   ---@type Fugit2GitBlameHunk[]
   local hunks = table_new(nhunks, 0)
+  local indices = table_new(nhunks, 0)
   local total_lines = 0
+  local authors_map = {}
 
   for i = 0, nhunks - 1 do
     local git_hunk = blame:hunk(i)
     if not git_hunk then
-      goto add_hunk_continue
+      goto git_blame_to_hunks_continue
     end
 
+    indices[i + 1] = total_lines + 1
     total_lines = total_lines + git_hunk.num_lines
 
     local author_signature = git_hunk:final_signature()
@@ -120,11 +134,14 @@ local function git_blame_to_hunks(repo, file_path, commits, blame)
       end
     end
 
+    local author_name = author_signature and author_signature:name() or "You"
+    authors_map[author_name] = 1
+
     ---@type Fugit2GitBlameHunk
     local h = {
       commit = commit,
       oid = commit_key:sub(1, 8),
-      author_name = author_signature and author_signature:name() or "You",
+      author_name = author_name,
       author_email = author_signature and author_signature:email() or "You",
       message = msg,
       num_lines = git_hunk.num_lines,
@@ -133,11 +150,20 @@ local function git_blame_to_hunks(repo, file_path, commits, blame)
       date = date,
     }
     hunks[i + 1] = h
-
-    ::add_hunk_continue::
+    ::git_blame_to_hunks_continue::
   end
 
-  return hunks, total_lines
+  -- build author index table
+  local authors = {}
+  for a, _ in pairs(authors_map) do
+    authors[#authors + 1] = a
+  end
+  table.sort(authors)
+  for i, a in ipairs(authors) do
+    authors_map[a] = i - 1
+  end
+
+  return hunks, indices, total_lines, authors_map
 end
 
 --- Start timer
@@ -195,7 +221,8 @@ function GitBlame:update()
       return
     end
 
-    git.hunks, git.num_lines = git_blame_to_hunks(self.repo, git.path, git.commits, b)
+    git.hunks, git.hunk_indices, git.num_lines, git.authors_map =
+      git_blame_to_hunks(self.repo, git.path, git.commits, b)
 
     vim.schedule(function()
       self:render()
@@ -217,13 +244,66 @@ function GitBlame:update_buffer(buf)
     return
   end
 
-  git.hunks, git.num_lines = git_blame_to_hunks(self.repo, git.path, git.commits, blame)
+  git.hunks, git.hunk_indices, git.num_lines, git.authors_map =
+    git_blame_to_hunks(self.repo, git.path, git.commits, blame)
+end
+
+---@param hunk Fugit2GitBlameHunk
+---@param now osdateparam
+---@param authors_map { [string]: integer }
+---@return NuiLine header_line
+---@return integer age_colore
+local function prepare_blame_header(hunk, now, authors_map)
+  local time_ago = "now"
+  local age_color = 10 -- latest
+  if hunk.date then
+    local diff = pendulum.precise_diff(now, hunk.date)
+    time_ago = diff:ago()
+
+    local weeks = diff:in_weeks()
+    if diff.years > 1 then
+      age_color = 1
+    elseif diff.years == 1 then
+      age_color = 2
+    elseif diff.months > 6 then
+      age_color = 3
+    elseif diff.months > 3 then
+      age_color = 4
+    elseif diff.months > 1 then
+      age_color = 5
+    elseif diff.months == 1 then
+      age_color = 6
+    elseif weeks > 2 then
+      age_color = 7
+    elseif weeks >= 2 then
+      age_color = 8
+    elseif weeks == 1 then
+      age_color = 9
+    else
+      age_color = 10
+    end
+  end
+
+  local author_idx = (authors_map[hunk.author_name] or 0) % 9 + 1
+  local content_len = 15 + strings.strdisplaywidth(hunk.author_name) + 1
+  local author_width = WIDTH - content_len
+  local message = utils.message_title_prettify(hunk.message:sub(1, author_width))
+
+  local line = NuiLine {
+    NuiText(HEADER_START, "Fugit2BlameAge" .. age_color),
+    NuiText(strings.align_str(time_ago .. " ", 13, true), "Fugit2BlameDate"),
+    NuiText(hunk.author_name .. " ", "Fugit2Branch" .. author_idx),
+  }
+  line:append(message)
+  return line, age_color
 end
 
 -- Renders GitBlame buffer
 function GitBlame:render()
   local git = self._git
   local bufnr = self.bufnr
+  local ns_id = self.ns_id
+  local authors_map = git.authors_map
 
   -- clear buffer
   local num_lines = vim.api.nvim_buf_line_count(bufnr)
@@ -232,15 +312,27 @@ function GitBlame:render()
   end
 
   -- render
+  local now = os.date "*t" --[[@as osdateparam]]
   for _, hunk in ipairs(git.hunks) do
-    local lines = table_new(hunk.num_lines, 0)
-    lines[1] = hunk.message
-    for i = 2, hunk.num_lines do
-      lines[i] = "|"
-    end
+    local header, age_color = prepare_blame_header(hunk, now, authors_map)
+    header:render(bufnr, ns_id, hunk.start_linenr)
 
-    local end_linenr = hunk.start_linenr + hunk.num_lines - 1
-    vim.api.nvim_buf_set_lines(bufnr, hunk.start_linenr - 1, end_linenr, false, lines)
+    if hunk.num_lines > 1 then
+      local end_linenr = hunk.start_linenr + hunk.num_lines
+
+      -- empty lines
+      if hunk.num_lines > 1 then
+        local lines = utils.list_init("│", hunk.num_lines - 2)
+        lines[hunk.num_lines - 1] = "└"
+        vim.api.nvim_buf_set_lines(bufnr, hunk.start_linenr, end_linenr - 1, false, lines)
+      end
+
+      vim.api.nvim_buf_set_extmark(bufnr, ns_id, hunk.start_linenr, 0, {
+        end_row = hunk.start_linenr + hunk.num_lines - 1,
+        end_col = 0,
+        hl_group = "Fugit2BlameAge" .. age_color,
+      })
+    end
   end
 
   -- lock buffer edit
@@ -268,15 +360,15 @@ function GitBlame:mount()
     vim.api.nvim_win_set_option(0, "wrap", false)
     vim.api.nvim_win_set_option(0, "number", false)
     vim.api.nvim_win_set_option(0, "signcolumn", "no")
+    vim.api.nvim_win_set_option(0, "foldcolumn", "0")
     vim.api.nvim_win_set_option(0, "scrollbind", true)
     vim.api.nvim_win_set_option(0, "cursorbind", true)
-    -- switch back
+    -- original buffer
     vim.api.nvim_win_set_option(winid, "wrap", false)
     vim.api.nvim_win_set_option(winid, "scrollbind", true)
     vim.api.nvim_win_set_option(winid, "cursorbind", true)
-    -- move cursor back
     vim.api.nvim_win_set_cursor(winid, cursor)
-    vim.api.nvim_set_current_win(winid)
+    -- vim.api.nvim_set_current_win(winid)
   end)
 end
 
@@ -313,7 +405,7 @@ function GitBlame:setup_handlers()
     once = true,
     callback = function(ev)
       self:unmount()
-    end
+    end,
   })
 
   -- buf del event
@@ -331,9 +423,11 @@ function GitBlame:setup_handlers()
   })
 
   -- quit event
-  keymap.set(self.bufnr, "n", "q", function()
+  keymap.set(self.bufnr, "n", { "q", "<esc>" }, function()
     self:unmount()
   end, opts)
+
+  -- jump events
 end
 
 return GitBlame
