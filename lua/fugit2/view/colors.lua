@@ -81,18 +81,18 @@ function M.set_hl(ns_id)
   end
 
   -- Blame time heatmap
-  -- get from github ui
+  -- get from catppuccin Macchiato
   local blame_date_heat = {
-    "#3d1300",
-    "#5a1e02",
-    "#762d0a",
-    "#9b4215",
-    "#bd561d",
-    "#db6d28",
-    "#f0883e",
-    "#f0883e",
-    "#ffc680",
-    "#ffdfb6",
+    "#b7bdf8",
+    "#8aadf4",
+    "#7dc4e4",
+    "#91d7e3",
+    "#8bd5ca",
+    "#a6da95",
+    "#eed49f",
+    "#f5a97f",
+    "#ee99a0",
+    "#ed8796",
   }
   for i, color in ipairs(blame_date_heat) do
     vim.api.nvim_set_hl(ns_id, "Fugit2BlameAge" .. i, {

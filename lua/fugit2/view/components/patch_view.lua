@@ -6,6 +6,7 @@ local Object = require "nui.object"
 local event = require("nui.utils.autocmd").event
 
 local diff_utils = require "fugit2.diff"
+local utils = require "fugit2.utils"
 
 ---@class Fugit2PatchView
 ---@field ns_id integer namespace id
@@ -161,46 +162,6 @@ function PatchView:map(mode, key, fn, opts)
   return self.popup:map(mode, key, fn, opts)
 end
 
----@param offsets integer[]
----@param cursor_row integer
----@return integer hunk_index
----@return integer hunk_offset
-local function get_hunk(offsets, cursor_row)
-  if cursor_row < offsets[1] then
-    return 0, 1
-  end
-
-  if #offsets > 6 then
-    -- do binary search
-    local start, stop = 1, #offsets
-    local mid, hunk_offset
-
-    while start < stop - 1 do
-      mid = math.floor((start + stop) / 2)
-      hunk_offset = offsets[mid]
-      if cursor_row == hunk_offset then
-        return mid, hunk_offset
-      elseif cursor_row < hunk_offset then
-        stop = mid
-      else
-        start = mid
-      end
-    end
-    return start, offsets[start]
-  else
-    -- do linear search
-    for i, hunk_offset in ipairs(offsets) do
-      if cursor_row < hunk_offset then
-        return i - 1, offsets[i - 1] or 1
-      elseif cursor_row == hunk_offset then
-        return i, hunk_offset
-      end
-    end
-  end
-
-  return 0, 1
-end
-
 ---Gets current hunk based on current cursor position
 ---@return integer hunk_index
 ---@return integer hunk_offset
@@ -208,7 +169,7 @@ end
 ---@return integer cursor_col
 function PatchView:get_current_hunk()
   local cursor = vim.api.nvim_win_get_cursor(self.popup.winid)
-  local index, offset = get_hunk(self._hunk_offsets, cursor[1])
+  local index, offset = utils.get_hunk(self._hunk_offsets, cursor[1])
 
   return index, offset, cursor[1], cursor[2]
 end
@@ -297,7 +258,7 @@ function PatchView:_get_hunks_range(start_row, end_row, for_reverse)
     start_row, end_row = end_row, start_row
   end
 
-  local hunk_idx, hunk_offset = get_hunk(self._hunk_offsets, start_row)
+  local hunk_idx, hunk_offset = utils.get_hunk(self._hunk_offsets, start_row)
   local next_offset = self._hunk_offsets[hunk_idx + 1]
 
   local hunk_segments = {}

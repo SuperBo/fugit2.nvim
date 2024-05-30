@@ -395,6 +395,33 @@ function GitBlame:unmount()
   self.repo = nil
 end
 
+---Gets current hunk based on current cursor position
+---@return integer hunk_index
+---@return integer hunk_offset
+---@return integer cursor_row
+---@return integer cursor_col
+function GitBlame:get_current_hunk()
+  local cursor = vim.api.nvim_win_get_cursor(self.winid)
+  local index, offset = utils.get_hunk(self._git.hunk_indices, cursor[1])
+
+  return index, offset, cursor[1], cursor[2]
+end
+
+function GitBlame:next_hunk()
+  local hunk_idx, _, _, col = self:get_current_hunk()
+  local new_row = self._git.hunk_indices[hunk_idx + 1]
+  vim.api.nvim_win_set_cursor(self.winid, { new_row, col })
+end
+
+function GitBlame:prev_hunk()
+  local hunk_idx, hunk_offset, row, col = self:get_current_hunk()
+  local new_row = hunk_offset
+  if hunk_offset == row then
+    new_row = self._git.hunk_indices[math.max(hunk_idx - 1, 1)]
+  end
+  vim.api.nvim_win_set_cursor(self.winid, { new_row, col })
+end
+
 -- Setup key binding and events
 function GitBlame:setup_handlers()
   local opts = { noremap = true, nowait = true }
@@ -428,6 +455,12 @@ function GitBlame:setup_handlers()
   end, opts)
 
   -- jump events
+  keymap.set(self.bufnr, "n", "J", function()
+    self:next_hunk()
+  end, opts)
+  keymap.set(self.bufnr, "n", "K", function()
+    self:prev_hunk()
+  end, opts)
 end
 
 return GitBlame
