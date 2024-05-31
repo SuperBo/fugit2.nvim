@@ -6,9 +6,12 @@ local table_new = require "table.new"
 local uv = vim.uv or vim.loop
 local NuiLine = require "nui.line"
 local NuiText = require "nui.text"
+local Path = require "plenary.path"
+local PlenaryJob = require "plenary.job"
 local strings = require "plenary.strings"
 
 local event = require("nui.utils.autocmd").event
+local blame = require "fugit2.core.blame"
 local notifier = require "fugit2.notifier"
 local pendulum = require "fugit2.core.pendulum"
 local utils = require "fugit2.utils"
@@ -17,17 +20,6 @@ pendulum.init()
 
 local WIDTH = 45
 local HEADER_START = "▇ "
-
----@class Fugit2GitBlameHunk
----@field commit GitCommit?
----@field author_name string
----@field author_email string
----@field oid string
----@field date osdateparam?
----@field message string
----@field num_lines integer
----@field start_linenr integer
----@field orig_path string?
 
 ---@class Fugit2GitBlameView
 ---@field ns_id integer namespace number
@@ -40,21 +32,22 @@ local GitBlame = Object "Fugit2GitBlameView"
 ---@param file_bufnr integer file buffer
 function GitBlame:init(ns_id, repo, file_bufnr)
   self.ns_id = ns_id
-  self.repo = repo
   self.file_bufnr = file_bufnr
 
-  local file_path = vim.fn.fnamemodify(vim.api.nvim_buf_get_name(file_bufnr), ":.")
+  local file_path = Path:new(vim.fn.fnamemodify(vim.api.nvim_buf_get_name(file_bufnr), ":."))
+  local git_path = vim.fn.fnamemodify(repo:repo_path(), ":p:h:h")
 
   self._git = {
-    file_path = file_path,
+    file_path = file_path:make_relative(git_path),
+    path = git_path,
     commits = {} --[[@as { [string]: GitCommit }]],
     hunks = {} --[[@as Fugit2GitBlameHunk[] ]],
-    hunk_indices = {} --[[@as integer[] ]],
+    hunk_offsets = {} --[[@as integer[] ]],
     authors_map = {} --[[@as {[string]: integer} ]],
   }
 
   -- TODO: concat git_path_to_bufname
-  local buf_name = "Fugit2GitBlame:" .. file_path
+  local buf_name = "Fugit2GitBlame:" .. tostring(file_path)
 
   for _, b in ipairs(vim.api.nvim_list_bufs()) do
     local name = vim.fn.fnamemodify(vim.api.nvim_buf_get_name(b), ":.")
@@ -80,90 +73,7 @@ function GitBlame:init(ns_id, repo, file_bufnr)
 
   self:start_timer()
   self:update()
-end
-
----@param repo GitRepository
----@param file_path string
----@param commits { [string]: GitCommit }
----@param blame GitBlame
----@return Fugit2GitBlameHunk[]
----@return integer[] hunk_indices
----@return integer total_lines
----@return { [string]: integer } authors_map
-local function git_blame_to_hunks(repo, file_path, commits, blame)
-  local nhunks = blame:nhunks()
-
-  ---@type Fugit2GitBlameHunk[]
-  local hunks = table_new(nhunks, 0)
-  local indices = table_new(nhunks, 0)
-  local total_lines = 0
-  local authors_map = {}
-
-  for i = 0, nhunks - 1 do
-    local git_hunk = blame:hunk(i)
-    if not git_hunk then
-      goto git_blame_to_hunks_continue
-    end
-
-    indices[i + 1] = total_lines + 1
-    total_lines = total_lines + git_hunk.num_lines
-
-    local author_signature = git_hunk:final_signature()
-    local orig_path = git_hunk:orig_path()
-    local oid = git_hunk:final_commit_id()
-
-    local msg, commit, date, err
-    local commit_key = oid:tostring(10)
-
-    if commit_key == "0000000000" then
-      -- null commit
-      msg = "Uncommitted changes"
-    else
-      commit = commits[commit_key]
-      if not commit then
-        commit, err = repo:commit_lookup(oid)
-        commits[commit_key] = commit
-      end
-
-      if not commit then
-        notifier.error("Failed to get commit " .. oid:tostring(8), err)
-        msg = "Not found commit"
-      else
-        msg = commit:summary():sub(1, 40)
-        date = commit:time()
-      end
-    end
-
-    local author_name = author_signature and author_signature:name() or "You"
-    authors_map[author_name] = 1
-
-    ---@type Fugit2GitBlameHunk
-    local h = {
-      commit = commit,
-      oid = commit_key:sub(1, 8),
-      author_name = author_name,
-      author_email = author_signature and author_signature:email() or "You",
-      message = msg,
-      num_lines = git_hunk.num_lines,
-      start_linenr = git_hunk.final_start_line_number,
-      orig_path = orig_path ~= file_path and orig_path or nil,
-      date = date,
-    }
-    hunks[i + 1] = h
-    ::git_blame_to_hunks_continue::
-  end
-
-  -- build author index table
-  local authors = {}
-  for a, _ in pairs(authors_map) do
-    authors[#authors + 1] = a
-  end
-  table.sort(authors)
-  for i, a in ipairs(authors) do
-    authors_map[a] = i - 1
-  end
-
-  return hunks, indices, total_lines, authors_map
+  self:render()
 end
 
 --- Start timer
@@ -182,70 +92,74 @@ function GitBlame:start_timer()
     tick = tick + 1
 
     vim.schedule(function()
-      vim.api.nvim_buf_set_lines(bufnr, 2, 3, false, { char })
+      if self.timer then
+        vim.api.nvim_buf_set_lines(bufnr, 2, 3, false, { char })
+      end
     end)
   end)
 end
 
 -- Updates buffer info
 function GitBlame:update()
-  local lines = vim.api.nvim_buf_get_lines(self.file_bufnr, 0, -1, false)
-  local contents = table.concat(lines, "\n") .. "\n"
-
-  ---@type GitBlameOptions
-  local opts = {}
-
+  -- local lines = vim.api.nvim_buf_get_lines(self.file_bufnr, 0, -1, false)
+  -- local contents = table.concat(lines, "\n") .. "\n"
+  local git_path = self._git.path
   local git = self._git
-  local path = git.file_path
-  self.repo:blame_file_async(git.file_path, opts, function(blame, err)
-    if self.timer then
-      self.timer:stop()
-      self.timer:close()
-      self.timer = nil
-    end
 
-    if not blame then
-      notifier.error("Can't get git blame for file " .. path, err)
-      return
-    end
+  local job = PlenaryJob:new {
+    command = "git",
+    args = { "blame", "--date=unix", "--porcelain", self._git.file_path },
+    cwd = git_path,
+    enable_recording = true,
+  }
+  local result, err = job:sync(5000, 200) -- wait till 3 seconds
 
-    if not self.bufnr then
-      -- blame is closed while loading
-      return
-    end
+  if self.timer then
+    self.timer:stop()
+    self.timer:close()
+    self.timer = nil
+  end
 
-    local b
-    b, err = blame:blame_buffer(contents)
-    if not b then
-      notifier.error("Can't blame buffer", err)
-      return
-    end
+  if err ~= 0 then
+    result = job:stderr_result()
+    local stderr = #result > 0 and result[1] or ""
+    notifier.error("git blame error, " .. stderr, err)
+    return
+  end
 
-    git.hunks, git.hunk_indices, git.num_lines, git.authors_map =
-      git_blame_to_hunks(self.repo, git.path, git.commits, b)
+  local hunks = blame.parse_git_blame_porcelain_lines(result)
 
-    vim.schedule(function()
-      self:render()
-    end)
-  end)
+  local authors_map = {}
+  local total_lines = 0
+  local offsets = table_new(#hunks, 0)
+
+  for i, h in ipairs(hunks) do
+    authors_map[h.author_name] = 1
+    offsets[i] = total_lines + 1
+    total_lines = total_lines + h.num_lines
+  end
+
+  git.hunks = hunks
+  git.hunk_offsets = offsets
+  git.num_lines = total_lines
+
+  -- build author index table
+  local authors = {}
+  for a, _ in pairs(authors_map) do
+    authors[#authors + 1] = a
+  end
+  table.sort(authors)
+  for i, a in ipairs(authors) do
+    authors_map[a] = i - 1
+  end
+
+  git.authors_map = authors_map
 end
 
 ---@param buf string buffer content
 function GitBlame:update_buffer(buf)
   local git = self._git
-
-  if not git.blame then
-    return
-  end
-
-  local blame, err = git.blame:blame_buffer(buf)
-  if not blame then
-    notifier.error("Can't get git blame for buffer", err)
-    return
-  end
-
-  git.hunks, git.hunk_indices, git.num_lines, git.authors_map =
-    git_blame_to_hunks(self.repo, git.path, git.commits, blame)
+  return
 end
 
 ---@param hunk Fugit2GitBlameHunk
@@ -402,22 +316,24 @@ end
 ---@return integer cursor_col
 function GitBlame:get_current_hunk()
   local cursor = vim.api.nvim_win_get_cursor(self.winid)
-  local index, offset = utils.get_hunk(self._git.hunk_indices, cursor[1])
+  local index, offset = utils.get_hunk(self._git.hunk_offsets, cursor[1])
 
   return index, offset, cursor[1], cursor[2]
 end
 
 function GitBlame:next_hunk()
-  local hunk_idx, _, _, col = self:get_current_hunk()
-  local new_row = self._git.hunk_indices[hunk_idx + 1]
-  vim.api.nvim_win_set_cursor(self.winid, { new_row, col })
+  local hunk_idx, _, row, col = self:get_current_hunk()
+  local new_row = self._git.hunk_offsets[hunk_idx + 1]
+  if new_row > row then
+    vim.api.nvim_win_set_cursor(self.winid, { new_row, col })
+  end
 end
 
 function GitBlame:prev_hunk()
   local hunk_idx, hunk_offset, row, col = self:get_current_hunk()
   local new_row = hunk_offset
   if hunk_offset == row then
-    new_row = self._git.hunk_indices[math.max(hunk_idx - 1, 1)]
+    new_row = self._git.hunk_offsets[math.max(hunk_idx - 1, 1)]
   end
   vim.api.nvim_win_set_cursor(self.winid, { new_row, col })
 end
@@ -455,10 +371,10 @@ function GitBlame:setup_handlers()
   end, opts)
 
   -- jump events
-  keymap.set(self.bufnr, "n", "J", function()
+  keymap.set(self.bufnr, "n", { "J", "]c" }, function()
     self:next_hunk()
   end, opts)
-  keymap.set(self.bufnr, "n", "K", function()
+  keymap.set(self.bufnr, "n", { "K", "[c" }, function()
     self:prev_hunk()
   end, opts)
 end
