@@ -6,7 +6,8 @@ describe("git2", function()
   local head --[[@as GitReference]]
 
   setup(function()
-    git2.init()
+    local path = require("os").getenv "GIT2_DIR"
+    git2.init(path and path .. "/lib/libgit2.so" or nil)
 
     repo = git2.Repository.open(".", false) --[[@as GitRepository]]
     head, _ = repo:head() --[[@as GitReference]]

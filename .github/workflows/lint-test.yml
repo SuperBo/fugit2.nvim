@@ -53,7 +53,7 @@ jobs:
           sudo ln -s /usr/lib/x86_64-linux-gnu/libgit2.so.1.1 /usr/local/lib/libgit2.so
           sudo ldconfig
           nvim --version
-          luarocks test --local
+          luarocks test --local -- --config-file=nlua.busted
 
   test-macos:
     runs-on: macos-14
@@ -85,4 +85,4 @@ jobs:
         run: |
           brew install libgit2
           nvim --version
-          luarocks test --local -- --output=tap
+          luarocks test --local -- --config-file=nlua.busted --output=tap

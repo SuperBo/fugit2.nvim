@@ -19,11 +19,16 @@ jobs:
           fetch-depth: 0 # Required to count the commits
       - name: Get Version
         run: echo "LUAROCKS_VERSION=$(git describe --abbrev=0 --tags)" >> $GITHUB_ENV
-      - name: Install libgit2
-        run: |
-          sudo apt-get install -y libgit2-1.1
-          sudo ln -s /usr/lib/x86_64-linux-gnu/libgit2.so.1.1 /usr/local/lib/libgit2.so
-          sudo ldconfig
+
+      - uses: cachix/install-nix-action@v27
+        with:
+          nix_path: nixpkgs=channel:nixos-stable
+
+      - run: |
+          nix profile install nixpkgs#libgit2
+          export GIT2_PATH=/nix/store/$(ls /nix/store | grep libgit2-20*)
+          echo "GIT2_DIR=$GIT2_PATH" >> $GITHUB_ENV
+
       - name: LuaRocks Upload
         uses: nvim-neorocks/luarocks-tag-release@v5
         env:
@@ -31,3 +36,8 @@ jobs:
         with:
           version: ${{ env.LUAROCKS_VERSION }}
           template: .github/workflows/rockspec.template
+          test_interpreters: |
+            neovim-stable
+            neovim-nightly
+          extra_luarocks_args: |
+            GIT2_DIR=$GIT2_DIR
