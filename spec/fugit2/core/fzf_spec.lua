@@ -3,36 +3,38 @@
 local fzf = require "fugit2.core.fzf"
 local SCORE = fzf.SCORE
 
-fzf.init "default"
-
 describe("is_ascii", function()
   it("return true for ascii string", function()
-    assert(fzf.is_ascii "")
-    assert(fzf.is_ascii "Hello World!")
+    assert.is_true(fzf.is_ascii "")
+    assert.is_true(fzf.is_ascii "Hello World!")
   end)
 
   it("return false for unicode string", function()
-    assert(not fzf.is_ascii "Unicode Xin chào")
-    assert(not fzf.is_ascii "official name 简化字")
-    assert(not fzf.is_ascii "Le restaurant italien s’ouvre à midi.")
+    assert.is_false(fzf.is_ascii "Unicode Xin chào")
+    assert.is_false(fzf.is_ascii "official name 简化字")
+    assert.is_false(fzf.is_ascii "Le restaurant italien s’ouvre à midi.")
   end)
 end)
 
 describe("bonus_for", function()
+  setup(function()
+    fzf.init "default"
+  end)
+
   it("return correct bonus", function()
-    assert.equals(10, fzf.bonus_for(0, 3))
-    assert.equals(0, fzf.bonus_for(3, 3))
-    assert.equals(7, fzf.bonus_for(3, 4))
-    assert.equals(0, fzf.bonus_for(4, 3))
-    assert.equals(0, fzf.bonus_for(4, 4))
+    assert.are.equal(10, fzf.bonus_for(0, 3))
+    assert.are.equal(0, fzf.bonus_for(3, 3))
+    assert.are.equal(7, fzf.bonus_for(3, 4))
+    assert.are.equal(0, fzf.bonus_for(4, 3))
+    assert.are.equal(0, fzf.bonus_for(4, 4))
   end)
 
   it("init correct bonus matrix", function()
-    assert.equals(10, fzf.BONUS_MATRIX:at(0, 3))
-    assert.equals(0, fzf.BONUS_MATRIX:at(3, 3))
-    assert.equals(7, fzf.BONUS_MATRIX:at(3, 4))
-    assert.equals(0, fzf.BONUS_MATRIX:at(4, 3))
-    assert.equals(0, fzf.BONUS_MATRIX:at(4, 4))
+    assert.are.equal(10, fzf.BONUS_MATRIX:at(0, 3))
+    assert.are.equal(0, fzf.BONUS_MATRIX:at(3, 3))
+    assert.are.equal(7, fzf.BONUS_MATRIX:at(3, 4))
+    assert.are.equal(0, fzf.BONUS_MATRIX:at(4, 3))
+    assert.are.equal(0, fzf.BONUS_MATRIX:at(4, 4))
   end)
 end)
 
@@ -291,6 +293,10 @@ local function fuzzy_match_suite(fn, forward)
 end
 
 describe("fuzzy_match_v1", function()
+  setup(function()
+    fzf.init "default"
+  end)
+
   it("match fuzzy backward", function()
     fuzzy_match_suite(fzf.fuzzy_match_v1, false)
 

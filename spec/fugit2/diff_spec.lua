@@ -15,42 +15,42 @@ local function read_patch_file(path)
 end
 
 describe("parse_patch", function()
-  local patch = read_patch_file "tests/resources/patch_a.diff"
+  local patch = read_patch_file "spec/resources/patch_a.diff"
 
   it("get correct header", function()
     local patch_item = diff.parse_patch(patch)
 
-    assert.is_not_nil(patch_item.header)
-    assert.array(patch_item.header).has.no.holes()
-    assert.equals(4, #patch_item.header)
+    assert.is.not_nil(patch_item.header)
+    assert.array(patch_item.header).has.no.holes(4)
+    assert.are.equal(4, #patch_item.header)
   end)
 
   it("get correct num hunk", function()
     local patch_item = diff.parse_patch(patch)
 
-    assert.is_not_nil(patch_item.hunks)
-    assert.array(patch_item.hunks).has.no.holes()
-    assert.equals(4, #patch_item.hunks)
+    assert.is.not_nil(patch_item.hunks)
+    assert.array(patch_item.hunks).has.no.holes(4)
+    assert.are.equal(4, #patch_item.hunks)
   end)
 
   it("get correct hunk", function()
     local patch_item = diff.parse_patch(patch)
 
-    assert.is_not_nil(patch_item.hunks)
-    assert.is_not_nil(patch_item.hunks[4])
+    assert.is.not_nil(patch_item.hunks)
+    assert.is.not_nil(patch_item.hunks[4])
 
     local hunk = patch_item.hunks[4]
 
-    assert.equals("@@ -149,4 +172,23 @@ function PatchView:unmount()", hunk.header)
-    assert.equals(" return PatchView", hunk.lines[#hunk.lines].text)
-    assert.equals(" ", hunk.lines[#hunk.lines].c)
-    assert.equals(92, hunk.lines[#hunk.lines].linenr)
-    assert.equals(23, #hunk.lines)
+    assert.are.equal("@@ -149,4 +172,23 @@ function PatchView:unmount()", hunk.header)
+    assert.are.equal(" return PatchView", hunk.lines[#hunk.lines].text)
+    assert.are.equal(" ", hunk.lines[#hunk.lines].c)
+    assert.are.equal(92, hunk.lines[#hunk.lines].linenr)
+    assert.are.equal(23, #hunk.lines)
   end)
 end)
 
 describe("partial_patch_from_hunk", function()
-  local patch = read_patch_file "tests/resources/patch_a.diff"
+  local patch = read_patch_file "spec/resources/patch_a.diff"
   local function read_hunk(idx)
     local patch_item = diff.parse_patch(patch)
 
@@ -69,14 +69,18 @@ describe("partial_patch_from_hunk", function()
     return header, hunk_header, hunk_lines
   end
 
+  setup(function()
+    git2.init()
+  end)
+
   it("creates partial patch", function()
     local header, hunk_header, hunk_lines = read_hunk(1)
 
     local partial_patch = diff.partial_patch_from_hunk(header, hunk_header, hunk_lines)
 
-    assert.is_not_nil(partial_patch)
-    assert.equals("string", type(partial_patch))
-    assert.equals(
+    assert.is.not_nil(partial_patch)
+    assert.are.equal("string", type(partial_patch))
+    assert.are.equal(
       [[diff --git a/lua/fugit2/view/components/patch_view.lua b/lua/fugit2/view/components/patch_view.lua
 index fd118ca..0167db3 100644
 --- a/lua/fugit2/view/components/patch_view.lua
@@ -103,9 +107,9 @@ index fd118ca..0167db3 100644
 
     local partial_patch = diff.partial_patch_from_hunk(header, hunk_header, hunk_lines)
 
-    assert.is_not_nil(partial_patch)
-    assert.equals("string", type(partial_patch))
-    assert.equals(
+    assert.is.not_nil(partial_patch)
+    assert.are.equal("string", type(partial_patch))
+    assert.are.equal(
       [[diff --git a/lua/fugit2/view/components/patch_view.lua b/lua/fugit2/view/components/patch_view.lua
 index fd118ca..0167db3 100644
 --- a/lua/fugit2/view/components/patch_view.lua
@@ -144,13 +148,13 @@ index fd118ca..0167db3 100644
 
     local partial_patch = diff.partial_patch_from_hunk(header, hunk_header, hunk_lines)
 
-    assert.is_not_nil(partial_patch)
+    assert.is.not_nil(partial_patch)
 
     local diff, err = git2.Diff.from_buffer(partial_patch)
 
-    assert.equals(0, err)
-    assert.is_not_nil(diff)
-    assert.is_not_nil(diff.diff)
+    assert.are.equal(0, err)
+    assert.is.not_nil(diff)
+    assert.is.not_nil(diff.diff)
   end)
 end)
 
@@ -231,10 +235,10 @@ describe("partial_hunk", function()
 
     local _, partial = diff.partial_hunk(hunk, hunk_lines)
 
-    assert.array(partial).has.no.holes()
-    assert.equals(#hunk_lines, #partial)
-    assert.equals("@@ -219,7 +219,7 @@ function PatchView:prev_hunk_handler()", partial[1])
-    assert.equals("       if hunk_idx <= 1 then", partial[2])
+    assert.array(partial).has.no.holes(#hunk_lines)
+    assert.are.equal(#hunk_lines, #partial)
+    assert.are.equal("@@ -219,7 +219,7 @@ function PatchView:prev_hunk_handler()", partial[1])
+    assert.are.equal("       if hunk_idx <= 1 then", partial[2])
   end)
 
   it("extracts untracked hunk", function()
@@ -265,9 +269,9 @@ describe("partial_hunk", function()
 
     local _, partial = diff.partial_hunk(hunk, hunk_lines)
 
-    assert.array(partial).has.no.holes()
-    assert.equals(#hunk_lines, #partial)
-    assert.equals("@@ -0,0 +1,10 @@", partial[1])
+    assert.array(partial).has.no.holes(#hunk_lines)
+    assert.are.equal(#hunk_lines, #partial)
+    assert.are.equal("@@ -0,0 +1,10 @@", partial[1])
   end)
 
   it("extracts selected partial hunk 1", function()
@@ -283,8 +287,8 @@ describe("partial_hunk", function()
     local _, selected = diff.partial_hunk_selected(hunk, hunk_lines, 1, 2, false)
 
     assert.array(selected).has.no.holes()
-    assert.equals("@@ -1,3 +1,4 @@", selected[1])
-    assert.equals(" ---Diff helper module", selected[3])
+    assert.are.equal("@@ -1,3 +1,4 @@", selected[1])
+    assert.are.equal(" ---Diff helper module", selected[3])
   end)
 
   it("extracts selected partial hunk 2", function()
@@ -300,8 +304,8 @@ describe("partial_hunk", function()
     local _, selected = diff.partial_hunk_selected(hunk, hunk_lines, 1, 3, false)
 
     assert.array(selected).has.no.holes()
-    assert.equals("@@ -1,3 +1,5 @@", selected[1])
-    assert.equals("+", selected[3])
+    assert.are.equal("@@ -1,3 +1,5 @@", selected[1])
+    assert.are.equal("+", selected[3])
   end)
 
   it("extracts selected partial hunk 3", function()
@@ -316,10 +320,10 @@ describe("partial_hunk", function()
 
     local _, selected = diff.partial_hunk_selected(hunk, hunk_lines, 1, 6, false)
 
-    assert.array(selected).has.no.holes()
-    assert.equals(9, #selected)
-    assert.equals("@@ -277,8 +277,6 @@ function BitArray:set_k_unset_indices(k)", selected[1])
-    assert.equals("   local i = 1", selected[9])
+    assert.array(selected).has.no.holes(9)
+    assert.are.equal(9, #selected)
+    assert.are.equal("@@ -277,8 +277,6 @@ function BitArray:set_k_unset_indices(k)", selected[1])
+    assert.are.equal("   local i = 1", selected[9])
   end)
 
   it("extracts selected partial hunk 4", function()
@@ -334,13 +338,13 @@ describe("partial_hunk", function()
 
     local _, selected = diff.partial_hunk_selected(hunk, hunk_lines, 7, 10, false)
 
-    assert.is_not_nil(selected)
-    assert.array(selected).has.no.holes()
-    assert.equals(13, #selected)
-    assert.equals("@@ -277,9 +277,12 @@ function BitArray:set_k_unset_indices(k)", selected[1])
-    assert.equals(" ---@param lst table", selected[6])
-    assert.equals("+---@generic T", selected[8])
-    assert.equals(" function M.list_sorted_insert(lst, ele)", selected[11])
+    assert.is.not_nil(selected)
+    assert.array(selected).has.no.holes(13)
+    assert.are.equal(13, #selected)
+    assert.are.equal("@@ -277,9 +277,12 @@ function BitArray:set_k_unset_indices(k)", selected[1])
+    assert.are.equal(" ---@param lst table", selected[6])
+    assert.are.equal("+---@generic T", selected[8])
+    assert.are.equal(" function M.list_sorted_insert(lst, ele)", selected[11])
   end)
 
   it("extracts selected partial hunk with minus line non-selected", function()
@@ -355,12 +359,12 @@ describe("partial_hunk", function()
 
     local _, selected = diff.partial_hunk_selected(hunk, hunk_lines, 6, 7, false)
 
-    assert.is_not_nil(selected)
+    assert.is.not_nil(selected)
     assert.array(selected).has.no.holes()
-    assert.equals(#hunk_lines, #selected)
-    assert.equals("@@ -219,7 +219,8 @@ function PatchView:prev_hunk_handler()", selected[1])
-    assert.equals("         new_row = self._hunks[hunk_idx-1]", selected[5])
-    assert.equals("+        new_row = self._hunk_offsets[hunk_idx-1]", selected[6])
+    assert.are.equal(#hunk_lines, #selected)
+    assert.are.equal("@@ -219,7 +219,8 @@ function PatchView:prev_hunk_handler()", selected[1])
+    assert.are.equal("         new_row = self._hunks[hunk_idx-1]", selected[5])
+    assert.are.equal("+        new_row = self._hunk_offsets[hunk_idx-1]", selected[6])
   end)
 
   it("extracts selected partial hunk for reverse 1", function()
@@ -375,11 +379,11 @@ describe("partial_hunk", function()
 
     local _, partial = diff.partial_hunk_selected(hunk, hunk_lines, 3, 5, true)
 
-    assert.array(partial).has.no.holes()
-    assert.equals(8, #partial)
-    assert.equals("@@ -219,7 +219,6 @@ function PatchView:prev_hunk_handler()", partial[1])
-    assert.equals("-        new_row = self._hunks[hunk_idx-1]", partial[5])
-    assert.equals("         new_row = self._hunk_offsets[hunk_idx-1]", partial[6])
+    assert.array(partial).has.no.holes(8)
+    assert.are.equal(8, #partial)
+    assert.are.equal("@@ -219,7 +219,6 @@ function PatchView:prev_hunk_handler()", partial[1])
+    assert.are.equal("-        new_row = self._hunks[hunk_idx-1]", partial[5])
+    assert.are.equal("         new_row = self._hunk_offsets[hunk_idx-1]", partial[6])
   end)
 
   it("returns nil for context only selection", function()
@@ -419,11 +423,11 @@ describe("partial_hunk", function()
 
     local merged = diff.merge_hunks(hunks, hunk_segments)
 
-    assert.is_not_nil(merged)
+    assert.is.not_nil(merged)
     assert.array(merged).has.no.holes()
-    assert.equals(#hunk_lines1 + #hunk_lines2, #merged)
-    assert.equals("@@ -1,3 +1,5 @@", merged[1])
-    assert.equals("@@ -277,9 +279,11 @@ function BitArray:set_k_unset_indices(k)", merged[#hunk_lines1 + 1])
+    assert.are.equal(#hunk_lines1 + #hunk_lines2, #merged)
+    assert.are.equal("@@ -1,3 +1,5 @@", merged[1])
+    assert.are.equal("@@ -277,9 +279,11 @@ function BitArray:set_k_unset_indices(k)", merged[#hunk_lines1 + 1])
   end)
 
   it("merges 3 partial hunks into one", function()
@@ -456,12 +460,15 @@ describe("partial_hunk", function()
 
     local merged = diff.merge_hunks(hunks, hunk_segments)
 
-    assert.is_not_nil(merged)
+    assert.is.not_nil(merged)
     assert.array(merged).has.no.holes()
-    assert.equals(#hunk_lines1 + #hunk_lines2 + #hunk_lines3, #merged)
-    assert.equals("@@ -1,3 +1,5 @@", merged[1])
-    assert.equals("@@ -277,9 +279,11 @@ function BitArray:set_k_unset_indices(k)", merged[#hunk_lines1 + 1])
-    assert.equals("@@ -320,7 +324,7 @@ function PatchView:prev_hunk_handler()", merged[#hunk_lines1 + #hunk_lines2 + 1])
+    assert.are.equal(#hunk_lines1 + #hunk_lines2 + #hunk_lines3, #merged)
+    assert.are.equal("@@ -1,3 +1,5 @@", merged[1])
+    assert.are.equal("@@ -277,9 +279,11 @@ function BitArray:set_k_unset_indices(k)", merged[#hunk_lines1 + 1])
+    assert.are.equal(
+      "@@ -320,7 +324,7 @@ function PatchView:prev_hunk_handler()",
+      merged[#hunk_lines1 + #hunk_lines2 + 1]
+    )
   end)
 end)
 
@@ -490,10 +497,10 @@ describe("reverse_hunk", function()
     local _, reversed = diff.reverse_hunk(hunk, hunk_lines)
 
     assert.array(reversed).has.no.holes()
-    assert.equals("@@ -2,5 +2,5 @@ test_header", reversed[1])
-    assert.equals(" This is line i", reversed[2])
-    assert.equals("+This is line 2", reversed[4])
-    assert.equals("-This is line i", reversed[7])
+    assert.are.equal("@@ -2,5 +2,5 @@ test_header", reversed[1])
+    assert.are.equal(" This is line i", reversed[2])
+    assert.are.equal("+This is line 2", reversed[4])
+    assert.are.equal("-This is line i", reversed[7])
   end)
 
   it("reverses untracked hunk", function()
@@ -524,9 +531,9 @@ describe("reverse_hunk", function()
 
     local _, reversed = diff.reverse_hunk(hunk, hunk_lines)
 
-    assert.array(reversed).has.no.holes()
-    assert.equals(#hunk_lines, #reversed)
-    assert.equals("@@ -1,10 +0,0 @@", reversed[1])
+    assert.array(reversed).has.no.holes(#hunk_lines)
+    assert.are.equal(#hunk_lines, #reversed)
+    assert.are.equal("@@ -1,10 +0,0 @@", reversed[1])
   end)
 
   it("gets line number at context line", function()
@@ -568,12 +575,12 @@ describe("reverse_hunk", function()
     local line15 = diff.file_line(hunk, hunk_lines, 15)
     local line16 = diff.file_line(hunk, hunk_lines, 16)
 
-    assert.equals(788, line0)
-    assert.equals(788, line1)
-    assert.equals(789, line2)
-    assert.equals(801, line14)
-    assert.equals(802, line15)
-    assert.equals(803, line16)
+    assert.are.equal(788, line0)
+    assert.are.equal(788, line1)
+    assert.are.equal(789, line2)
+    assert.are.equal(801, line14)
+    assert.are.equal(802, line15)
+    assert.are.equal(803, line16)
   end)
 
   it("gets line number at added line", function()
@@ -612,9 +619,9 @@ describe("reverse_hunk", function()
     local line6 = diff.file_line(hunk, hunk_lines, 6)
     local line10 = diff.file_line(hunk, hunk_lines, 10)
 
-    assert.equals(791, line4)
-    assert.equals(793, line6)
-    assert.equals(797, line10)
+    assert.are.equal(791, line4)
+    assert.are.equal(793, line6)
+    assert.are.equal(797, line10)
   end)
 
   it("gets line number at removed line", function()
@@ -653,9 +660,9 @@ describe("reverse_hunk", function()
     local line10 = diff.file_line(hunk, hunk_lines, 10)
     local line12 = diff.file_line(hunk, hunk_lines, 12)
 
-    assert.equals(2231, line4)
-    assert.equals(2231, line6)
-    assert.equals(2231, line10)
-    assert.equals(2231, line12)
+    assert.are.equal(2231, line4)
+    assert.are.equal(2231, line6)
+    assert.are.equal(2231, line10)
+    assert.are.equal(2231, line12)
   end)
 end)

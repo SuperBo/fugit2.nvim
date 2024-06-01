@@ -4,12 +4,8 @@ local stat = require "fugit2.core.stat"
 local table_new = require "table.new"
 local uv = vim.uv or vim.loop
 
---- Libgit2 init
+--- Libgit2 init counter
 local libgit2_init_count = 0
-
-if libgit2_init_count == 0 then
-  libgit2_init_count = libgit2.C.git_libgit2_init()
-end
 
 -- ========================
 -- | Libgit2 Enum section |
@@ -3613,6 +3609,15 @@ end
 
 ---@class Git2Module
 local M = {}
+
+-- Inits luajit-git2 lib
+---@param path string? optional path to libgit2 lib
+function M.init(path)
+  libgit2.load_library(path)
+  if libgit2_init_count == 0 then
+    libgit2_init_count = libgit2.C.git_libgit2_init()
+  end
+end
 
 M.Config = Config
 M.Diff = Diff
