@@ -46,7 +46,6 @@ function GitBlame:init(ns_id, repo, file_bufnr)
     authors_map = {} --[[@as {[string]: integer} ]],
   }
 
-  -- TODO: concat git_path_to_bufname
   local buf_name = "Fugit2GitBlame:" .. tostring(file_path)
 
   for _, b in ipairs(vim.api.nvim_list_bufs()) do
@@ -156,12 +155,6 @@ function GitBlame:update()
   git.authors_map = authors_map
 end
 
----@param buf string buffer content
-function GitBlame:update_buffer(buf)
-  local git = self._git
-  return
-end
-
 ---@param hunk Fugit2GitBlameHunk
 ---@param now osdateparam
 ---@param authors_map { [string]: integer }
@@ -219,6 +212,10 @@ function GitBlame:render()
   local ns_id = self.ns_id
   local authors_map = git.authors_map
 
+  -- unlock buffer edit
+  vim.api.nvim_buf_set_option(bufnr, "readonly", false)
+  vim.api.nvim_buf_set_option(bufnr, "modifiable", true)
+
   -- clear buffer
   local num_lines = vim.api.nvim_buf_line_count(bufnr)
   if num_lines > git.num_lines then
@@ -259,6 +256,23 @@ function GitBlame:mount()
   local winid = vim.api.nvim_get_current_win()
   local cursor = vim.api.nvim_win_get_cursor(0)
   self.file_winid = winid
+
+  -- clear auto command in main window
+  vim.api.nvim_clear_autocmds {
+    event = event.BufWritePost,
+    buffer = self.file_bufnr,
+    group = "Fugit2",
+  }
+
+  vim.api.nvim_create_autocmd(event.BufWritePost, {
+    group = "Fugit2",
+    buffer = self.file_bufnr,
+    desc = "Update GitBlame buffer when finished writing file",
+    callback = function()
+      self:update()
+      self:render()
+    end,
+  })
 
   vim.schedule(function()
     -- move cursor to start of file
@@ -361,6 +375,11 @@ function GitBlame:setup_handlers()
         self.file_winid = nil
         vim.api.nvim_win_set_option(winid, "scrollbind", false)
         vim.api.nvim_win_set_option(winid, "cursorbind", false)
+        vim.api.nvim_clear_autocmds {
+          event = event.BufWritePost,
+          buffer = self.file_bufnr,
+          group = "Fugit2",
+        }
       end
     end,
   })

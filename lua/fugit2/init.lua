@@ -21,8 +21,11 @@ local config = {
 ---@class Fugit2Module
 local M = {}
 
----@type number
+---@type integer
 M.namespace = 0
+
+---@type integer
+M.autocmd_group = -1
 
 ---@type Fugit2Config
 M.config = config
@@ -33,7 +36,7 @@ M.config = config
 M.setup = function(args)
   M.config = vim.tbl_deep_extend("force", M.config, args or {})
 
-  -- Validate
+  -- TODO: Validate
 
   -- Load C Library
   require("fugit2.libgit2").load_library(M.config.libgit2_path)
@@ -41,6 +44,10 @@ M.setup = function(args)
   if M.namespace == 0 then
     M.namespace = vim.api.nvim_create_namespace "Fugit2"
     require("fugit2.view.colors").set_hl(0)
+  end
+
+  if M.autocmd_group < 0 then
+    M.autocmd_group = vim.api.nvim_create_augroup("Fugit2", { clear = true })
   end
 end
 

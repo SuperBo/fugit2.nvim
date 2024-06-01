@@ -3290,28 +3290,31 @@ end
 ---@param index GitIndex? Repository index, can be null
 ---@param paths string[]? Git paths, can be null
 ---@param reverse? boolean whether to reverse the diff
+---@param context_lines integer? number of context lines
 ---@return GitDiff?
 ---@return GIT_ERROR
-function Repository:diff_index_to_workdir(index, paths, reverse)
-  return self:diff_helper(true, true, index, paths, reverse)
+function Repository:diff_index_to_workdir(index, paths, reverse, context_lines)
+  return self:diff_helper(true, true, index, paths, reverse, context_lines)
 end
 
 ---@param index GitIndex? Repository index, can be null
 ---@param paths string[]? Git paths, can be null
 ---@param reverse? boolean whether to reverse the diff
+---@param context_lines integer? number of context lines
 ---@return GitDiff?
 ---@return GIT_ERROR
-function Repository:diff_head_to_index(index, paths, reverse)
-  return self:diff_helper(false, true, index, paths, reverse)
+function Repository:diff_head_to_index(index, paths, reverse, context_lines)
+  return self:diff_helper(false, true, index, paths, reverse, context_lines)
 end
 
 ---@param index GitIndex? Repository index, can be null
 ---@param paths string[]? Git paths, can be null
 ---@param reverse? boolean whether to reverse the diff
+---@param context_lines integer? number of context lines
 ---@return GitDiff?
 ---@return GIT_ERROR
-function Repository:diff_head_to_workdir(index, paths, reverse)
-  return self:diff_helper(true, false, index, paths, reverse)
+function Repository:diff_head_to_workdir(index, paths, reverse, context_lines)
+  return self:diff_helper(true, false, index, paths, reverse, context_lines)
 end
 
 ---@param include_workdir boolean Whether to do include workd_dir in diff target
@@ -3319,9 +3322,10 @@ end
 ---@param index GitIndex? Repository index, can be null
 ---@param paths string[]? Git paths, can be null
 ---@param reverse boolean? Reverse diff
+---@param context_lines integer? number of context lines
 ---@return GitDiff?
 ---@return GIT_ERROR
-function Repository:diff_helper(include_workdir, include_index, index, paths, reverse)
+function Repository:diff_helper(include_workdir, include_index, index, paths, reverse, context_lines)
   local c_paths, err
   local opts = libgit2.git_diff_options(libgit2.GIT_DIFF_OPTIONS_INIT)
   local find_opts = libgit2.git_diff_find_options(libgit2.GIT_DIFF_FIND_OPTIONS_INIT)
@@ -3338,6 +3342,10 @@ function Repository:diff_helper(include_workdir, include_index, index, paths, re
     c_paths = libgit2.const_char_pointer_array(#paths, paths)
     opts[0].pathspec.strings = c_paths
     opts[0].pathspec.count = #paths
+  end
+
+  if context_lines then
+    opts[0].context_lines = context_lines
   end
 
   if include_workdir and include_index then

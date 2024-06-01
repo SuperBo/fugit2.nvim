@@ -400,14 +400,14 @@ function GitGraph:setup_handlers()
   log_view:map("n", "yy", function()
     local commit, _ = log_view:get_commit()
     if commit then
-      vim.api.nvim_call_function("setreg", { "0", commit.oid })
+      vim.fn.setreg("0", commit.oid)
     end
   end, map_options)
 
   log_view:map("n", "yc", function()
     local commit, _ = log_view:get_commit()
     if commit then
-      vim.api.nvim_call_function("setreg", { "+", commit.oid })
+      vim.fn.setreg("+", commit.oid)
     end
   end, map_options)
 end
