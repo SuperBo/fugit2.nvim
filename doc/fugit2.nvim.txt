@@ -1,0 +1,180 @@
+*fugit2.nvim.txt*         For Neovim >= 0.8.0        Last change: 2024 June 01
+
+==============================================================================
+Table of Contents                              *fugit2.nvim-table-of-contents*
+
+1. Neovim git GUI powered by libgit2|fugit2.nvim-neovim-git-gui-powered-by-libgit2|
+  - Features          |fugit2.nvim-neovim-git-gui-powered-by-libgit2-features|
+  - Installation  |fugit2.nvim-neovim-git-gui-powered-by-libgit2-installation|
+  - Usage and Keymap|fugit2.nvim-neovim-git-gui-powered-by-libgit2-usage-and-keymap|
+  - Credits            |fugit2.nvim-neovim-git-gui-powered-by-libgit2-credits|
+2. Links                                                   |fugit2.nvim-links|
+
+==============================================================================
+1. Neovim git GUI powered by libgit2*fugit2.nvim-neovim-git-gui-powered-by-libgit2*
+
+
+
+Git plugin for Neovim (based on libgit2).
+
+
+
+
+FEATURES              *fugit2.nvim-neovim-git-gui-powered-by-libgit2-features*
+
+- Floating git source window.
+- Magit style menu.
+- Patch View.
+- Stage/Unstage hunkes in patch view.
+- Nice git graph.
+- Diff view.
+- TODO: Git blame.
+- TODO: In-memory rebase.
+- TODO: Remap default key binding.
+- TODO: Proper help menu.
+- TODO: Native branch popup.
+
+
+INSTALLATION      *fugit2.nvim-neovim-git-gui-powered-by-libgit2-installation*
+
+Third party libraries: - Required: Libgit2 <https://libgit2.org> - Optional (if
+use gpg signing): GPGme <https://gnupg.org/software/gpgme/index.html>
+
+Please refer to Installation Guide
+<https://github.com/SuperBo/fugit2.nvim/wiki/%F0%9F%93%A6-Installation>.
+
+
+NEOVIM ~
+
+<https://luarocks.org/modules/SuperBo/fugit2.nvim>
+
+
+ROCKS.NVIM
+
+>
+    :Rocks install fugit2.nvim
+<
+
+
+LAZY
+
+If you are using lazy, you can use this config
+
+>lua
+    {
+      'SuperBo/fugit2.nvim',
+      opts = {
+        width = 70,
+      },
+      dependencies = {
+        'MunifTanjim/nui.nvim',
+        'nvim-tree/nvim-web-devicons',
+        'nvim-lua/plenary.nvim',
+        {
+          'chrisgrieser/nvim-tinygit', -- optional: for Github PR view
+          dependencies = { 'stevearc/dressing.nvim' }
+        },
+      },
+      cmd = { 'Fugit2', 'Fugit2Diff', 'Fugit2Graph' },
+      keys = {
+        { '<leader>F', mode = 'n', '<cmd>Fugit2<cr>' }
+      }
+    },
+<
+
+In case you want to use more stable diffview.nvim
+<https://github.com/sindrets/diffview.nvim> for diff split view.
+
+>lua
+    {
+      'SuperBo/fugit2.nvim',
+      opts = {
+        width = 70,
+        external_diffview = true, -- tell fugit2 to use diffview.nvim instead of builtin implementation.
+      },
+      dependencies = {
+        'MunifTanjim/nui.nvim',
+        'nvim-tree/nvim-web-devicons',
+        'nvim-lua/plenary.nvim',
+        {
+          'chrisgrieser/nvim-tinygit', -- optional: for Github PR view
+          dependencies = { 'stevearc/dressing.nvim' }
+        },
+      },
+      cmd = { 'Fugit2', 'Fugit2Diff', 'Fugit2Graph' },
+      keys = {
+        { '<leader>F', mode = 'n', '<cmd>Fugit2<cr>' }
+      }
+    },
+    {
+      'sindrets/diffview.nvim',
+      dependencies = { 'nvim-tree/nvim-web-devicons' },
+      -- lazy, only load diffview by these commands
+      cmd = {
+        'DiffviewFileHistory', 'DiffviewOpen', 'DiffviewToggleFiles', 'DiffviewFocusFiles', 'DiffviewRefresh'
+      }
+    }
+<
+
+
+PCKR.NVIM
+
+TODO: add later
+
+Default options dictionary
+
+>lua
+    ---@class Fugit2Config
+    ---@field width integer|string Main popup width
+    ---@field max_width integer|string Main popup popup width when expand patch view
+    ---@field min_width integer File view width when expand patch view
+    ---@field content_width File view content width
+    ---@field height integer|string Main popup height
+    ---@field libgit2_path string? path to libgit2 lib if not set via environments
+    ---@field external_diffview boolean whether to use external diffview.nvim or Fugit2 implementation
+    local opts = {
+      width = 100,
+      min_width = 50,
+      content_width = 60,
+      max_width = "80%",
+      height = "60%",
+      external_diffview = false,
+    }
+<
+
+
+USAGE AND KEYMAP*fugit2.nvim-neovim-git-gui-powered-by-libgit2-usage-and-keymap*
+
+Please refer to Usage Guide
+<https://github.com/SuperBo/fugit2.nvim/wiki/%E2%8C%A8%EF%B8%8F-Usage-and-Keymap>.
+
+
+CREDITS                *fugit2.nvim-neovim-git-gui-powered-by-libgit2-credits*
+
+Very special thanks to these plugins and their authors.
+
+- nvim-tiny <https://github.com/chrisgrieser/nvim-tinygit> for Github integration.
+- diffview.nvim <https://github.com/sindrets/diffview.nvim> for Diffview integration.
+- nui.nvim <https://github.com/MunifTanjim/nui.nvim> for his great Nvim UI library.
+- plenary.nvim <https://github.com/nvim-lua/plenary.nvim> for utilities and testing framework.
+- libgit2 <https://libgit2.org/> for lightweight and performance git library.
+- lazygit <https://github.com/jesseduffield/lazygit> for Git pane inspirations.
+- fugitive.vim <https://github.com/tpope/vim-fugitive> for a great vim git client.
+- magit <https://magit.vc/> for a great Git client.
+- neogit <https://github.com/NeogitOrg/neogit> for great Neovim git client.
+- vim-flog <https://github.com/rbong/vim-flog> for beautiful git graph.
+- blame.nvim <https://github.com/FabijanZulj/blame.nvim> for git blame inspiration.
+
+==============================================================================
+2. Links                                                   *fugit2.nvim-links*
+
+1. *Neovim*: https://camo.githubusercontent.com/eead1ee1a978cd0b8a41e94d79973e5f84a337858ce89db1b2c2084140c35a0b/68747470733a2f2f696d672e736869656c64732e696f2f62616467652f4e656f56696d2d2532333537413134332e7376673f267374796c653d666f722d7468652d6261646765266c6f676f3d6e656f76696d266c6f676f436f6c6f723d7768697465
+2. *Lua*: https://img.shields.io/badge/Made%20with%20Lua-blueviolet.svg?style=for-the-badge&logo=lua
+3. *GitHub Workflow Status*: https://img.shields.io/github/actions/workflow/status/ellisonleao/nvim-plugin-template/lint-test.yml?branch=main&style=for-the-badge
+4. *Fugit2 Main View*: https://raw.githubusercontent.com/SuperBo/fugit2.nvim/assets/assets/main_view.png
+5. *Fugit2 Graph View*: https://raw.githubusercontent.com/SuperBo/fugit2.nvim/assets/assets/graph_view.png
+6. *LuaRocks*: https://img.shields.io/luarocks/v/superbo/fugit2.nvim?logo=lua&color=purple
+
+Generated by panvimdoc <https://github.com/kdheepak/panvimdoc>
+
+vim:tw=78:ts=8:noet:ft=help:norl:
