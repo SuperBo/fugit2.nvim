@@ -3,7 +3,7 @@
 local blame = require "fugit2.core.blame"
 local context = require "plenary.context_manager"
 
-local RESOURCE_DIR = "tests/resources/"
+local RESOURCE_DIR = "spec/resources/"
 
 ---@param path string
 ---@return string
@@ -20,18 +20,18 @@ describe("git_blame", function()
 
     local hunks = blame.parse_git_blame_porcelain(stdout)
 
-    assert.array(hunks).has.no.holes()
-    assert.equals(6, #hunks)
-    assert.equals(1, hunks[1].num_lines)
-    assert.equals(2, hunks[4].num_lines)
-    assert.equals(1, hunks[1].start_linenr)
-    assert.equals(2, hunks[2].start_linenr)
-    assert.equals(3, hunks[3].start_linenr)
-    assert.equals(4, hunks[4].start_linenr)
-    assert.equals(6, hunks[5].start_linenr)
-    assert.equals("Scott Chacon", hunks[1].author_name)
-    assert.equals("Vicent Martí", hunks[1].committer_name)
-    assert.equals("Haneef Mubarak", hunks[2].author_name)
+    assert.array(hunks).has.no.holes(6)
+    assert.are.equal(6, #hunks)
+    assert.are.equal(1, hunks[1].num_lines)
+    assert.are.equal(2, hunks[4].num_lines)
+    assert.are.equal(1, hunks[1].start_linenr)
+    assert.are.equal(2, hunks[2].start_linenr)
+    assert.are.equal(3, hunks[3].start_linenr)
+    assert.are.equal(4, hunks[4].start_linenr)
+    assert.are.equal(6, hunks[5].start_linenr)
+    assert.are.equal("Scott Chacon", hunks[1].author_name)
+    assert.are.equal("Vicent Martí", hunks[1].committer_name)
+    assert.are.equal("Haneef Mubarak", hunks[2].author_name)
   end)
 
   it("parses git blame with uncommitted changes", function()
@@ -39,13 +39,13 @@ describe("git_blame", function()
 
     local hunks = blame.parse_git_blame_porcelain(stdout)
 
-    assert.array(hunks).has.no.holes()
-    assert.equals(10, #hunks)
-    assert.equals(3, hunks[10].num_lines)
-    assert.equals(11, hunks[10].start_linenr)
-    assert.equals(11, hunks[10].orig_start_linenr)
-    assert.equals("You", hunks[10].author_name)
-    assert.equals("Uncommitted changes", hunks[10].message)
+    assert.array(hunks).has.no.holes(10)
+    assert.are.equal(10, #hunks)
+    assert.are.equal(3, hunks[10].num_lines)
+    assert.are.equal(11, hunks[10].start_linenr)
+    assert.are.equal(11, hunks[10].orig_start_linenr)
+    assert.are.equal("You", hunks[10].author_name)
+    assert.are.equal("Uncommitted changes", hunks[10].message)
     assert.is_nil(hunks[10].date)
   end)
 end)

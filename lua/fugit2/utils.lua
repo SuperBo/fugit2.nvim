@@ -5,10 +5,17 @@ local NuiText = require "nui.text"
 local NuiTree = require "nui.tree"
 local Path = require "plenary.path"
 
-local git2 = require "fugit2.git2"
-
 ---@class Fugit2Utils
 local M = {}
+
+-- copy from git2 to avoid import
+local GIT_REFERENCE_NAMESPACE = {
+  NONE = 0, -- Normal ref, no namespace
+  BRANCH = 1, -- Reference is in Branch namespace
+  TAG = 2, -- Reference is in Tag namespace
+  REMOTE = 3, -- Reference is in Remote namespace
+  NOTE = 4, -- Reference is in Note namespace
+}
 
 ---@enum LINUX_SIGNALS
 M.LINUX_SIGNALS = {
@@ -142,11 +149,11 @@ end
 ---@param namespace GIT_REFERENCE_NAMESPACE
 ---@return string
 function M.get_git_namespace_icon(namespace)
-  if namespace == git2.GIT_REFERENCE_NAMESPACE.BRANCH then
+  if namespace == GIT_REFERENCE_NAMESPACE.BRANCH then
     return "󰘬 "
-  elseif namespace == git2.GIT_REFERENCE_NAMESPACE.TAG then
+  elseif namespace == GIT_REFERENCE_NAMESPACE.TAG then
     return "󰓹 "
-  elseif namespace == git2.GIT_REFERENCE_NAMESPACE.REMOTE then
+  elseif namespace == GIT_REFERENCE_NAMESPACE.REMOTE then
     return "󰑔 "
   end
 

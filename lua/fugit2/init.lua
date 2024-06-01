@@ -39,7 +39,7 @@ M.setup = function(args)
   -- TODO: Validate
 
   -- Load C Library
-  require("fugit2.libgit2").load_library(M.config.libgit2_path)
+  require("fugit2.git2").init(M.config.libgit2_path)
 
   if M.namespace == 0 then
     M.namespace = vim.api.nvim_create_namespace "Fugit2"

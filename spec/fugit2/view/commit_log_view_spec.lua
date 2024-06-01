@@ -3,7 +3,7 @@ local context = require "plenary.context_manager"
 local Graph = require "fugit2.view.components.commit_log_view"
 local CommitNode = Graph.CommitNode
 
-local RESOURCE_DIR = "tests/resources/"
+local RESOURCE_DIR = "spec/resources/"
 
 ---@param path string
 ---@param read_output boolean Read expected output or not
@@ -47,12 +47,12 @@ describe("prepare_commit_node_visualisation", function()
 
     local out, length = Graph.prepare_commit_node_visualisation(nodes)
 
-    assert.array(out).has.no.holes()
-    assert.equals(#nodes, #out)
-    assert.equals(1, length)
+    assert.array(out).has.no.holes(#nodes)
+    assert.are.equal(#nodes, #out)
+    assert.are.equal(1, length)
     for _, n in ipairs(out) do
-      assert.is_not_nil(n.vis)
-      assert.equals(1, n.vis.j)
+      assert.is.not_nil(n.vis)
+      assert.are.equal(1, n.vis.j)
     end
   end)
 
@@ -63,15 +63,15 @@ describe("prepare_commit_node_visualisation", function()
     local js = { 1, 2, 1, 2, 1, 1, 1, 2, 1 }
 
     assert.array(out).has.no.holes()
-    assert.equals(9, #out)
-    assert.equals(2, width)
+    assert.are.equal(9, #out)
+    assert.are.equal(2, width)
     for i, n in ipairs(out) do
-      assert.is_not_nil(n.vis)
-      assert.equals(js[i], n.vis.j)
+      assert.is.not_nil(n.vis)
+      assert.are.equal(js[i], n.vis.j)
     end
     assert.is_nil(out[2].vis.merge_cols)
-    assert.same({ 1 }, out[2].vis.active_cols)
-    assert.same({ 2 }, out[7].vis.active_cols)
+    assert.are.same({ 1 }, out[2].vis.active_cols)
+    assert.are.same({ 2 }, out[7].vis.active_cols)
     assert.is_nil(out[9].vis.active_cols)
   end)
 
@@ -82,17 +82,17 @@ describe("prepare_commit_node_visualisation", function()
     local js = { 1, 1, 2, 2, 1, 1, 1 }
 
     assert.array(out).has.no.holes()
-    assert.equals(#nodes, #out)
-    assert.equals(2, length)
+    assert.are.equal(#nodes, #out)
+    assert.are.equal(2, length)
     for i, n in ipairs(out) do
-      assert.is_not_nil(n.vis)
-      assert.equals(js[i], n.vis.j)
+      assert.is.not_nil(n.vis)
+      assert.are.equal(js[i], n.vis.j)
     end
-    assert.same({ 2 }, out[2].vis.merge_cols)
-    assert.same({ 1 }, out[3].vis.active_cols)
-    assert.same({ 1 }, out[4].vis.active_cols)
-    assert.same({ 2 }, out[5].vis.active_cols)
-    assert.same({ 2 }, out[6].vis.out_cols)
+    assert.are.same({ 2 }, out[2].vis.merge_cols)
+    assert.are.same({ 1 }, out[3].vis.active_cols)
+    assert.are.same({ 1 }, out[4].vis.active_cols)
+    assert.are.same({ 2 }, out[5].vis.active_cols)
+    assert.are.same({ 2 }, out[6].vis.out_cols)
   end)
 
   it("prepares simple merge graph 2", function()
@@ -102,16 +102,16 @@ describe("prepare_commit_node_visualisation", function()
     local js = { 1, 1, 1, 2, 2, 1, 1 }
 
     assert.array(out).has.no.holes()
-    assert.equals(#nodes, #out)
-    assert.equals(2, length)
+    assert.are.equal(#nodes, #out)
+    assert.are.equal(2, length)
     for i, n in ipairs(out) do
-      assert.is_not_nil(n.vis)
-      assert.equals(js[i], n.vis.j)
+      assert.is.not_nil(n.vis)
+      assert.are.equal(js[i], n.vis.j)
     end
-    assert.same({ 2 }, out[2].vis.merge_cols)
-    assert.same({ 2 }, out[3].vis.active_cols)
-    assert.same({ 1 }, out[4].vis.active_cols)
-    assert.same({ 2 }, out[6].vis.out_cols)
+    assert.are.same({ 2 }, out[2].vis.merge_cols)
+    assert.are.same({ 2 }, out[3].vis.active_cols)
+    assert.are.same({ 1 }, out[4].vis.active_cols)
+    assert.are.same({ 2 }, out[6].vis.out_cols)
   end)
 
   it("prepares merge graph continue after merge", function()
@@ -121,17 +121,17 @@ describe("prepare_commit_node_visualisation", function()
     local js = { 1, 2, 1, 1, 2, 2, 1, 1 }
 
     assert.array(out).has.no.holes()
-    assert.equals(#nodes, #out)
-    assert.equals(2, length)
+    assert.are.equal(#nodes, #out)
+    assert.are.equal(2, length)
     for i, n in ipairs(out) do
-      assert.is_not_nil(n.vis)
-      assert.equals(js[i], n.vis.j)
+      assert.is.not_nil(n.vis)
+      assert.are.equal(js[i], n.vis.j)
     end
-    assert.same({ 1 }, out[2].vis.active_cols)
-    assert.same({ 2 }, out[3].vis.merge_cols)
-    assert.same({ 2 }, out[4].vis.active_cols)
-    assert.same({ 1 }, out[6].vis.active_cols)
-    assert.same({ 2 }, out[7].vis.out_cols)
+    assert.are.same({ 1 }, out[2].vis.active_cols)
+    assert.are.same({ 2 }, out[3].vis.merge_cols)
+    assert.are.same({ 2 }, out[4].vis.active_cols)
+    assert.are.same({ 1 }, out[6].vis.active_cols)
+    assert.are.same({ 2 }, out[7].vis.out_cols)
   end)
 
   it("prepares branch out graph", function()
@@ -140,11 +140,11 @@ describe("prepare_commit_node_visualisation", function()
     local out, width = Graph.prepare_commit_node_visualisation(nodes)
     local js = { 1, 2, 2, 3, 1, 1, 3, 1, 1, 2, 1 }
 
-    assert.array(out).has.no.holes()
-    assert.equals(3, width)
+    assert.array(out).has.no.holes(3)
+    assert.are.equal(3, width)
     for i, n in ipairs(out) do
-      assert.is_not_nil(n.vis)
-      assert.equals(js[i], n.vis.j)
+      assert.is.not_nil(n.vis)
+      assert.are.equal(js[i], n.vis.j)
     end
   end)
 end)
@@ -155,7 +155,7 @@ describe("draw_graph_line", function()
 
     local line = Graph.draw_graph_line(cols, 0, nil)
 
-    assert.equals("x", line:content())
+    assert.are.equal("x", line:content())
   end)
 
   it("draws single commit at col 2", function()
@@ -163,7 +163,7 @@ describe("draw_graph_line", function()
 
     local line = Graph.draw_graph_line(cols, 0, nil)
 
-    assert.equals("    x", line:content())
+    assert.are.equal("    x", line:content())
   end)
 
   it("draws single commit with active columns", function()
@@ -171,7 +171,7 @@ describe("draw_graph_line", function()
 
     local line = Graph.draw_graph_line(cols, 0, 2)
 
-    assert.equals("|   x   |", line:content())
+    assert.are.equal("|   x   |", line:content())
   end)
 
   it("draws active columns only", function()
@@ -179,7 +179,7 @@ describe("draw_graph_line", function()
 
     local line = Graph.draw_graph_line(cols, 0)
 
-    assert.equals("|       |   |", line:content())
+    assert.are.equal("|       |   |", line:content())
   end)
 
   it("draws with padding", function()
@@ -187,7 +187,7 @@ describe("draw_graph_line", function()
 
     local line = Graph.draw_graph_line(cols, 3, 1)
 
-    assert.equals("x   |   ", line:content())
+    assert.are.equal("x   |   ", line:content())
   end)
 
   it("draws branch out left", function()
@@ -195,7 +195,7 @@ describe("draw_graph_line", function()
 
     local line = Graph.draw_graph_line(cols, 0, 3)
 
-    assert.equals("l───────c", line:content())
+    assert.are.equal("l───────c", line:content())
   end)
 
   it("draws branch out left with outrange active column", function()
@@ -203,7 +203,7 @@ describe("draw_graph_line", function()
 
     local line = Graph.draw_graph_line(cols, 0, 3)
 
-    assert.equals("│   l───c", line:content())
+    assert.are.equal("│   l───c", line:content())
   end)
 
   it("draws branch out left with active column", function()
@@ -211,7 +211,7 @@ describe("draw_graph_line", function()
 
     local line = Graph.draw_graph_line(cols, 3, 3)
 
-    assert.equals("l───┆───c", line:content())
+    assert.are.equal("l───┆───c", line:content())
   end)
 
   it("draws branch out right", function()
@@ -219,7 +219,7 @@ describe("draw_graph_line", function()
 
     local line = Graph.draw_graph_line(cols, 0, 2)
 
-    assert.equals("    c───r", line:content())
+    assert.are.equal("    c───r", line:content())
   end)
 
   it("draws branch out right with outrange active columns", function()
@@ -227,7 +227,7 @@ describe("draw_graph_line", function()
 
     local line = Graph.draw_graph_line(cols, 0, 2)
 
-    assert.equals("|   c───r   |", line:content())
+    assert.are.equal("|   c───r   |", line:content())
   end)
 
   it("draws branch out right with active columns", function()
@@ -235,7 +235,7 @@ describe("draw_graph_line", function()
 
     local line = Graph.draw_graph_line(cols, 0, 2)
 
-    assert.equals("|   c───┆───┆───r───r", line:content())
+    assert.are.equal("|   c───┆───┆───r───r", line:content())
   end)
 end)
 
@@ -255,7 +255,7 @@ describe("draw_commit_nodes", function()
     nodes, width = Graph.prepare_commit_node_visualisation(nodes)
     local lines = render_graph_lines(Graph.draw_commit_nodes(nodes, width))
 
-    assert.same(output, lines)
+    assert.are.same(output, lines)
   end)
 
   it("draws double linear graph", function()
@@ -265,7 +265,7 @@ describe("draw_commit_nodes", function()
     nodes, width = Graph.prepare_commit_node_visualisation(nodes)
     local lines = render_graph_lines(Graph.draw_commit_nodes(nodes, width))
 
-    assert.same(output, lines)
+    assert.are.same(output, lines)
   end)
 
   it("draws simple merge graph 1", function()
@@ -275,7 +275,7 @@ describe("draw_commit_nodes", function()
     nodes, width = Graph.prepare_commit_node_visualisation(nodes)
     local lines = render_graph_lines(Graph.draw_commit_nodes(nodes, width))
 
-    assert.same(output, lines)
+    assert.are.same(output, lines)
   end)
 
   it("draws simple merge graph 2", function()
@@ -285,7 +285,7 @@ describe("draw_commit_nodes", function()
     nodes, width = Graph.prepare_commit_node_visualisation(nodes)
     local lines = render_graph_lines(Graph.draw_commit_nodes(nodes, width))
 
-    assert.same(output, lines)
+    assert.are.same(output, lines)
   end)
 
   it("draws simple merge graph 3", function()
@@ -295,7 +295,7 @@ describe("draw_commit_nodes", function()
     nodes, width = Graph.prepare_commit_node_visualisation(nodes)
     local lines = render_graph_lines(Graph.draw_commit_nodes(nodes, width))
 
-    assert.same(output, lines)
+    assert.are.same(output, lines)
   end)
 
   it("draws branch out graph", function()
@@ -305,7 +305,7 @@ describe("draw_commit_nodes", function()
     nodes, width = Graph.prepare_commit_node_visualisation(nodes)
     local lines = render_graph_lines(Graph.draw_commit_nodes(nodes, width))
 
-    assert.same(output, lines)
+    assert.are.same(output, lines)
   end)
 
   it("draws merge with branch out graph", function()
@@ -315,7 +315,7 @@ describe("draw_commit_nodes", function()
     nodes, width = Graph.prepare_commit_node_visualisation(nodes)
     local lines = render_graph_lines(Graph.draw_commit_nodes(nodes, width))
 
-    assert.same(output, lines)
+    assert.are.same(output, lines)
   end)
 
   it("draws opctopus out graph", function()
@@ -325,7 +325,7 @@ describe("draw_commit_nodes", function()
     nodes, width = Graph.prepare_commit_node_visualisation(nodes)
     local lines = render_graph_lines(Graph.draw_commit_nodes(nodes, width))
 
-    assert.same(output, lines)
+    assert.are.same(output, lines)
   end)
 
   it("draws opctopus graph", function()
@@ -335,7 +335,7 @@ describe("draw_commit_nodes", function()
     nodes, width = Graph.prepare_commit_node_visualisation(nodes)
     local lines = render_graph_lines(Graph.draw_commit_nodes(nodes, width))
 
-    assert.same(output, lines)
+    assert.are.same(output, lines)
   end)
 
   it("draws opctopus crossover graph", function()
@@ -345,7 +345,7 @@ describe("draw_commit_nodes", function()
     nodes, width = Graph.prepare_commit_node_visualisation(nodes)
     local lines = render_graph_lines(Graph.draw_commit_nodes(nodes, width))
 
-    assert.same(output, lines)
+    assert.are.same(output, lines)
   end)
 
   it("draws merge cross graph", function()
@@ -355,7 +355,7 @@ describe("draw_commit_nodes", function()
     nodes, width = Graph.prepare_commit_node_visualisation(nodes)
     local lines = render_graph_lines(Graph.draw_commit_nodes(nodes, width))
 
-    assert.same(output, lines)
+    assert.are.same(output, lines)
   end)
 
   it("draws merge cross graph 2", function()
@@ -365,7 +365,7 @@ describe("draw_commit_nodes", function()
     nodes, width = Graph.prepare_commit_node_visualisation(nodes)
     local lines = render_graph_lines(Graph.draw_commit_nodes(nodes, width))
 
-    assert.same(output, lines)
+    assert.are.same(output, lines)
   end)
 
   it("draws merge complex graph", function()
@@ -375,8 +375,8 @@ describe("draw_commit_nodes", function()
     nodes, width = Graph.prepare_commit_node_visualisation(nodes)
     local lines = render_graph_lines(Graph.draw_commit_nodes(nodes, width))
 
-    assert.equals(3, width)
-    assert.same(output, lines)
+    assert.are.equal(3, width)
+    assert.are.same(output, lines)
   end)
 
   it("draws graph with wider width", function()
@@ -386,7 +386,7 @@ describe("draw_commit_nodes", function()
     local width = 3
     local lines = render_graph_lines(Graph.draw_commit_nodes(nodes, width))
 
-    assert.same(output, lines)
+    assert.are.same(output, lines)
   end)
 
   it("draws merge graph with wider width", function()
@@ -396,6 +396,6 @@ describe("draw_commit_nodes", function()
     local width = 3
     local lines = render_graph_lines(Graph.draw_commit_nodes(nodes, width))
 
-    assert.same(output, lines)
+    assert.are.same(output, lines)
   end)
 end)
