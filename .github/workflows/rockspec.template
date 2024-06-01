@@ -16,16 +16,20 @@ description = {
 }
 
 dependencies = {
-	'lua >= 5.1',
+  'lua>=5.1',
   'nui.nvim',
   'nvim-web-devicons',
   'plenary.nvim',
 }
 
+test_dependencies = {
+  'busted>=2.2.0',
+}
+
 external_dependencies = {
-	GIT2 = {
-		library = 'git2',
-	}
+  GIT2 = {
+    library = 'git2',
+  }
 }
 
 source = {

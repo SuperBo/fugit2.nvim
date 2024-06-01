@@ -70,7 +70,8 @@ describe("partial_patch_from_hunk", function()
   end
 
   setup(function()
-    git2.init()
+    local path = require("os").getenv "GIT2_DIR"
+    git2.init(path and path .. "/lib/libgit2.so" or nil)
   end)
 
   it("creates partial patch", function()

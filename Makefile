@@ -4,7 +4,7 @@ TESTS_DIR=tests/
 .PHONY: test
 
 test:
-	luarocks test --local
+	luarocks test --local -- --config-file=nlua.busted
 
 format:
 	stylua lua
