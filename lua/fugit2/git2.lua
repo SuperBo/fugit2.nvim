@@ -2455,7 +2455,7 @@ function Repository:reset_default(paths)
   end
 end
 
----@param strategy GIT_CHECKOUT?
+---@param strategy GIT_CHECKOUT? The default strategy is SAFE | RECREATE_MISSING.
 ---@param paths string[]? file paths to be checkout
 ---@return ffi.cdata* opts GIT_CHECKOUT_OPTION
 ---@return ffi.cdata* c_paths GIT_STR_ARRAY
@@ -2465,6 +2465,8 @@ local function prepare_checkout_opts(strategy, paths)
 
   if strategy ~= nil then
     opts[0].checkout_strategy = strategy
+  else
+    opts[0].checkout_strategy = bit.bor(libgit2.GIT_CHECKOUT.SAFE, libgit2.GIT_CHECKOUT.RECREATE_MISSING)
   end
 
   if paths and #paths > 0 then
