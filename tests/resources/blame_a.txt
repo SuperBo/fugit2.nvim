@@ -1,0 +1,68 @@
+4b7483a285024937df9623c3543390e717e2338a 1 1 1
+author Scott Chacon
+author-mail <schacon@gmail.com>
+author-time 1288931040
+author-tz -0700
+committer Vicent Martí
+committer-mail <vicent@github.com>
+committer-time 1289086268
+committer-tz +0200
+summary add initial README file
+filename README.txt
+	libgit2 - the Git linkable library
+20b5d300dce48ce34c16bf39752fae9a7d05f021 2 2 1
+author Haneef Mubarak
+author-mail <haneefmubarak@users.noreply.github.com>
+author-time 1381994888
+author-tz -0700
+committer Haneef Mubarak
+committer-mail <haneefmubarak@users.noreply.github.com>
+committer-time 1381994888
+committer-tz -0700
+summary slightly clarified the "license" portion of `README.md" + formatting all over
+previous b2c9e41ae43dbd6674abd38a17d87d690c80d43e README.md
+filename README.md
+	==================================
+4b7483a285024937df9623c3543390e717e2338a 3 3 1
+	
+4b9a0880147492f47566e56eca101f82de86c0e8 4 4 2
+author Edward Thomson
+author-mail <ethomson@edwardthomson.com>
+author-time 1536242548
+author-tz +0100
+committer Edward Thomson
+committer-mail <ethomson@edwardthomson.com>
+committer-time 1537610298
+committer-tz +1000
+summary README: more CI status badges
+previous a54043b7f9ceef2ed370933c2d58c7fb96c68011 README.md
+filename README.md
+	| Build Status | |
+4b9a0880147492f47566e56eca101f82de86c0e8 5 5
+	| ------------ | - |
+752dbecf9b0969145ed13dee11cf64fd515ef3c8 6 6 1
+author Edward Thomson
+author-mail <ethomson@edwardthomson.com>
+author-time 1614851112
+author-tz +0000
+committer Edward Thomson
+committer-mail <ethomson@edwardthomson.com>
+committer-time 1614851224
+committer-tz +0000
+summary README: it's actually our main branch
+previous d7e65096cade21ea37f1fbd8fcd0c4e884187a8a README.md
+filename README.md
+	| **main** branch CI builds | [![CI Build](https://github.com/libgit2/libgit2/workflows/CI%20Build/badge.svg?event=push)](https://github.com/libgit2/libgit2/actions?query=workflow%3A%22CI+Build%22+event%3Apush) |
+5aa3ce722538bc898af09be332e8ccaa5d04232c 7 7 1
+author Edward Thomson
+author-mail <ethomson@edwardthomson.com>
+author-time 1710619650
+author-tz +0000
+committer Edward Thomson
+committer-mail <ethomson@edwardthomson.com>
+committer-time 1710922749
+committer-tz +0000
+summary v1.8: update version numbers
+previous 7940f094a54765f277d5ce9bcb9d6ce6ea9d24e5 README.md
+filename README.md
+	| **v1.8 branch** CI builds | [![CI Build](https://github.com/libgit2/libgit2/workflows/CI%20Build/badge.svg?branch=maint%2Fv1.8&event=push)](https://github.com/libgit2/libgit2/actions?query=workflow%3A%22CI+Build%22+event%3Apush+branch%3Amaint%2Fv1.8) |

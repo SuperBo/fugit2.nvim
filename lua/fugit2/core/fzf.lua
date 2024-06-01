@@ -6,6 +6,8 @@ local ffi = require "ffi"
 local table_clear = require "table.clear"
 local table_new = require "table.new"
 
+local Matrix = require "fugit2.core.matrix"
+
 local M = {}
 
 ---@class FuzzyMatchResult
@@ -51,25 +53,6 @@ local DELIMITER_CHARS = { 47, 44, 58, 59, 124 } -- "/,:;|"
 local char_array = ffi.typeof "const unsigned char*"
 local int16_array = ffi.typeof "int16_t[?]"
 local uint32_array = ffi.typeof "uint32_t[?]"
-
----@class FuzzyMatchMatrix
----@field matrix ffi.cdata*
----@field n integer
-local Matrix = {}
-Matrix.__index = Matrix
-
----@param n integer
-function Matrix.new(n)
-  local m = { matrix = ffi.new(int16_array, n * n), n = n }
-  setmetatable(m, Matrix)
-  return m
-end
-
----@param i FuzzyCharClass
----@param j FuzzyCharClass
-function Matrix:at(i, j)
-  return self.matrix[i * self.n + j]
-end
 
 ---@param prev_class FuzzyCharClass
 ---@param class FuzzyCharClass
@@ -128,7 +111,7 @@ function M.init(scheme)
     SCORE.BONUS_BOUNDARY_DELIMITER = SCORE.BONUS_BOUNDARY
   end
 
-  local matrix = Matrix.new(8) -- use 8x8 matrix for better aligned
+  local matrix = Matrix.new_int16(8, 8) -- use 8x8 matrix for better aligned
 
   -- init bonus matrix
   for i = 0, 6 do

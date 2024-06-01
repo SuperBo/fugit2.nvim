@@ -1,4 +1,4 @@
--- Test algorithm module
+-- Test fzf algorithm module
 
 local fzf = require "fugit2.core.fzf"
 local SCORE = fzf.SCORE

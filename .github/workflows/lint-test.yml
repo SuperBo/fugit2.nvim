@@ -7,12 +7,19 @@ jobs:
     name: stylua
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: JohnnyMorganz/stylua-action@v3
+      - name: checkout
+        uses: actions/checkout@v4
+
+      - name: install stylua
+        uses: baptiste0928/cargo-install@v3
         with:
-          version: latest
-          token: ${{ secrets.GITHUB_TOKEN }}
-          args: --color always --check lua
+          crate: stylua
+          version: '0.20.0'
+          features: 'lua52'
+
+      - name: run lint
+        run: |
+          stylua --color always --check lua tests
 
   test-linux:
     runs-on: ubuntu-latest

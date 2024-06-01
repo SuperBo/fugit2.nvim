@@ -11,6 +11,7 @@ ffi.cdef [[
   typedef int64_t git_time_t;
 
   typedef struct git_annotated_commit git_annotated_commit;
+  typedef struct git_blame git_blame;
   typedef struct git_blob git_blob;
   typedef struct git_branch_iterator git_branch_iterator;
   typedef struct git_commit git_commit;
@@ -65,6 +66,28 @@ ffi.cdef [[
     git_time when;
   } git_signature;
 
+  typedef struct git_blame_hunk {
+	  size_t lines_in_hunk;
+	  git_oid final_commit_id;
+	  size_t final_start_line_number;
+	  git_signature *final_signature;
+	  git_oid orig_commit_id;
+	  const char *orig_path;
+	  size_t orig_start_line_number;
+	  git_signature *orig_signature;
+	  char boundary;
+  } git_blame_hunk;
+
+  typedef struct git_blame_options {
+	  unsigned int version;
+	  uint32_t flags;
+	  uint16_t min_match_characters;
+	  git_oid newest_commit;
+	  git_oid oldest_commit;
+    size_t min_line;
+    size_t max_line;
+  } git_blame_options;
+
   typedef struct git_config_entry {
     const char *name;
     const char *value;
@@ -74,6 +97,7 @@ ffi.cdef [[
     unsigned int level;
     void (*free)(struct git_config_entry *entry);
   } git_config_entry;
+
 
   typedef struct git_diff_hunk {
     int    old_start;
@@ -316,6 +340,14 @@ ffi.cdef [[
   int git_buf_grow(git_buf *buffer, size_t target_size);
   void git_buf_dispose(git_buf *buffer);
 
+  int git_blame_options_init(git_blame_options *opts, unsigned int version);
+  void git_blame_free(git_blame *blame);
+  int git_blame_buffer(git_blame **out, git_blame *reference, const char *buffer, size_t buffer_len);
+  int git_blame_file(git_blame **out, git_repository *repo, const char *path, git_blame_options *options);
+  const git_blame_hunk * git_blame_get_hunk_byindex(git_blame *blame, uint32_t index);
+  const git_blame_hunk * git_blame_get_hunk_byline(git_blame *blame, size_t lineno);
+  uint32_t git_blame_get_hunk_count(git_blame *blame);
+
   int git_blob_lookup(git_blob **blob, git_repository *repo, const git_oid *id);
   const void * git_blob_rawcontent(const git_blob *blob);
   int git_blob_is_binary(const git_blob *blob);
@@ -338,6 +370,7 @@ ffi.cdef [[
   void git_object_free(git_object *object);
   const git_oid * git_object_id(const git_object *obj);
 
+  int git_apply_options_init(git_apply_options *opts, unsigned int version);
   int git_apply(git_repository *repo, git_diff *diff, unsigned int location, const git_apply_options *options);
 
   int git_commit_lookup(git_commit **commit, git_repository *repo, const git_oid *id);
@@ -349,6 +382,8 @@ ffi.cdef [[
   git_repository * git_commit_owner(const git_commit *commit);
   const char * git_commit_message(const git_commit *commit);
   const char * git_commit_message_encoding(const git_commit *commit);
+  const char * git_commit_summary(git_commit *commit);
+  git_time_t git_commit_time(const git_commit *commit);
   int git_commit_extract_signature(git_buf *signature, git_buf *signed_data, git_repository *repo, git_oid *commit_id, const char *field);
   unsigned int git_commit_parentcount(const git_commit *commit);
   int git_commit_parent(git_commit **out, const git_commit *commit, unsigned int n);
@@ -576,10 +611,13 @@ local M = {}
 
 ---@param path string?
 M.load_library = function(path)
-  rawset(M, "C", ffi.load(path or "libgit2"))
+  if not M.C then
+    rawset(M, "C", ffi.load(path or "libgit2"))
+  end
 end
 
 M.uint32 = ffi.typeof "uint32_t"
+M.pointer_t = ffi.typeof "intptr_t"
 M.char_pointer = ffi.typeof "char*"
 M.char_array = ffi.typeof "char[?]"
 M.const_char_pointer_array = ffi.typeof "const char *[?]"
@@ -624,6 +662,15 @@ M.git_annotated_commit_pointer = ffi.typeof "git_annotated_commit*"
 M.git_object_double_pointer = ffi.typeof "git_object*[1]"
 ---@type ffi.ctype* git_object *
 M.git_object_pointer = ffi.typeof "git_object*"
+
+---@type ffi.ctype* git_blame **
+M.git_blame_double_pointer = ffi.typeof "git_blame*[1]"
+---@type ffi.ctype* git_blame*
+M.git_blame_pointer = ffi.typeof "git_blame*"
+---@type ffi.ctype* const git_blame_hunk *
+M.git_blame_hunk_pointer = ffi.typeof "const git_blame_hunk*"
+---@type ffi.ctype* git_blame_options [1]
+M.git_blame_options = ffi.typeof "git_blame_options[1]"
 
 ---@type ffi.ctype* git_commit **
 M.git_commit_double_pointer = ffi.typeof "git_commit*[1]"
@@ -754,15 +801,16 @@ M.git_branch_iterator_double_pointer = ffi.typeof "git_branch_iterator *[1]"
 local _UI64_MAX = 0xffffffffffffffffULL
 
 M.GIT_APPLY_OPTIONS_VERSION = 1
+M.GIT_BLAME_OPTIONS_VERSION = 1
+M.GIT_CHECKOUT_OPTIONS_VERSION = 1
 M.GIT_DIFF_FIND_OPTIONS_VERSION = 1
 M.GIT_DIFF_OPTIONS_VERSION = 1
 M.GIT_FETCH_OPTIONS_VERSION = 1
+M.GIT_MERGE_OPTIONS_VERSION = 1
 M.GIT_PROXY_OPTIONS_VERSION = 1
+M.GIT_REBASE_OPTIONS_VERSION = 1
 M.GIT_REMOTE_CALLBACKS_VERSION = 1
 M.GIT_STATUS_OPTIONS_VERSION = 1
-M.GIT_MERGE_OPTIONS_VERSION = 1
-M.GIT_CHECKOUT_OPTIONS_VERSION = 1
-M.GIT_REBASE_OPTIONS_VERSION = 1
 
 M.GIT_REBASE_NO_OPERATION = _UI64_MAX
 
@@ -857,6 +905,17 @@ M.GIT_APPLY_LOCATION = {
   WORKDIR = 0,
   INDEX = 1,
   BOTH = 2,
+}
+
+M.GIT_BLAME = {
+  NORMAL = 0,
+  TRACK_COPIES_SAME_FILE = 1, -- not yet implemented
+  TRACK_COPIES_SAME_COMMIT_MOVES = 2, -- not yet implemented
+  TRACK_COPIES_SAME_COMMIT_COPIES = 4, -- not yet implemented
+  TRACK_COPIES_ANY_COMMIT_COPIES = 8, -- not yet implemented
+  FIRST_PARENT = POW[4], -- (1<<4)
+  USE_MAILMAP = POW[5], -- (1<<5)
+  IGNORE_WHITESPACE = POW[6], -- (1<<6)
 }
 
 ---@enum GIT_BRANCH
@@ -1239,6 +1298,7 @@ M.GIT_MERGE = {
 local NULL = ffi.cast("void*", nil)
 
 M.GIT_APPLY_OPTIONS_INIT = { { M.GIT_APPLY_OPTIONS_VERSION } }
+M.GIT_BLAME_OPTIONS_INIT = { { M.GIT_BLAME_OPTIONS_VERSION } }
 M.GIT_STATUS_OPTIONS_INIT = { { M.GIT_STATUS_OPTIONS_VERSION } }
 M.GIT_DIFF_OPTIONS_INIT = {
   {

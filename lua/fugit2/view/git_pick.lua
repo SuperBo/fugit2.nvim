@@ -142,9 +142,7 @@ end
 -- Override mount with setting correct last_ref
 ---@overide
 function GitPick:mount()
-  self:update()
   self._layout:mount()
-  self:render()
   self._views.branch:scroll_to_active_branch()
 
   local node, linenr = self._views.branch:get_child_node_linenr()

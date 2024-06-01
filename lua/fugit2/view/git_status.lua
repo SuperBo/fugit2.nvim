@@ -96,21 +96,6 @@ end
 -- | Main git status |
 -- ===================
 
-local LOADING_CHARS = {
-  " ",
-  " ",
-  " ",
-  " ",
-  " ",
-  " ",
-  " ",
-  " ",
-  " ",
-  " ",
-  " ",
-  " ",
-}
-
 ---@enum Fugit2GitStatusSidePanel
 local SidePanel = {
   NONE = 0,
@@ -304,15 +289,15 @@ function GitStatus:init(ns_id, repo, last_window, current_file, opts)
   -- keymaps
   self:setup_handlers()
 
-  async.run(
-    function()
-      self:update()
-    end, -- get git content
-    async_utils.scheduler(function()
-      self:render()
-      self:scroll_to_active_file()
-    end)
-  )
+  local update_fn = async.wrap(function(callback)
+    self:update()
+    return callback()
+  end, 1)
+
+  async.run(update_fn, function()
+    self:render()
+    self:scroll_to_active_file()
+  end)
 end
 
 ---@param git Fugit2GitStatusGitStates
@@ -1080,7 +1065,9 @@ function GitStatus:scroll_to_active_file()
   local current_file = self._states.current_file
   local _, linenr = self._views.files.tree:get_node("-" .. current_file)
   if linenr then
-    vim.api.nvim_win_set_cursor(0, { linenr, 1 })
+    vim.schedule(function()
+      vim.api.nvim_win_set_cursor(0, { linenr, 1 })
+    end)
   end
 end
 
@@ -2168,6 +2155,7 @@ function GitStatus:run_command(cmd, args, refresh)
   timer:start(0, 250, function()
     if tick > COMMAND_QUEUE_WAIT_TIME then
       timer:stop()
+      timer:close()
       for i, id in ipairs(queue) do
         if id == command_id then
           table.remove(queue, i)
@@ -2177,6 +2165,7 @@ function GitStatus:run_command(cmd, args, refresh)
       return
     elseif queue[1] == command_id then
       timer:stop()
+      timer:close()
       vim.schedule(function()
         self:_run_single_command(cmd, args, refresh)
       end)
@@ -2287,6 +2276,7 @@ function GitStatus:_run_single_command(cmd, args, refresh)
 
   timer:start(0, tick_rate, function()
     if tick * tick_rate > wait_time then
+      timer:stop()
       timer:close()
 
       vim.schedule(function()
@@ -2300,8 +2290,8 @@ function GitStatus:_run_single_command(cmd, args, refresh)
       return
     end
 
-    local idx = 1 + (tick % #LOADING_CHARS)
-    local char = LOADING_CHARS[idx]
+    local idx = 1 + (tick % #utils.LOADING_CHARS)
+    local char = utils.LOADING_CHARS[idx]
 
     vim.schedule(function()
       vim.api.nvim_buf_set_lines(bufnr, linenr, -1, true, { char })

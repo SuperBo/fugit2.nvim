@@ -36,6 +36,8 @@ M.link_colors = {
   Fugit2RebasePick = "diffAdded", -- green
   Fugit2RebaseDrop = "diffRemoved", -- red
   Fugit2RebaseSquash = "Type", -- yellow
+  Fugit2BlameDate = "Comment",
+  Fugit2BlameBorder = "Comment",
   Fugit2Branch1 = "diffAdded", -- green
   Fugit2Branch2 = "@field", --dark blue
   Fugit2Branch3 = "Type", -- yellow
@@ -75,6 +77,26 @@ function M.set_hl(ns_id)
       ctermbg = hl_group.ctermbg,
       reverse = true,
       default = true,
+    })
+  end
+
+  -- Blame time heatmap
+  -- get from catppuccin Macchiato
+  local blame_date_heat = {
+    "#b7bdf8",
+    "#8aadf4",
+    "#7dc4e4",
+    "#91d7e3",
+    "#8bd5ca",
+    "#a6da95",
+    "#eed49f",
+    "#f5a97f",
+    "#ee99a0",
+    "#ed8796",
+  }
+  for i, color in ipairs(blame_date_heat) do
+    vim.api.nvim_set_hl(ns_id, "Fugit2BlameAge" .. i, {
+      fg = color,
     })
   end
 end

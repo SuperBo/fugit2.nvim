@@ -1,4 +1,5 @@
 -- Fugit2 main module file
+local ui = require "fugit2.view.ui"
 
 ---@class Fugit2Config
 ---@field width integer|string main popup width
@@ -20,8 +21,11 @@ local config = {
 ---@class Fugit2Module
 local M = {}
 
----@type number
+---@type integer
 M.namespace = 0
+
+---@type integer
+M.autocmd_group = -1
 
 ---@type Fugit2Config
 M.config = config
@@ -32,7 +36,7 @@ M.config = config
 M.setup = function(args)
   M.config = vim.tbl_deep_extend("force", M.config, args or {})
 
-  -- Validate
+  -- TODO: Validate
 
   -- Load C Library
   require("fugit2.libgit2").load_library(M.config.libgit2_path)
@@ -40,6 +44,10 @@ M.setup = function(args)
   if M.namespace == 0 then
     M.namespace = vim.api.nvim_create_namespace "Fugit2"
     require("fugit2.view.colors").set_hl(0)
+  end
+
+  if M.autocmd_group < 0 then
+    M.autocmd_group = vim.api.nvim_create_augroup("Fugit2", { clear = true })
   end
 end
 
@@ -78,7 +86,6 @@ end
 function M.git_status()
   local repo = open_repository()
   if repo then
-    local ui = require "fugit2.view.ui"
     ui.new_fugit2_status_window(M.namespace, repo, M.config):mount()
   end
 end
@@ -86,7 +93,6 @@ end
 function M.git_graph()
   local repo = open_repository()
   if repo then
-    local ui = require "fugit2.view.ui"
     ui.new_fugit2_graph_window(M.namespace, repo):mount()
   end
 end
@@ -95,11 +101,22 @@ end
 function M.git_diff(kwargs)
   local repo = open_repository()
   if repo then
-    local ui = require "fugit2.view.ui"
     local diffview = ui.new_fugit2_diff_view(M.namespace, repo)
     diffview:mount()
-    if kwargs["args"] then
-      diffview:focus_file(kwargs["args"])
+    if #kwargs.fargs > 0 then
+      diffview:focus_file(kwargs.fargs[1])
+    end
+  end
+end
+
+---@param kwargs table arguments table
+function M.git_blame(kwargs)
+  local repo = open_repository()
+  if repo then
+    if #kwargs.fargs == 0 or kwargs.fargs[1] == "file" then
+      ui.new_fugit2_blame_view(M.namespace, repo):mount()
+    elseif kwargs.fargs[1] == "line" then
+      --TODO
     end
   end
 end

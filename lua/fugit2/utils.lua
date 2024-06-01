@@ -24,7 +24,22 @@ M.LINUX_SIGNALS = {
 M.KEY_ESC = vim.api.nvim_replace_termcodes("<esc>", true, false, true)
 
 -- temp dir
-M.TMPDIR = Path:new(os.getenv "TMPDIR" or "/tmp/")
+M.TMPDIR = Path:new(os.getenv "TMPDIR" or "/tmp")
+
+M.LOADING_CHARS = {
+  " ",
+  " ",
+  " ",
+  " ",
+  " ",
+  " ",
+  " ",
+  " ",
+  " ",
+  " ",
+  " ",
+  " ",
+}
 
 ---@param str string
 function M.lines_head(str)
@@ -532,6 +547,51 @@ function M.list_all(fun, lst)
   end
 
   return true
+end
+
+-- ===================
+-- | Hunk list utils |
+-- ===================
+
+-- Gets hunk index and hunk offset given hunk offset list.
+---@param offsets integer[]
+---@param cursor_row integer
+---@return integer hunk_index index of found hunk in list
+---@return integer hunk_offset offset of found hunk
+function M.get_hunk(offsets, cursor_row)
+  if cursor_row < offsets[1] then
+    return 0, 1
+  end
+
+  if #offsets > 4 then
+    -- do binary search
+    local start, stop = 1, #offsets
+    local mid, hunk_offset
+
+    while start < stop - 1 do
+      mid = math.floor((start + stop) / 2)
+      hunk_offset = offsets[mid]
+      if cursor_row == hunk_offset then
+        return mid, hunk_offset
+      elseif cursor_row < hunk_offset then
+        stop = mid
+      else
+        start = mid
+      end
+    end
+    return start, offsets[start]
+  else
+    -- do linear search
+    for i, hunk_offset in ipairs(offsets) do
+      if cursor_row < hunk_offset then
+        return i - 1, offsets[i - 1] or 1
+      elseif cursor_row == hunk_offset then
+        return i, hunk_offset
+      end
+    end
+  end
+
+  return 0, 1
 end
 
 M.BitArray = BitArray
