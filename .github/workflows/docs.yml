@@ -1,8 +1,12 @@
+name: docs
+
 on:
   push:
     branches:
       - main
-name: docs
+
+permissions:
+  contents: write
 
 jobs:
   docs:
@@ -12,8 +16,10 @@ jobs:
       - name: panvimdoc
         uses: kdheepak/panvimdoc@main
         with:
-          vimdoc: fugit2
+          vimdoc: fugit2.nvim
           version: "Neovim >= 0.8.0"
+          pandoc: "README.md"
+          toc: true
           demojify: true
           treesitter: true
       - name: Push changes
