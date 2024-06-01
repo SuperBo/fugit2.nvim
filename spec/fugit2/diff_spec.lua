@@ -465,7 +465,10 @@ describe("partial_hunk", function()
     assert.are.equal(#hunk_lines1 + #hunk_lines2 + #hunk_lines3, #merged)
     assert.are.equal("@@ -1,3 +1,5 @@", merged[1])
     assert.are.equal("@@ -277,9 +279,11 @@ function BitArray:set_k_unset_indices(k)", merged[#hunk_lines1 + 1])
-    assert.are.equal("@@ -320,7 +324,7 @@ function PatchView:prev_hunk_handler()", merged[#hunk_lines1 + #hunk_lines2 + 1])
+    assert.are.equal(
+      "@@ -320,7 +324,7 @@ function PatchView:prev_hunk_handler()",
+      merged[#hunk_lines1 + #hunk_lines2 + 1]
+    )
   end)
 end)
 

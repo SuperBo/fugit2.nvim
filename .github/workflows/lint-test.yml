@@ -19,7 +19,7 @@ jobs:
 
       - name: run lint
         run: |
-          stylua --color always --check lua tests
+          stylua --color always --check lua spec
 
   test-linux:
     runs-on: ubuntu-latest
@@ -31,10 +31,21 @@ jobs:
       - name: checkout
         uses: actions/checkout@v4
 
-      - uses: rhysd/action-setup-vim@v1
+      - name: setup neovim
+        uses: rhysd/action-setup-vim@v1
         with:
           neovim: true
           version: ${{ matrix.nvim-versions }}
+
+      - name: setup Lua
+        uses: leafo/gh-actions-lua@v10
+        with:
+          luaVersion: '5.1.5'
+
+      - name: setup luarocks
+        uses: leafo/gh-actions-luarocks@v4
+        with:
+          luarocksVersion: '3.11.1'
 
       - name: run tests
         run: |
@@ -42,7 +53,7 @@ jobs:
           sudo ln -s /usr/lib/x86_64-linux-gnu/libgit2.so.1.1 /usr/local/lib/libgit2.so
           sudo ldconfig
           nvim --version
-          nvim --headless -u tests/minimal_init.lua -c "PlenaryBustedDirectory tests/ {minimal_init = 'tests/minimal_init.lua', sequential = true}"
+          luarocks test --local
 
   test-macos:
     runs-on: macos-14
@@ -54,13 +65,24 @@ jobs:
       - name: checkout
         uses: actions/checkout@v4
 
-      - uses: rhysd/action-setup-vim@v1
+      - name: setup neovim
+        uses: rhysd/action-setup-vim@v1
         with:
           neovim: true
           version: ${{ matrix.nvim-versions }}
+
+      - name: setup Lua
+        uses: leafo/gh-actions-lua@v10
+        with:
+          luaVersion: '5.1.5'
+
+      - name: setup luarocks
+        uses: leafo/gh-actions-luarocks@v4
+        with:
+          luarocksVersion: '3.11.1'
 
       - name: run tests
         run: |
           brew install libgit2
           nvim --version
-          nvim --headless -u tests/minimal_init.lua -c "PlenaryBustedDirectory tests/ {minimal_init = 'tests/minimal_init.lua', sequential = true}"
+          luarocks test --local -- --output=tap
