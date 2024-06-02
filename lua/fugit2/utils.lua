@@ -504,6 +504,13 @@ function M.list_clear(lst)
   return lst
 end
 
+-- Clears / empyt a table
+---@param tbl table
+function M.table_clear(tbl)
+  table_clear(tbl)
+  return tbl
+end
+
 ---@generic T
 ---@param tbl table
 ---@param key string

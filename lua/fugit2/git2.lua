@@ -7,6 +7,9 @@ local uv = vim.uv or vim.loop
 --- Libgit2 init counter
 local libgit2_init_count = 0
 
+---@type string?
+local libgit2_library_path
+
 -- ========================
 -- | Libgit2 Enum section |
 -- ========================
@@ -1952,6 +1955,19 @@ function Repository.new(git_repository)
   return repo
 end
 
+-- New Repository object, only borrow cdata
+---@param git_repo ffi.cdata* libgit2.git_repository_pointer, don't own cdata
+---@return GitRepository
+function Repository.borrow(git_repo)
+  local repo = { repo = libgit2.git_repository_pointer(git_repo) }
+  setmetatable(repo, Repository)
+
+  local c_path = libgit2.C.git_repository_path(repo.repo)
+  repo.path = ffi.string(c_path)
+
+  return repo
+end
+
 function Repository:__tostring()
   return string.format("Git Repository: %s", self.path)
 end
@@ -2127,52 +2143,6 @@ function Repository:blame_file(path, opts)
   end
 
   return Blame.new(git_blame[0]), 0
-end
-
--- Get blame for single file but run in async
----@param callback fun(b: GitBlame?, e: GIT_ERROR)
-function Repository:blame_file_async(path, opts, callback)
-  local blame_opts, err = init_blame_options(opts)
-  if not blame_opts then
-    callback(nil, err)
-    return
-  end
-
-  local work_fn = function(lib, repo_ptr, p, opts_ptr)
-    local lg2 = require "fugit2.libgit2"
-    lg2.load_library(lib)
-    local ffi_ = require "ffi"
-
-    local repo = ffi_.cast(lg2.git_repository_pointer, repo_ptr)
-    local o = ffi_.cast("git_blame_options*", opts_ptr)
-    local git_blame = lg2.git_blame_double_pointer()
-
-    local e = lg2.C.git_blame_file(git_blame, repo, p, o)
-    if e ~= 0 then
-      return nil, e
-    end
-
-    return tonumber(ffi_.cast(lg2.pointer_t, git_blame[0])), 0
-  end
-
-  local after_work_fn = function(ptr, e)
-    if not ptr then
-      return nil, e
-    end
-
-    local blame = Blame.new(ffi.cast(libgit2.git_blame_pointer, ptr))
-    callback(blame, 0)
-  end
-
-  local config = require("fugit2").config
-
-  local work = uv.new_work(work_fn, after_work_fn)
-  work:queue(
-    config.libgit2_path,
-    tonumber(ffi.cast(libgit2.pointer_t, self.repo)),
-    path,
-    tonumber(ffi.cast(libgit2.pointer_t, blame_opts))
-  )
 end
 
 ---Retrieves reference pointed at by HEAD.
@@ -2697,7 +2667,7 @@ function Repository:status_file(path)
   return worktree_status, index_status, 0
 end
 
----Reads head and upstream status.
+-- Reads head and upstream status.
 ---@return GitStatusHead?
 ---@return GitStatusUpstream?
 ---@return GIT_ERROR
@@ -2763,32 +2733,17 @@ function Repository:status_head_upstream()
   return head_status, upstream_status, 0
 end
 
--- Reads the status of the repository and returns a dictionary.
--- with file paths as keys and status flags as values.
----@return GitStatusItem[]? status_result git status result.
----@return integer return_code Return code.
-function Repository:status()
-  ---@type GIT_ERROR
-  local err
-
-  local opts = libgit2.git_status_options(libgit2.GIT_STATUS_OPTIONS_INIT)
-  -- libgit2.C.git_status_options_init(opts, libgit2.GIT_STATUS_OPTIONS_VERSION)
-  opts[0].show = libgit2.GIT_STATUS_SHOW.INDEX_AND_WORKDIR
-  opts[0].flags = DEFAULT_STATUS_FLAGS
-
-  local status = libgit2.git_status_list_double_pointer()
-  err = libgit2.C.git_status_list_new(status, self.repo, opts)
-  if err ~= 0 then
-    return nil, err
-  end
-
-  local n_entry = tonumber(libgit2.C.git_status_list_entrycount(status[0])) or 0
+-- Parse information from git_status_list and convert to GitStatusItem[]
+---@param git_status_list ffi.cdata* git_status_list pointer
+---@return GitStatusItem[]
+local function git_status_list_to_items(git_status_list)
+  local n_entry = tonumber(libgit2.C.git_status_list_entrycount(git_status_list)) or 0
   ---@type GitStatusItem[]
   local status_list = table_new(n_entry, 0)
 
   -- Iterate through git status list
   for i = 0, n_entry - 1 do
-    local entry = libgit2.C.git_status_byindex(status[0], i)
+    local entry = libgit2.C.git_status_byindex(git_status_list, i)
     if entry == nil or entry.status == libgit2.GIT_STATUS.CURRENT then
       goto git_status_list_continue
     end
@@ -2837,6 +2792,30 @@ function Repository:status()
     status_list[#status_list + 1] = status_item
     ::git_status_list_continue::
   end
+
+  return status_list
+end
+
+-- Reads the status of the repository and returns a dictionary.
+-- with file paths as keys and status flags as values.
+---@return GitStatusItem[]? status_result git status result.
+---@return integer return_code Return code.
+function Repository:status()
+  ---@type GIT_ERROR
+  local err
+
+  local opts = libgit2.git_status_options(libgit2.GIT_STATUS_OPTIONS_INIT)
+  -- libgit2.C.git_status_options_init(opts, libgit2.GIT_STATUS_OPTIONS_VERSION)
+  opts[0].show = libgit2.GIT_STATUS_SHOW.INDEX_AND_WORKDIR
+  opts[0].flags = DEFAULT_STATUS_FLAGS
+
+  local status = libgit2.git_status_list_double_pointer()
+  err = libgit2.C.git_status_list_new(status, self.repo, opts)
+  if err ~= 0 then
+    return nil, err
+  end
+
+  local status_list = git_status_list_to_items(status[0])
 
   -- free C resources
   libgit2.C.git_status_list_free(status[0])
@@ -3543,6 +3522,101 @@ function Repository:rebase_open()
   return Rebase.new(git_rebase[0]), 0
 end
 
+-- ==============================
+-- | Repository async functions |
+-- ==============================
+
+-- Gets blame for single file but run in async
+---@param callback fun(b: GitBlame?, err: GIT_ERROR)
+function Repository:blame_file_async(path, opts, callback)
+  local blame_opts, err = init_blame_options(opts)
+  if not blame_opts then
+    return callback(nil, err)
+  end
+
+  local work_fn = function(lib, repo_ptr, p, opts_ptr)
+    local lg2 = require "fugit2.libgit2"
+    lg2.load_library(lib)
+    local ffi_ = require "ffi"
+
+    local repo = ffi_.cast(lg2.git_repository_pointer, repo_ptr)
+    local o = ffi_.cast("git_blame_options*", opts_ptr)
+    local git_blame = lg2.git_blame_double_pointer()
+
+    local e = lg2.C.git_blame_file(git_blame, repo, p, o)
+    if e ~= 0 then
+      return nil, e
+    end
+
+    return tonumber(ffi_.cast(lg2.pointer_t, git_blame[0])), 0
+  end
+
+  local after_work_fn = function(ptr, e)
+    if not ptr or ptr == 0 then
+      return callback(nil, err)
+    end
+
+    local blame = Blame.new(ffi.cast(libgit2.git_blame_pointer, ptr))
+    callback(blame, 0)
+  end
+
+  local config = require("fugit2").config
+
+  local work = uv.new_work(work_fn, after_work_fn)
+  work:queue(
+    config.libgit2_path,
+    tonumber(ffi.cast(libgit2.pointer_t, self.repo)),
+    path,
+    tonumber(ffi.cast(libgit2.pointer_t, blame_opts))
+  )
+end
+
+-- Reads repo status but in async.
+---@param callback fun(result: GitStatusItem[]?, err: GIT_ERROR)
+function Repository:status_async(callback)
+  ---@param lib string?
+  ---@param repo_ptr integer
+  ---@param flags integer
+  ---@return integer?
+  ---@return GIT_ERROR
+  local function new_git_status_list(lib, repo_ptr, flags)
+    local lg2 = require "fugit2.libgit2"
+    lg2.load_library(lib)
+    local ffi_ = require "ffi"
+
+    local opts = lg2.git_status_options(lg2.GIT_STATUS_OPTIONS_INIT)
+    opts[0].show = lg2.GIT_STATUS_SHOW.INDEX_AND_WORKDIR
+    opts[0].flags = flags
+
+    local repo = ffi_.cast(lg2.git_repository_pointer, repo_ptr)
+    local status = lg2.git_status_list_double_pointer()
+    local err = lg2.C.git_status_list_new(status, repo, opts)
+    if err ~= 0 then
+      return nil, err
+    end
+    return tonumber(ffi_.cast(lg2.pointer_t, status[0])), 0
+  end
+
+  ---@param git_status_list_ptr integer?
+  ---@param err GIT_ERROR
+  local function handle_git_status_list(git_status_list_ptr, err)
+    if not git_status_list_ptr or git_status_list_ptr == 0 then
+      return callback(nil, err)
+    end
+
+    local status = ffi.cast(libgit2.git_status_list_pointer, git_status_list_ptr)
+    local status_list = git_status_list_to_items(status)
+
+    -- free C resources
+    libgit2.C.git_status_list_free(status)
+
+    callback(status_list, err)
+  end
+
+  local work = uv.new_work(new_git_status_list, handle_git_status_list)
+  work:queue(libgit2_library_path, tonumber(ffi.cast(libgit2.pointer_t, self.repo)), DEFAULT_STATUS_FLAGS)
+end
+
 -- ===================
 -- | Utils functions |
 -- ===================
@@ -3616,6 +3690,7 @@ local M = {}
 ---@param path string? optional path to libgit2 lib
 function M.init(path)
   libgit2.load_library(path)
+  libgit2_library_path = path
   if libgit2_init_count == 0 then
     libgit2_init_count = libgit2.C.git_libgit2_init()
   end

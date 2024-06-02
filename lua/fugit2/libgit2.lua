@@ -769,6 +769,8 @@ M.git_status_options = ffi.typeof "git_status_options[1]"
 
 ---@type ffi.ctype* struct git_status_list*[1]
 M.git_status_list_double_pointer = ffi.typeof "git_status_list*[1]"
+---@type ffi.ctype* struct git_status_list*
+M.git_status_list_pointer = ffi.typeof "git_status_list*"
 
 ---@type ffi.ctype* git_tag*[1]
 M.git_tag_double_pointer = ffi.typeof "git_tag*[1]"

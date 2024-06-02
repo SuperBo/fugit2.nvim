@@ -289,12 +289,7 @@ function GitStatus:init(ns_id, repo, last_window, current_file, opts)
   -- keymaps
   self:setup_handlers()
 
-  local update_fn = async.wrap(function(callback)
-    self:update()
-    return callback()
-  end, 1)
-
-  async.run(update_fn, function()
+  self:update(function()
     self:render()
     self:scroll_to_active_file()
   end)
@@ -814,25 +809,21 @@ function GitStatus:read_gpg_config()
 end
 
 -- Updates git status.
----@overload fun()
-function GitStatus:update()
+---@param callback fun()?
+function GitStatus:update(callback)
   utils.list_clear(self._status_lines)
   -- clean cached menus
   self._menus[Menu.PUSH] = nil
   self._menus[Menu.PULL] = nil
   -- clean cached diffs
   if self._git.unstaged_diff then
-    for k, _ in pairs(self._git.unstaged_diff) do
-      self._git.unstaged_diff[k] = nil
-    end
+    utils.table_clear(self._git.unstaged_diff)
   end
   if self._git.staged_diff then
-    for k, _ in pairs(self._git.staged_diff) do
-      self._git.staged_diff[k] = nil
-    end
+    utils.table_clear(self._git.staged_diff)
   end
 
-  local status_files, status_head, status_upstream, diff_head_to_index, err
+  local status_head, status_upstream, diff_head_to_index, err
   ---@type NuiLine[]
   local lines = self._status_lines
 
@@ -860,6 +851,11 @@ function GitStatus:update()
       line:append("Libgit2 code: " .. err, "Error")
     end
     lines[1] = line
+
+    -- render top head
+    vim.schedule(function()
+      self:render_top_info()
+    end)
   else
     -- update status panel
     self._git.head = status_head
@@ -989,6 +985,11 @@ function GitStatus:update()
       end
     end
 
+    -- render top head
+    vim.schedule(function()
+      self:render_top_info()
+    end)
+
     -- update branches tree
     -- local branches, err = self.repo:branches(true, false)
     -- if not branches then
@@ -1030,34 +1031,54 @@ function GitStatus:update()
         end
       end
 
-      self._views.commits:update(commits, self._git.remote_icons)
+      local commit_view = self._views.commits
+      commit_view:update(commits, self._git.remote_icons)
+
+      -- render bottom pane
+      vim.schedule(function()
+        commit_view:render()
+      end)
     end
   end
 
-  status_files, err = self.repo:status()
-  diff_head_to_index = self.repo:diff_head_to_index(self.index)
-  if status_files then
-    -- update files tree
-    self._views.files:update(status_files, self._git.path, diff_head_to_index)
-  end
+  self.repo:status_async(function(status_items, e)
+    if status_items then
+      diff_head_to_index = self.repo:diff_head_to_index(self.index)
+      -- update files tree
+      vim.schedule(function()
+        self._views.files:update(status_items, self._git.path, diff_head_to_index)
+        if callback then
+          callback()
+        end
+      end)
+    end
+  end)
 end
 
--- Renders git status
----@overload fun()
-function GitStatus:render()
-  vim.api.nvim_buf_set_option(self.info_popup.bufnr, "modifiable", true)
-  vim.api.nvim_buf_set_option(self.info_popup.bufnr, "readonly", false)
+function GitStatus:update_then_render()
+  self:update(function()
+    self:render()
+  end)
+end
+
+function GitStatus:render_top_info()
+  local bufnr = self.info_popup.bufnr
+  vim.api.nvim_buf_set_option(bufnr, "modifiable", true)
+  vim.api.nvim_buf_set_option(bufnr, "readonly", false)
 
   for i, line in ipairs(self._status_lines) do
     line:render(self.info_popup.bufnr, self.ns_id, i)
   end
 
-  self._views.files:render()
-  self._views.commits:render()
-  -- self._branches_view:render()
+  vim.api.nvim_buf_set_option(bufnr, "readonly", true)
+  vim.api.nvim_buf_set_option(bufnr, "modifiable", false)
+end
 
-  vim.api.nvim_buf_set_option(self.info_popup.bufnr, "readonly", true)
-  vim.api.nvim_buf_set_option(self.info_popup.bufnr, "modifiable", false)
+-- Renders git status only
+function GitStatus:render()
+  -- self:render_top_info()
+  self._views.files:render()
+  -- self._views.commits:render()
 end
 
 ---Scrolls to active file
@@ -1300,8 +1321,7 @@ function GitStatus:_git_create_commit(message, args)
       if result.commit_id then
         notifier.info(string.format("New %scommit %s", gpg_sign and "signed " or "", result.commit_id:tostring(8)))
         self:hide_input(true)
-        self:update()
-        self:render()
+        self:update_then_render()
       else
         notifier.error(result.message or "Failed creating commit", result.err or 0)
       end
@@ -1328,8 +1348,7 @@ function GitStatus:_git_extend_commit(args)
 
   if commit_id then
     notifier.info("Extend HEAD " .. commit_id:tostring(8))
-    self:update()
-    self:render()
+    self:update_then_render()
   else
     err_msg = (err_msg and err_msg ~= "") and err_msg or "Failed to extend HEAD"
     notifier.error(err_msg, err)
@@ -1367,8 +1386,7 @@ function GitStatus:_git_reword_commit(message, args)
   if commit_id then
     notifier.info("Reword HEAD " .. commit_id:tostring(8))
     self:hide_input(false)
-    self:update()
-    self:render()
+    self:update_then_render()
   else
     err_msg = (err_msg and err_msg ~= "") and err_msg or "Failed to reword HEAD"
     notifier.error(err_msg, err)
@@ -1407,8 +1425,7 @@ function GitStatus:_git_amend_commit(message, args)
   if commit_id then
     notifier.info("Amend HEAD " .. commit_id:tostring(8))
     self:hide_input(true)
-    self:update()
-    self:render()
+    self:update_then_render()
   else
     err_msg = (err_msg and err_msg ~= "") and err_msg or "Failed to amend HEAD"
     notifier.error(err_msg, err)
@@ -1827,8 +1844,7 @@ function GitStatus:_init_branch_input()
     end
 
     self:hide_input(true)
-    self:update()
-    self:render()
+    self:update_then_render()
   end)
 
   local exit_fn = function()
@@ -1912,8 +1928,7 @@ function GitStatus:_init_branch_menu()
       notifier.error("Failed to checkout " .. git2.reference_name_shorthand(ref), err)
     else
       notifier.info("Checked out " .. git2.reference_name_shorthand(ref))
-      self:update()
-      self:render()
+      self:update_then_render()
     end
     self:focus_file()
   end
@@ -2227,8 +2242,7 @@ function GitStatus:_run_single_command(cmd, args, refresh)
         notifier.info(string.format("Command %s %s SUCCESS", cmd, args[1] or ""))
         self:quit_command()
         if refresh then
-          self:update()
-          self:render()
+          self:update_then_render()
         end
       elseif ret == -3 then
         vim.api.nvim_buf_set_lines(bufnr, linenr, -1, true, { "CANCELLED" })
@@ -2362,8 +2376,7 @@ function GitStatus:setup_handlers()
 
   -- refresh
   file_tree:map("n", "r", function()
-    self:update()
-    self:render()
+    self:update_then_render()
   end, map_options)
 
   -- collapse
