@@ -39,12 +39,12 @@ M.link_colors = {
   Fugit2BlameDate = "Comment",
   Fugit2BlameBorder = "Comment",
   Fugit2Branch1 = "diffAdded", -- green
-  Fugit2Branch2 = "@field", --dark blue
+  Fugit2Branch2 = "DiagnosticInfo", --dark blue
   Fugit2Branch3 = "Type", -- yellow
   Fugit2Branch4 = "PreProc", -- orange
   Fugit2Branch5 = "Error", --red
   Fugit2Branch6 = "Keyword", -- violet
-  Fugit2Branch7 = "@parameter", -- blue
+  Fugit2Branch7 = "Identifier", -- blue/white
 }
 
 M.colors = {
@@ -52,9 +52,30 @@ M.colors = {
   Fugit2Branch9 = { ctermfg = "green", fg = "yellow1" },
 }
 
+CYBERDREAM = {
+  Fugit2MenuKey = "Special",
+  Fugit2FloatTitle = "PreProc",
+  Fugit2MenuArgOn = "ErrorMsg",
+}
+
 ---Sets highlight groups
 ---@param ns_id integer
-function M.set_hl(ns_id)
+---@param colorscheme string?
+function M.set_hl(ns_id, colorscheme)
+  -- small tweak for cyberdream
+  if colorscheme == "cyberdream" then
+    local link_colors = M.link_colors
+    for group, hl in pairs(link_colors) do
+      if hl == "diffAdded" then
+        link_colors[group] = "DiffAdd"
+      elseif hl == "diffRemoved" then
+        link_colors[group] = "DiffDelete"
+      end
+    end
+
+    M.link_colors = vim.tbl_deep_extend("force", link_colors, CYBERDREAM)
+  end
+
   for hl_group, link in pairs(M.link_colors) do
     vim.api.nvim_set_hl(ns_id, hl_group, {
       link = link,

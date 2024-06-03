@@ -190,6 +190,7 @@ function GitStatus:init(ns_id, repo, last_window, current_file, opts)
     },
     win_options = {
       winhighlight = win_hl,
+      wrap = false,
     },
     buf_options = buf_readonly_opts,
   }

@@ -128,6 +128,7 @@ function CommitLogView:init(ns_id, title, enter)
       winblend = 0,
       winhighlight = "Normal:Normal,FloatBorder:FloatBorder",
       cursorline = true,
+      wrap = false,
     },
     buf_options = {
       modifiable = false,
