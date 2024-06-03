@@ -19,12 +19,12 @@ Git plugin for Neovim (based on libgit2).
 - ✔ Patch View.
 - ✔ Stage/Unstage hunkes in patch view.
 - ✔ Nice git graph.
+- ✔ Native branch picker.
 - ✔ Diff view.
-- ☐ TODO: Git blame.
+- ✔ Git blame.
 - ☐ TODO: In-memory rebase.
 - ☐ TODO: Remap default key binding.
 - ☐ TODO: Proper help menu.
-- ☐ TODO: Native branch popup.
 
 ## 📦 Installation
 
@@ -123,6 +123,7 @@ Default options dictionary
 ---@field height integer|string Main popup height
 ---@field libgit2_path string? path to libgit2 lib if not set via environments
 ---@field external_diffview boolean whether to use external diffview.nvim or Fugit2 implementation
+---@field colorscheme string? custom color scheme override
 local opts = {
   width = 100,
   min_width = 50,
@@ -132,6 +133,14 @@ local opts = {
   external_diffview = false,
 }
 ```
+
+## Tested colorschemes
+
+- [Catppuccin](https://github.com/catppuccin/nvim)
+- [Nightfox](https://github.com/EdenEast/nightfox.nvim)
+- [Tokyo Night](https://github.com/folke/tokyonight.nvim)
+- [Kanagawa](https://github.com/rebelot/kanagawa.nvim)
+- [Cyberdream](https://github.com/scottmckendry/cyberdream.nvim): please set `colorscheme = "cyberdream"` in plugin options.
 
 ## Usage and Keymap
 

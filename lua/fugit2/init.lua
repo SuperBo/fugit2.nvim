@@ -9,6 +9,7 @@ local ui = require "fugit2.view.ui"
 ---@field height integer|string main file popup height
 ---@field libgit2_path string? path to libgit2 lib if not set via environments
 ---@field external_diffview boolean whether to use external diffview.nvim or Fugit2 implementation
+---@field colorscheme string? custom colorscheme specification
 local config = {
   width = 100,
   min_width = 50,
@@ -43,7 +44,7 @@ M.setup = function(args)
 
   if M.namespace == 0 then
     M.namespace = vim.api.nvim_create_namespace "Fugit2"
-    require("fugit2.view.colors").set_hl(0)
+    require("fugit2.view.colors").set_hl(0, M.config.colorscheme)
   end
 
   if M.autocmd_group < 0 then
