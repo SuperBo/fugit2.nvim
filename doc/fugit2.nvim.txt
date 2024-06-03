@@ -1,4 +1,4 @@
-*fugit2.nvim.txt*         For Neovim >= 0.8.0        Last change: 2024 June 02
+*fugit2.nvim.txt*         For Neovim >= 0.8.0        Last change: 2024 June 03
 
 ==============================================================================
 Table of Contents                              *fugit2.nvim-table-of-contents*
@@ -6,6 +6,7 @@ Table of Contents                              *fugit2.nvim-table-of-contents*
 1. Neovim git GUI powered by libgit2|fugit2.nvim-neovim-git-gui-powered-by-libgit2|
   - Features          |fugit2.nvim-neovim-git-gui-powered-by-libgit2-features|
   - Installation  |fugit2.nvim-neovim-git-gui-powered-by-libgit2-installation|
+  - Tested colorschemes|fugit2.nvim-neovim-git-gui-powered-by-libgit2-tested-colorschemes|
   - Usage and Keymap|fugit2.nvim-neovim-git-gui-powered-by-libgit2-usage-and-keymap|
   - Credits            |fugit2.nvim-neovim-git-gui-powered-by-libgit2-credits|
 2. Links                                                   |fugit2.nvim-links|
@@ -27,12 +28,12 @@ FEATURES              *fugit2.nvim-neovim-git-gui-powered-by-libgit2-features*
 - Patch View.
 - Stage/Unstage hunkes in patch view.
 - Nice git graph.
+- Native branch picker.
 - Diff view.
-- TODO: Git blame.
+- Git blame.
 - TODO: In-memory rebase.
 - TODO: Remap default key binding.
 - TODO: Proper help menu.
-- TODO: Native branch popup.
 
 
 INSTALLATION      *fugit2.nvim-neovim-git-gui-powered-by-libgit2-installation*
@@ -132,6 +133,7 @@ Default options dictionary
     ---@field height integer|string Main popup height
     ---@field libgit2_path string? path to libgit2 lib if not set via environments
     ---@field external_diffview boolean whether to use external diffview.nvim or Fugit2 implementation
+    ---@field colorscheme string? custom color scheme override
     local opts = {
       width = 100,
       min_width = 50,
@@ -141,6 +143,15 @@ Default options dictionary
       external_diffview = false,
     }
 <
+
+
+TESTED COLORSCHEMES*fugit2.nvim-neovim-git-gui-powered-by-libgit2-tested-colorschemes*
+
+- Catppuccin <https://github.com/catppuccin/nvim>
+- Nightfox <https://github.com/EdenEast/nightfox.nvim>
+- Tokyo Night <https://github.com/folke/tokyonight.nvim>
+- Kanagawa <https://github.com/rebelot/kanagawa.nvim>
+- Cyberdream <https://github.com/scottmckendry/cyberdream.nvim>please set `colorscheme = "cyberdream"` in plugin options.
 
 
 USAGE AND KEYMAP*fugit2.nvim-neovim-git-gui-powered-by-libgit2-usage-and-keymap*
