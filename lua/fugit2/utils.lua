@@ -69,6 +69,13 @@ function M.lines_print(str)
   end
 end
 
+-- Rounding a number
+---@param n number
+---@return number
+function M.round(n)
+  return math.floor((math.floor(n * 2) + 1) / 2)
+end
+
 ---@param str string
 ---@return NuiLine
 function M.message_title_prettify(str)
