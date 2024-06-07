@@ -144,9 +144,9 @@ end
 function M.lab_to_hex(lab)
   local r, g, b = lab_to_rgb(lab)
 
-  local red_255 = utils.round(r * 0xff)
-  local green_255 = utils.round(g * 0xff)
-  local blue_255 = utils.round(b * 0xff)
+  local red_255 = math.max(utils.round(r * 0xff), 0)
+  local green_255 = math.max(utils.round(g * 0xff), 0)
+  local blue_255 = math.max(utils.round(b * 0xff), 0)
 
   return string.format("#%02x%02x%02x", red_255, green_255, blue_255)
 end
@@ -167,6 +167,31 @@ end
 function M.lab_lighten(lab, amount)
   local l = lab.l + (LAB.Kn * amount)
   return { l = l, a = lab.a, b = lab.b }
+end
+
+-- Generates color palette
+---@param base string base color hex string.
+---@param n integer number of color to generate.
+---@param step integer lightness step used to generate colors.
+---@return string[] colors
+function M.generate_palette(base, n, step)
+  if n <= 0 then
+    return {}
+  end
+
+  local rgb = M.rgba_from_hex(base)
+  local lab = M.rgb_to_lab(rgb)
+
+  local palette = utils.list_new(n) --[[@as string[] ]]
+  palette[n] = base
+
+  for i = n - 1, 1, -1 do
+    lab = M.lab_darken(lab, step)
+    local hex = M.lab_to_hex(lab)
+    palette[i] = hex
+  end
+
+  return palette
 end
 
 return M

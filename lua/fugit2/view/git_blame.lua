@@ -13,10 +13,7 @@ local strings = require "plenary.strings"
 local event = require("nui.utils.autocmd").event
 local blame = require "fugit2.core.blame"
 local notifier = require "fugit2.notifier"
-local pendulum = require "fugit2.core.pendulum"
 local utils = require "fugit2.utils"
-
-pendulum.init()
 
 local WIDTH = 45
 local HEADER_START = "▇ "
@@ -34,7 +31,7 @@ function GitBlame:init(ns_id, repo, file_bufnr)
   self.ns_id = ns_id
   self.file_bufnr = file_bufnr
 
-  local file_path = Path:new(vim.fn.fnamemodify(vim.api.nvim_buf_get_name(file_bufnr), ":."))
+  local file_path = Path:new(vim.fn.fnameescape(vim.api.nvim_buf_get_name(file_bufnr)))
   local git_path = vim.fn.fnamemodify(repo:repo_path(), ":p:h:h")
 
   self._git = {
@@ -163,32 +160,9 @@ end
 local function prepare_blame_header(hunk, now, authors_map)
   local time_ago = "now"
   local age_color = 10 -- latest
-  if hunk.date then
-    local diff = pendulum.precise_diff(now, hunk.date)
-    time_ago = diff:ago()
 
-    local weeks = diff:in_weeks()
-    if diff.years > 1 then
-      age_color = 1
-    elseif diff.years == 1 then
-      age_color = 2
-    elseif diff.months > 6 then
-      age_color = 3
-    elseif diff.months > 3 then
-      age_color = 4
-    elseif diff.months > 1 then
-      age_color = 5
-    elseif diff.months == 1 then
-      age_color = 6
-    elseif weeks > 2 then
-      age_color = 7
-    elseif weeks >= 2 then
-      age_color = 8
-    elseif weeks == 1 then
-      age_color = 9
-    else
-      age_color = 10
-    end
+  if hunk.date then
+    time_ago, age_color = blame.blame_time(hunk.date, now)
   end
 
   local author_idx = (authors_map[hunk.author_name] or 0) % 9 + 1

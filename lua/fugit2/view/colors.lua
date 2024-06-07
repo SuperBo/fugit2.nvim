@@ -1,3 +1,5 @@
+local color = require "fugit2.hl.color"
+
 local M = {}
 
 M.link_colors = {
@@ -102,22 +104,23 @@ function M.set_hl(ns_id, colorscheme)
   end
 
   -- Blame time heatmap
-  -- get from catppuccin Macchiato
-  local blame_date_heat = {
-    "#b7bdf8",
-    "#8aadf4",
-    "#7dc4e4",
-    "#91d7e3",
-    "#8bd5ca",
-    "#a6da95",
-    "#eed49f",
-    "#f5a97f",
-    "#ee99a0",
-    "#ed8796",
-  }
-  for i, color in ipairs(blame_date_heat) do
+  -- default base get from catppuccin
+  local blame_base = "#1e66f5"
+  local blame_text = "#4c4f69"
+
+  local blame_latest = "Todo" -- Todo
+  local blame_base_hl = vim.api.nvim_get_hl(0, { name = blame_latest })
+  if blame_base_hl then
+    blame_text = blame_base_hl.fg
+    blame_base = blame_base_hl.bg
+  end
+
+  local blame_palette = color.generate_palette(blame_base, 10, 0.1)
+
+  for i, c in ipairs(blame_palette) do
     vim.api.nvim_set_hl(ns_id, "Fugit2BlameAge" .. i, {
-      fg = color,
+      fg = blame_text,
+      bg = c,
     })
   end
 end

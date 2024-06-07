@@ -1,5 +1,9 @@
 -- Helper module to parse git blame porcelain information
 
+local pendulum = require "fugit2.core.pendulum"
+
+pendulum.init()
+
 local M = {}
 
 ---@class Fugit2GitBlameHunk
@@ -97,9 +101,9 @@ function M.parse_git_blame_porcelain_lines(blame_lines)
         -- null commit, not committed yet
         local hunk = {
           oid = oid,
-          author_name = "You",
+          author_name = "Uncommitted",
           author_email = "not@committed.yet",
-          committer_name = "You",
+          committer_name = "Uncommitted",
           committer_email = "not@committed.yet",
           committer_tz = "+0000",
           message = "Uncommitted changes",
@@ -134,6 +138,43 @@ function M.parse_git_blame_porcelain_lines(blame_lines)
   end
 
   return hunks
+end
+
+-- Converts commit time to ago string and age color index.
+---@param date osdateparam input date
+---@param today osdateparam? current date time
+---@return string ago string such as "3 years ago"
+---@return integer age_color in range [1, 10], 10 is latest, 1 is oldest
+function M.blame_time(date, today)
+  local now = today or os.date "*t" --[[@as osdateparam]]
+  local time_ago = "now"
+  local age_color = 10 -- latest
+
+  local diff = pendulum.precise_diff(now, date)
+  time_ago = diff:ago()
+
+  local weeks = diff:in_weeks()
+  if diff.years > 1 then
+    age_color = 1
+  elseif diff.years == 1 then
+    age_color = 2
+  elseif diff.months > 6 then
+    age_color = 3
+  elseif diff.months > 3 then
+    age_color = 4
+  elseif diff.months > 1 then
+    age_color = 5
+  elseif diff.months == 1 then
+    age_color = 6
+  elseif weeks > 2 then
+    age_color = 7
+  elseif weeks >= 2 then
+    age_color = 8
+  elseif weeks == 1 then
+    age_color = 9
+  end
+
+  return time_ago, age_color
 end
 
 return M

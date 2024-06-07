@@ -75,4 +75,13 @@ describe("color_utils", function()
     assert.are.equal(lab.a, lighter.a)
     assert.are.equal(lab.b, lighter.b)
   end)
+
+  it("generates color palette", function()
+    local base = "#54a23d"
+
+    local palette = color.generate_palette(base, 6, 0.2)
+
+    assert.array(palette).has.no.holes(6)
+    assert.are.equal(base, palette[6])
+  end)
 end)

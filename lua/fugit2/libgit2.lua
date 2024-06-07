@@ -368,6 +368,7 @@ ffi.cdef [[
   int git_message_prettify(git_buf *out, const char *message, int strip_comments, char comment_char);
 
   void git_object_free(git_object *object);
+  int git_object_lookup_bypath(git_object **out, const git_object *treeish, const char *path, int type);
   const git_oid * git_object_id(const git_object *obj);
 
   int git_apply_options_init(git_apply_options *opts, unsigned int version);
@@ -560,8 +561,12 @@ ffi.cdef [[
   int git_tree_lookup(git_tree **out, git_repository *repo, const git_oid *id);
   void git_tree_free(git_tree *tree);
   size_t git_tree_entrycount(const git_tree *tree);
-  int git_tree_entry_bypath(git_tree_entry **out, const git_tree *root, const char *path);
   const git_oid * git_tree_id(const git_tree *tree);
+
+  int git_tree_entry_bypath(git_tree_entry **out, const git_tree *root, const char *path);
+  const git_tree_entry * git_tree_entry_byname(const git_tree *tree, const char *filename);
+  const git_tree_entry * git_tree_entry_byid(const git_tree *tree, const git_oid *id);
+  const git_tree_entry * git_tree_entry_byindex(const git_tree *tree, size_t idx);
 
   const git_oid * git_tree_entry_id(const git_tree_entry *entry);
   void git_tree_entry_free(git_tree_entry *entry);

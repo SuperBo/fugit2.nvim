@@ -447,6 +447,11 @@ end
 -- | Table/list utils |
 -- ====================
 
+---@param n integer number of element in list
+function M.list_new(n)
+  return require "table.new"(n, 0)
+end
+
 ---Builds a lookup table for a given list.
 ---@generic T
 ---@param lst T[]

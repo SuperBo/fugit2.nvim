@@ -385,6 +385,21 @@ function Object:as_blob()
   return Blob.borrow(ffi.cast(libgit2.git_blob_pointer, self.obj))
 end
 
+-- Lookups an object that represents a tree entry from this treeish object.
+---@param path string relative path from the root object to the desired object.
+---@param object_type GIT_OBJECT type of object desired.
+---@return GitObject?
+---@return GIT_ERROR
+function Object:lookup_by_path(path, object_type)
+  local obj_out = libgit2.git_object_double_pointer()
+  local err = libgit2.C.git_object_lookup_bypath(obj_out, self.obj, path, object_type)
+  if err ~= 0 then
+    return nil, err
+  end
+
+  return Object.new(obj_out[0]), 0
+end
+
 -- ======================
 -- | ObjectId functions |
 -- ======================
@@ -3560,11 +3575,9 @@ function Repository:blame_file_async(path, opts, callback)
     callback(blame, 0)
   end
 
-  local config = require("fugit2").config
-
   local work = uv.new_work(work_fn, after_work_fn)
   work:queue(
-    config.libgit2_path,
+    libgit2_library_path,
     tonumber(ffi.cast(libgit2.pointer_t, self.repo)),
     path,
     tonumber(ffi.cast(libgit2.pointer_t, blame_opts))
