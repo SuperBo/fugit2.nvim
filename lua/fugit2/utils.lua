@@ -73,7 +73,7 @@ end
 ---@param n number
 ---@return number
 function M.round(n)
-  return math.floor((math.floor(n * 2) + 1) / 2)
+  return math.floor(n + 0.5)
 end
 
 ---@param str string
@@ -586,7 +586,7 @@ end
 ---@return integer hunk_offset offset of found hunk
 function M.get_hunk(offsets, cursor_row)
   if cursor_row < offsets[1] then
-    return 0, 1
+    return 1, offsets[1]
   end
 
   if #offsets > 4 then
@@ -594,30 +594,31 @@ function M.get_hunk(offsets, cursor_row)
     local start, stop = 1, #offsets
     local mid, hunk_offset
 
-    while start < stop - 1 do
-      mid = math.floor((start + stop) / 2)
+    while start < stop do
+      mid = math.ceil((start + stop) / 2)
       hunk_offset = offsets[mid]
       if cursor_row == hunk_offset then
         return mid, hunk_offset
       elseif cursor_row < hunk_offset then
-        stop = mid
+        stop = mid - 1
       else
         start = mid
       end
     end
-    return start, offsets[start]
-  else
-    -- do linear search
-    for i, hunk_offset in ipairs(offsets) do
-      if cursor_row < hunk_offset then
-        return i - 1, offsets[i - 1] or 1
-      elseif cursor_row == hunk_offset then
-        return i, hunk_offset
-      end
+
+    return stop, offsets[stop]
+  end
+
+  -- do linear search
+  for i, hunk_offset in ipairs(offsets) do
+    if cursor_row < hunk_offset then
+      return i - 1, offsets[i - 1] or 1
+    elseif cursor_row == hunk_offset then
+      return i, hunk_offset
     end
   end
 
-  return 0, 1
+  return #offsets, offsets[#offsets]
 end
 
 M.BitArray = BitArray

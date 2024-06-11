@@ -273,3 +273,75 @@ describe("list_utils", function()
     assert.are.same({ 1, 2, 3, 4, 5, 6 }, list)
   end)
 end)
+
+describe("get_hunk", function()
+  it("returns first hunk when negative index", function()
+    local offsets = { 10, 18, 19, 20 }
+    local offsets2 = { 10, 18, 19, 20, 28, 30, 32 }
+
+    local i1, o1 = utils.get_hunk(offsets, 5)
+    local i2, o2 = utils.get_hunk(offsets, -1)
+    local i3, o3 = utils.get_hunk(offsets2, 8)
+
+    assert.are.equal(i1, 1)
+    assert.are.equal(10, o1)
+    assert.are.equal(i2, 1)
+    assert.are.equal(10, o2)
+    assert.are.equal(i3, 1)
+    assert.are.equal(10, o3)
+  end)
+
+  it("returns last hunk when out of last offset", function()
+    local offsets1 = { 2, 6, 9, 10 }
+    local offsets2 = { 1, 6, 9, 10, 12, 16 }
+
+    local i1, o1 = utils.get_hunk(offsets1, 15)
+    local i2, o2 = utils.get_hunk(offsets2, 20)
+
+    assert.are.equal(#offsets1, i1)
+    assert.are.equal(offsets1[#offsets1], o1)
+    assert.are.equal(#offsets2, i2)
+    assert.are.equal(offsets2[#offsets2], o2)
+  end)
+
+  it("returns correct hunk for small array", function()
+    local offsets = { 2, 6, 9, 10 }
+
+    local i1, off1 = utils.get_hunk(offsets, 2)
+    local i2, off2 = utils.get_hunk(offsets, 8)
+    local i3, off3 = utils.get_hunk(offsets, 9)
+    local i4, off4 = utils.get_hunk(offsets, 12)
+
+    assert.are.equal(1, i1)
+    assert.are.equal(2, off1)
+    assert.are.equal(2, i2)
+    assert.are.equal(6, off2)
+    assert.are.equal(3, i3)
+    assert.are.equal(9, off3)
+    assert.are.equal(4, i4)
+    assert.are.equal(10, off4)
+  end)
+
+  it("returns correct hunk for big array", function()
+    local offsets = { 2, 6, 10, 14, 18, 22, 26, 30, 34, 38 }
+
+    local expected_ids = { 1 }
+    local expected_offs = { 2 }
+    for i, off in ipairs(offsets) do
+      expected_ids[#expected_ids + 1] = i
+      expected_ids[#expected_ids + 1] = i
+      expected_offs[#expected_offs + 1] = off
+      expected_offs[#expected_offs + 1] = off
+    end
+
+    local indices, offs = {}, {}
+    for i = 0, 40, 2 do
+      local j, off = utils.get_hunk(offsets, i)
+      indices[#indices + 1] = j
+      offs[#offs + 1] = off
+    end
+
+    assert.are.same(expected_ids, indices)
+    assert.are.same(expected_offs, offs)
+  end)
+end)
