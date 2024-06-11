@@ -1,10 +1,21 @@
 -- Helper module to parse git blame porcelain information
 
+local diff_utils = require "fugit2.diff"
+local git2 = require "fugit2.git2"
 local pendulum = require "fugit2.core.pendulum"
+local utils = require "fugit2.utils"
 
 pendulum.init()
 
+---@module 'Fugit2BlameHelper'
 local M = {}
+
+---@class Fugit2GitBlameCommit
+---@field oid string
+---@field message_header string
+---@field message_body string
+---@field hunks GitDiffHunk[]?
+---@field patch string[]?
 
 ---@class Fugit2GitBlameHunk
 ---@field oid string Git oid string
@@ -147,7 +158,7 @@ end
 ---@return integer age_color in range [1, 10], 10 is latest, 1 is oldest
 function M.blame_time(date, today)
   local now = today or os.date "*t" --[[@as osdateparam]]
-  local time_ago = "now"
+  local time_ago = "a moment ago"
   local age_color = 10 -- latest
 
   local diff = pendulum.precise_diff(now, date)
@@ -175,6 +186,151 @@ function M.blame_time(date, today)
   end
 
   return time_ago, age_color
+end
+
+-- Filters blame hunk and patch hunk
+-- Only keeping patch hunk that intersects with blam hunks
+---@param hunks GitDiffHunk[]
+---@param blame_ranges Fugit2GitBlameRange[]
+---@return integer[] indices index of remaining hunks
+function M.filter_intersect_hunks(hunks, blame_ranges)
+  local i, j = 1, 1
+  local intersect_indices = {}
+  local last_i = 0
+
+  while i <= #hunks and j <= #blame_ranges do
+    local diff_hunk = hunks[i]
+    local blame_range = blame_ranges[j]
+
+    local diff_end = diff_hunk.new_start + diff_hunk.new_lines
+    local blame_end = blame_range.start + blame_range.num
+
+    if
+      diff_hunk.new_start < (blame_range.start + blame_range.num)
+      and blame_range.start < (diff_hunk.new_start + diff_hunk.new_lines)
+    then
+      -- intersect
+      if i ~= last_i then
+        -- dedup indices
+        intersect_indices[#intersect_indices + 1] = i
+      end
+      last_i = i
+    end
+
+    if diff_end == blame_end then
+      i = i + 1
+      j = j + 1
+    elseif diff_end < blame_end then
+      i = i + 1
+    else
+      j = j + 1
+    end
+  end
+
+  return intersect_indices
+end
+
+-- Find the first intersect hunk from hunk items
+---@param hunks GitDiffHunk[] patch hunks, can be filtered by filter_intersect_hunks
+---@param patch_lines string[] patch splitted into lines
+---@param start_linenr integer start line of range
+---@param num_lines integer num lines of range
+---@return GitDiffHunk? hunk information of founded hunk
+---@return string[]? lines intersect lines from patch lines
+function M.find_intersect_hunk(hunks, patch_lines, start_linenr, num_lines)
+  if #hunks < 1 or #patch_lines < 1 then
+    return nil, nil
+  end
+
+  local offsets = utils.list_new(#hunks)
+  for i, h in ipairs(hunks) do
+    offsets[i] = h.new_start
+  end
+
+  local hunk_idx, _ = utils.get_hunk(offsets, start_linenr)
+  if hunk_idx < 1 or hunk_idx > #hunks then
+    return nil, nil
+  end
+
+  for i = hunk_idx, math.min(hunk_idx + 1, #hunks) do
+    local hunk = hunks[i]
+
+    if hunk.new_start < (start_linenr + num_lines) and start_linenr < (hunk.new_start + hunk.new_lines) then
+      -- intersect
+      local hunk_linenr = 1
+      for j = 1, i - 1 do
+        hunk_linenr = hunk_linenr + hunks[j].num_lines + 1 -- one extra line of header
+      end
+      local hunk_lines = vim.list_slice(patch_lines, hunk_linenr, hunk_linenr + hunk.num_lines)
+
+      local intersect_lines = diff_utils.select_hunk_lines(hunk, hunk_lines, start_linenr, num_lines)
+      return hunk, intersect_lines
+    end
+  end
+
+  return nil, nil
+end
+
+-- Get blame commit details including diff, commit info
+---@param repo GitRepository
+---@param oid_str string git commit id full string
+---@param blame_ranges Fugit2GitBlameRange[]?
+---@return Fugit2GitBlameCommit?
+---@return GIT_ERROR
+function M.blame_commit_detail(repo, oid_str, file_path, blame_ranges)
+  local oid, err = git2.ObjectId.from_string(oid_str)
+  if not oid then
+    return nil, err
+  end
+  local commit
+  commit, err = repo:commit_lookup(oid)
+  if not commit then
+    return nil, err
+  end
+
+  ---@type Fugit2GitBlameCommit
+  local blame_detail = {
+    oid = oid_str:sub(1, 8),
+    message_header = commit:summary(),
+    message_body = commit:body(),
+  }
+
+  local diff, parent_commit, patches
+  if commit:nparents() > 0 then
+    parent_commit, err = commit:parent(0)
+  end
+
+  diff, err = repo:diff_commit_to_commit(parent_commit, commit, { file_path }, 3)
+  if not diff then
+    return blame_detail, err
+  end
+
+  patches, err = diff:patches(false)
+  if #patches == 0 then
+    return blame_detail, err
+  end
+
+  local patch = patches[1]
+  local hunk_info = utils.list_new(patch.num_hunks)
+  for i = 0, patch.num_hunks - 1 do
+    hunk_info[i + 1], _ = patch.patch:hunk(i)
+  end
+
+  local _, hunk_lines = diff_utils.split_patch(tostring(patch.patch))
+
+  if not blame_ranges or #blame_ranges < 0 then
+    blame_detail.hunks = hunk_info
+    blame_detail.patch = hunk_lines
+    return blame_detail, 0
+  end
+
+  -- filter intersect hunks if blame_ranges is provided
+  local indices = M.filter_intersect_hunks(hunk_info, blame_ranges)
+  local sub_lines, sub_hunks = diff_utils.patch_sub_lines(hunk_lines, hunk_info, indices)
+
+  blame_detail.hunks = sub_hunks
+  blame_detail.patch = sub_lines
+  return blame_detail, 0
 end
 
 return M

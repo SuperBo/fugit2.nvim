@@ -1,4 +1,7 @@
 ---Diff helper module
+
+local table_new = require "table.new"
+
 ---@module 'Fugit2DiffHelper'
 local M = {}
 
@@ -270,8 +273,9 @@ function M.merge_hunks(hunk_diffs, hunk_segments)
   return lines
 end
 
+-- Find line in file from hunk
 ---@param hunk GitDiffHunk hunk information
----@param hunk_lines string[] hunk content, including signature in the first line
+---@param hunk_lines string[] hunk content, including header in the first line
 ---@param offset integer offset from start of hunk header
 ---@return integer liner line in original file
 function M.file_line(hunk, hunk_lines, offset)
@@ -290,6 +294,126 @@ function M.file_line(hunk, hunk_lines, offset)
   end
 
   return linenr
+end
+
+-- Numbering hunk lines
+---@param hunk GitDiffHunk hunk info
+---@param hunk_lines string[] hunk lines
+---@return integer[] line_numbers line number in file
+function M.numbering_hunk_lines(hunk, hunk_lines)
+  local numbers = table_new(#hunk_lines, 0)
+  numbers[1] = 0 -- line number of header is 0
+  local linenr, linenr_before_minus = hunk.new_start, hunk.new_start
+  local is_prev_minus = false
+  for i = 2, #hunk_lines do
+    local is_minus = (hunk_lines[i]:sub(1, 1) == "-")
+    if not is_minus then
+      if is_prev_minus then
+        linenr = linenr_before_minus + 1
+      end
+
+      linenr_before_minus = linenr
+    end
+
+    numbers[i] = linenr
+
+    linenr = linenr + 1
+    is_prev_minus = is_minus
+  end
+
+  return numbers
+end
+
+-- Select hunk lines in hunk defined by range
+---@param hunk GitDiffHunk
+---@param hunk_lines string[]
+---@param start_linenr integer start line number of selection
+---@param num_lines integer number of lines selected
+---@return string[]? selected_lines
+function M.select_hunk_lines(hunk, hunk_lines, start_linenr, num_lines)
+  local end_linenr = start_linenr + num_lines - 1
+  local hunk_end_linenr = hunk.new_start + hunk.new_lines - 1
+  if end_linenr < hunk.new_start or hunk_end_linenr < start_linenr then
+    return nil
+  end
+
+  local lines = {}
+  local linenr, linenr_before_minus = hunk.new_start, hunk.new_start
+  local is_prev_minus = false
+  for i = 2, #hunk_lines do
+    local is_minus = (hunk_lines[i]:sub(1, 1) == "-")
+    if not is_minus then
+      if is_prev_minus then
+        linenr = linenr_before_minus + 1
+      end
+      linenr_before_minus = linenr
+    end
+
+    if linenr >= start_linenr and linenr <= end_linenr then
+      lines[#lines + 1] = hunk_lines[i]
+    end
+
+    if not is_minus and linenr == end_linenr then
+      break
+    end
+
+    linenr = linenr + 1
+    is_prev_minus = is_minus
+  end
+
+  return lines
+end
+
+-- Convert patch string to lines of header and contents
+---@param patch string patch content as string
+---@return string[] header header lines
+---@return string[] hunks hunk lines
+function M.split_patch(patch)
+  local lines = vim.split(patch, "\n", { plain = true, trimempty = true })
+  local header = {}
+
+  for i, l in ipairs(lines) do
+    if l:sub(1, 1) ~= "@" then
+      header[i] = l
+    else
+      break
+    end
+  end
+
+  local hunks = vim.list_slice(lines, #header + 1)
+
+  return header, hunks
+end
+
+-- Filters patch lines based on indices
+---@param hunk_lines string[] patch lines without header
+---@param hunks GitDiffHunk[] hunks info
+---@param indices integer[] indices of selected hunks.
+---@return string[] sub_patch_lines return patch lines corressponding to selected indices
+---@return GitDiffHunk[] sub_hunks return sub hunks corressponding to selected indices
+function M.patch_sub_lines(hunk_lines, hunks, indices)
+  if #indices < 1 then
+    return hunk_lines, hunks
+  end
+
+  local sub_lines = {}
+  local sub_hunks = table_new(#indices, 0)
+  local j, find_i = 1, indices[1]
+  local linenr = 1
+  for i, hunk in ipairs(hunks) do
+    if i == find_i then
+      vim.list_extend(sub_lines, hunk_lines, linenr, linenr + hunk.num_lines)
+      sub_hunks[#sub_hunks + 1] = hunk
+      j = j + 1
+      if j > #indices then
+        break
+      end
+      find_i = indices[j]
+    end
+    linenr = linenr + hunk.num_lines + 1
+  end
+
+  return sub_lines, sub_hunks
 end
 
 return M
