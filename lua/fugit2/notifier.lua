@@ -13,7 +13,7 @@ end
 function M.error(msg, err)
   local content = "[Fugit2] " .. msg
   if err ~= nil and err ~= 0 then
-    content = content .. string.format(", error code: %d", err)
+    content = content .. string.format(".\nError code %d", err)
   end
   vim.notify(content, vim.log.levels.ERROR)
 end

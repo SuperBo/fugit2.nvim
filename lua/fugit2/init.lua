@@ -1,23 +1,6 @@
 -- Fugit2 main module file
+local config = require "fugit2.config"
 local ui = require "fugit2.view.ui"
-
----@class Fugit2Config
----@field width integer|string main popup width
----@field max_width integer|string expand popup width
----@field min_width integer
----@field content_width integer
----@field height integer|string main file popup height
----@field libgit2_path string? path to libgit2 lib if not set via environments
----@field external_diffview boolean whether to use external diffview.nvim or Fugit2 implementation
----@field colorscheme string? custom colorscheme specification
-local config = {
-  width = 100,
-  min_width = 50,
-  content_width = 60,
-  max_width = "80%",
-  height = "60%",
-  external_diffview = false,
-}
 
 ---@class Fugit2Module
 local M = {}
@@ -28,23 +11,18 @@ M.namespace = 0
 ---@type integer
 M.autocmd_group = -1
 
----@type Fugit2Config
-M.config = config
-
 ---@param args Fugit2Config?
 -- Usually configurations can be merged, accepting outside params and
 -- some validation here.
 M.setup = function(args)
-  M.config = vim.tbl_deep_extend("force", M.config, args or {})
-
-  -- TODO: Validate
+  local cfg = config.merge(args)
 
   -- Load C Library
-  require("fugit2.git2").init(M.config.libgit2_path)
+  require("fugit2.git2").init(cfg.libgit2_path)
 
   if M.namespace == 0 then
     M.namespace = vim.api.nvim_create_namespace "Fugit2"
-    require("fugit2.view.colors").set_hl(0, M.config.colorscheme)
+    require("fugit2.view.colors").set_hl(0, cfg.colorscheme)
   end
 
   if M.autocmd_group < 0 then
@@ -87,7 +65,8 @@ end
 function M.git_status()
   local repo = open_repository()
   if repo then
-    ui.new_fugit2_status_window(M.namespace, repo, M.config):mount()
+    local cfg = config.config
+    ui.new_fugit2_status_window(M.namespace, repo, cfg):mount()
   end
 end
 
@@ -114,10 +93,14 @@ end
 function M.git_blame(kwargs)
   local repo = open_repository()
   if repo then
-    if #kwargs.fargs == 0 or kwargs.fargs[1] == "file" then
+    if #kwargs.fargs == 0 or kwargs.fargs[1] ~= "split" then
+      if kwargs.fargs[1] == "toggle" or kwargs.fargs[2] == "toggle" then
+        ui.new_fugit2_blame_file(M.namespace, repo):toggle()
+      else
+        ui.new_fugit2_blame_file(M.namespace, repo):refresh()
+      end
+    elseif kwargs.fargs[1] == "split" then
       ui.new_fugit2_blame_view(M.namespace, repo):mount()
-    elseif kwargs.fargs[1] == "line" then
-      --TODO
     end
   end
 end

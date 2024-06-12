@@ -69,6 +69,13 @@ function M.lines_print(str)
   end
 end
 
+-- Rounding a number
+---@param n number
+---@return number
+function M.round(n)
+  return math.floor(n + 0.5)
+end
+
 ---@param str string
 ---@return NuiLine
 function M.message_title_prettify(str)
@@ -440,6 +447,11 @@ end
 -- | Table/list utils |
 -- ====================
 
+---@param n integer number of element in list
+function M.list_new(n)
+  return require "table.new"(n, 0)
+end
+
 ---Builds a lookup table for a given list.
 ---@generic T
 ---@param lst T[]
@@ -574,7 +586,7 @@ end
 ---@return integer hunk_offset offset of found hunk
 function M.get_hunk(offsets, cursor_row)
   if cursor_row < offsets[1] then
-    return 0, 1
+    return 1, offsets[1]
   end
 
   if #offsets > 4 then
@@ -582,30 +594,31 @@ function M.get_hunk(offsets, cursor_row)
     local start, stop = 1, #offsets
     local mid, hunk_offset
 
-    while start < stop - 1 do
-      mid = math.floor((start + stop) / 2)
+    while start < stop do
+      mid = math.ceil((start + stop) / 2)
       hunk_offset = offsets[mid]
       if cursor_row == hunk_offset then
         return mid, hunk_offset
       elseif cursor_row < hunk_offset then
-        stop = mid
+        stop = mid - 1
       else
         start = mid
       end
     end
-    return start, offsets[start]
-  else
-    -- do linear search
-    for i, hunk_offset in ipairs(offsets) do
-      if cursor_row < hunk_offset then
-        return i - 1, offsets[i - 1] or 1
-      elseif cursor_row == hunk_offset then
-        return i, hunk_offset
-      end
+
+    return stop, offsets[stop]
+  end
+
+  -- do linear search
+  for i, hunk_offset in ipairs(offsets) do
+    if cursor_row < hunk_offset then
+      return i - 1, offsets[i - 1] or 1
+    elseif cursor_row == hunk_offset then
+      return i, hunk_offset
     end
   end
 
-  return 0, 1
+  return #offsets, offsets[#offsets]
 end
 
 M.BitArray = BitArray

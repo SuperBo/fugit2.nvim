@@ -55,4 +55,13 @@ function M.new_fugit2_blame_view(namespace, repo)
   return blameview
 end
 
+-- Creates Fugit2 BlameFile (inside buffer virtual text)
+---@param namespace integer Nvim namespace
+---@param repo GitRepository
+function M.new_fugit2_blame_file(namespace, repo)
+  local bufnr = vim.api.nvim_get_current_buf()
+  local blame = require "fugit2.view.git_blame_file"(namespace, repo, bufnr)
+  return blame
+end
+
 return M

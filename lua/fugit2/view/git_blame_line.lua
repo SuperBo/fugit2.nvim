@@ -1,1 +1,0 @@
--- GitBlame inside view

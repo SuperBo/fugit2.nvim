@@ -385,6 +385,21 @@ function Object:as_blob()
   return Blob.borrow(ffi.cast(libgit2.git_blob_pointer, self.obj))
 end
 
+-- Lookups an object that represents a tree entry from this treeish object.
+---@param path string relative path from the root object to the desired object.
+---@param object_type GIT_OBJECT type of object desired.
+---@return GitObject?
+---@return GIT_ERROR
+function Object:lookup_by_path(path, object_type)
+  local obj_out = libgit2.git_object_double_pointer()
+  local err = libgit2.C.git_object_lookup_bypath(obj_out, self.obj, path, object_type)
+  if err ~= 0 then
+    return nil, err
+  end
+
+  return Object.new(obj_out[0]), 0
+end
+
 -- ======================
 -- | ObjectId functions |
 -- ======================
@@ -416,6 +431,19 @@ function ObjectId.from_git_oid(git_oid)
     return nil, err
   end
 
+  return ObjectId.borrow(git_object_id), 0
+end
+
+-- Creates new ObjectId from string
+---@param oid_str string oid hex string
+---@return GitObjectId?
+---@return GIT_ERROR
+function ObjectId.from_string(oid_str)
+  local git_object_id = libgit2.git_oid()
+  local err = libgit2.C.git_oid_fromstrn(git_object_id, oid_str, oid_str:len())
+  if err ~= 0 then
+    return nil, err
+  end
   return ObjectId.borrow(git_object_id), 0
 end
 
@@ -801,16 +829,26 @@ function Commit:time()
 end
 
 -- Gets GitCommit messages.
----@return string
+---@return string message
 function Commit:message()
   local c_char = libgit2.C.git_commit_message(self.commit)
   return vim.trim(ffi.string(c_char))
 end
 
 -- Gets the short "summary" of the git commit message.
----@ return string
+---@return string summary
 function Commit:summary()
   local c_char = libgit2.C.git_commit_summary(self.commit)
+  return ffi.string(c_char)
+end
+
+-- Gets the body of the git commit message.
+---@return string body
+function Commit:body()
+  local c_char = libgit2.C.git_commit_body(self.commit)
+  if c_char == nil then
+    return ""
+  end
   return ffi.string(c_char)
 end
 
@@ -1678,8 +1716,8 @@ function Patch:hunk_line(hunk_idx, line_idx)
 end
 
 ---Gets the number of lines in a hunk.
----@param i integer
----@return integer
+---@param i integer hunk index 0-th based.
+---@return integer num_lines number of lines in i-th hunk.
 function Patch:hunk_num_lines(i)
   return libgit2.C.git_patch_num_lines_in_hunk(self.patch, i)
 end
@@ -3264,6 +3302,7 @@ local function git_status_flags_to_diff_flags(status_flag)
   return diff_flag, find_flag
 end
 
+-- Gets diff from index to workdir
 ---@param index GitIndex? Repository index, can be null
 ---@param paths string[]? Git paths, can be null
 ---@param reverse? boolean whether to reverse the diff
@@ -3274,6 +3313,7 @@ function Repository:diff_index_to_workdir(index, paths, reverse, context_lines)
   return self:diff_helper(true, true, index, paths, reverse, context_lines)
 end
 
+-- Gets diff from head to index
 ---@param index GitIndex? Repository index, can be null
 ---@param paths string[]? Git paths, can be null
 ---@param reverse? boolean whether to reverse the diff
@@ -3284,6 +3324,7 @@ function Repository:diff_head_to_index(index, paths, reverse, context_lines)
   return self:diff_helper(false, true, index, paths, reverse, context_lines)
 end
 
+-- Gets diff from head to workdir
 ---@param index GitIndex? Repository index, can be null
 ---@param paths string[]? Git paths, can be null
 ---@param reverse? boolean whether to reverse the diff
@@ -3383,6 +3424,73 @@ function Repository:diff_helper(include_workdir, include_index, index, paths, re
   end
 
   return Diff.new(diff[0]), 0
+end
+
+-- Gets diff from tree to tree
+---@param old_tree GitTree? A git_tree object to diff from.
+---@param new_tree GitTree? A git_tree object to diff to.
+---@param paths string[]? Git paths, can be null
+---@param context_lines integer? number of context lines
+---@return GitDiff?
+---@return GIT_ERROR
+function Repository:diff_tree_to_tree(old_tree, new_tree, paths, context_lines)
+  local c_paths, err
+  local opts = libgit2.git_diff_options(libgit2.GIT_DIFF_OPTIONS_INIT)
+  local find_opts = libgit2.git_diff_find_options(libgit2.GIT_DIFF_FIND_OPTIONS_INIT)
+  local diff = libgit2.git_diff_double_pointer()
+
+  opts[0].id_abbrev = 8
+  opts[0].flags, find_opts[0].flags = git_status_flags_to_diff_flags(DEFAULT_STATUS_FLAGS)
+
+  if paths and #paths > 0 then
+    c_paths = libgit2.const_char_pointer_array(#paths, paths)
+    opts[0].pathspec.strings = c_paths
+    opts[0].pathspec.count = #paths
+  end
+
+  if context_lines then
+    opts[0].context_lines = context_lines
+  end
+
+  err = libgit2.C.git_diff_tree_to_tree(
+    diff,
+    self.repo,
+    old_tree and old_tree.tree or nil,
+    new_tree and new_tree.tree or nil,
+    opts
+  )
+  if err ~= 0 then
+    return nil, err
+  end
+
+  return Diff.new(diff[0]), 0
+end
+
+-- Gets diff from commit to commit.
+---@param from_commit GitCommit? A git_tree object to diff from.
+---@param to_commit GitCommit? A git_tree object to diff to.
+---@param paths string[]? Git paths, can be null
+---@param context_lines integer? number of context lines
+---@return GitDiff?
+---@return GIT_ERROR
+function Repository:diff_commit_to_commit(from_commit, to_commit, paths, context_lines)
+  local old_tree, new_tree, diff, err
+  if from_commit then
+    old_tree, err = from_commit:tree()
+    if not old_tree then
+      return nil, err
+    end
+  end
+
+  if to_commit then
+    new_tree, err = to_commit:tree()
+    if not new_tree then
+      return nil, err
+    end
+  end
+
+  diff, err = self:diff_tree_to_tree(old_tree, new_tree, paths, context_lines)
+  return diff, err
 end
 
 ---Applies a diff into workdir
@@ -3560,11 +3668,9 @@ function Repository:blame_file_async(path, opts, callback)
     callback(blame, 0)
   end
 
-  local config = require("fugit2").config
-
   local work = uv.new_work(work_fn, after_work_fn)
   work:queue(
-    config.libgit2_path,
+    libgit2_library_path,
     tonumber(ffi.cast(libgit2.pointer_t, self.repo)),
     path,
     tonumber(ffi.cast(libgit2.pointer_t, blame_opts))

@@ -363,11 +363,15 @@ ffi.cdef [[
   char * git_oid_tostr_s(const git_oid *oid);
   int git_oid_equal(const git_oid *a, const git_oid *b);
   int git_oid_cpy(git_oid *out, const git_oid *src);
+  int git_oid_fromstr(git_oid *out, const char *str);
+  int git_oid_fromstrp(git_oid *out, const char *str);
+  int git_oid_fromstrn(git_oid *out, const char *str, size_t length);
 
   char git_diff_status_char(unsigned int status);
   int git_message_prettify(git_buf *out, const char *message, int strip_comments, char comment_char);
 
   void git_object_free(git_object *object);
+  int git_object_lookup_bypath(git_object **out, const git_object *treeish, const char *path, int type);
   const git_oid * git_object_id(const git_object *obj);
 
   int git_apply_options_init(git_apply_options *opts, unsigned int version);
@@ -383,6 +387,7 @@ ffi.cdef [[
   const char * git_commit_message(const git_commit *commit);
   const char * git_commit_message_encoding(const git_commit *commit);
   const char * git_commit_summary(git_commit *commit);
+  const char * git_commit_body(git_commit *commit);
   git_time_t git_commit_time(const git_commit *commit);
   int git_commit_extract_signature(git_buf *signature, git_buf *signed_data, git_repository *repo, git_oid *commit_id, const char *field);
   unsigned int git_commit_parentcount(const git_commit *commit);
@@ -461,6 +466,7 @@ ffi.cdef [[
   int git_diff_index_to_workdir(git_diff **diff, git_repository *repo, git_index *index, const git_diff_options *opts);
   int git_diff_tree_to_index(git_diff **diff, git_repository *repo, git_tree *old_tree, git_index *index, const git_diff_options *opts);
   int git_diff_tree_to_workdir(git_diff **diff, git_repository *repo, git_tree *old_tree, const git_diff_options *opts);
+  int git_diff_tree_to_tree(git_diff **diff, git_repository *repo, git_tree *old_tree, git_tree *new_tree, const git_diff_options *opts);
   int git_diff_to_buf(git_buf *out, git_diff *diff, unsigned int format);
   int git_diff_from_buffer(git_diff **out, const char *content, size_t content_len);
   int git_diff_get_stats(git_diff_stats **out, git_diff *diff);
@@ -560,8 +566,12 @@ ffi.cdef [[
   int git_tree_lookup(git_tree **out, git_repository *repo, const git_oid *id);
   void git_tree_free(git_tree *tree);
   size_t git_tree_entrycount(const git_tree *tree);
-  int git_tree_entry_bypath(git_tree_entry **out, const git_tree *root, const char *path);
   const git_oid * git_tree_id(const git_tree *tree);
+
+  int git_tree_entry_bypath(git_tree_entry **out, const git_tree *root, const char *path);
+  const git_tree_entry * git_tree_entry_byname(const git_tree *tree, const char *filename);
+  const git_tree_entry * git_tree_entry_byid(const git_tree *tree, const git_oid *id);
+  const git_tree_entry * git_tree_entry_byindex(const git_tree *tree, size_t idx);
 
   const git_oid * git_tree_entry_id(const git_tree_entry *entry);
   void git_tree_entry_free(git_tree_entry *entry);

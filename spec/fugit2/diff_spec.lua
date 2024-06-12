@@ -49,6 +49,299 @@ describe("parse_patch", function()
   end)
 end)
 
+describe("patch_sub_lines", function()
+  local patch_lines --[[@as string[] ]]
+  local hunks --[[@as GitDiffHunk[] ]]
+
+  setup(function()
+    local patch = read_patch_file "spec/resources/patch_a.diff"
+    local lines = vim.split(patch, "\n", { plain = true, trimempty = true })
+    patch_lines = vim.list_slice(lines, 5)
+    hunks = {
+      { old_start = 50, old_lines = 6, new_start = 50, new_lines = 11, num_lines = 11 },
+      { old_start = 59, old_lines = 11, new_start = 64, new_lines = 20, num_lines = 25 },
+      { old_start = 99, old_lines = 11, new_start = 113, new_lines = 20, num_lines = 25 },
+      { old_start = 149, old_lines = 4, new_start = 172, new_lines = 23, num_lines = 23 },
+    }
+  end)
+
+  it("selects all when empty indices", function()
+    local selected_lines, selected_hunks = diff.patch_sub_lines(patch_lines, hunks, {})
+
+    assert.array(selected_lines).has.no.holes()
+    assert.array(selected_hunks).has.no.holes()
+    assert.are.equal(#patch_lines, #selected_lines)
+    assert.are.equal(#hunks, #selected_hunks)
+    assert.are.same(patch_lines, selected_lines)
+    assert.are.same(hunks, selected_hunks)
+  end)
+
+  it("selects all indices", function()
+    local selected_lines, selected_hunks = diff.patch_sub_lines(patch_lines, hunks, { 1, 2, 3, 4 })
+
+    assert.array(selected_lines).has.no.holes()
+    assert.array(selected_hunks).has.no.holes()
+    assert.are.equal(#patch_lines, #selected_lines)
+    assert.are.equal(#hunks, #selected_hunks)
+    assert.are.same(patch_lines, selected_lines)
+    assert.are.same(hunks, selected_hunks)
+  end)
+
+  it("selects first hunk", function()
+    local selected_lines, selected_hunks = diff.patch_sub_lines(patch_lines, hunks, { 1 })
+
+    assert.array(selected_lines).has.no.holes()
+    assert.array(selected_hunks).has.no.holes()
+    assert.are.equal(hunks[1].num_lines + 1, #selected_lines)
+    assert.are.equal(1, #selected_hunks)
+    assert.are.same(hunks[1], selected_hunks[1])
+    assert.are.same(vim.list_slice(patch_lines, 1, hunks[1].num_lines + 1), selected_lines)
+  end)
+
+  it("selects last hunk", function()
+    local selected_lines, selected_hunks = diff.patch_sub_lines(patch_lines, hunks, { 4 })
+
+    assert.array(selected_lines).has.no.holes()
+    assert.array(selected_hunks).has.no.holes()
+    assert.are.equal(hunks[4].num_lines + 1, #selected_lines)
+    assert.are.equal(1, #selected_hunks)
+    assert.are.same(hunks[4], selected_hunks[1])
+    assert.are.same(vim.list_slice(patch_lines, 65, 65 + hunks[4].num_lines), selected_lines)
+  end)
+
+  it("selects two consecutive hunks", function()
+    local selected_lines, selected_hunks = diff.patch_sub_lines(patch_lines, hunks, { 1, 2 })
+
+    assert.array(selected_lines).has.no.holes()
+    assert.array(selected_hunks).has.no.holes()
+    assert.are.equal(2, #selected_hunks)
+    assert.are.same({ hunks[1], hunks[2] }, selected_hunks)
+    assert.are.equal(hunks[1].num_lines + hunks[2].num_lines + 2, #selected_lines)
+    assert.are.same(vim.list_slice(patch_lines, 1, hunks[1].num_lines + hunks[2].num_lines + 2), selected_lines)
+  end)
+
+  it("selects two gap hunks", function()
+    local selected_lines, selected_hunks = diff.patch_sub_lines(patch_lines, hunks, { 2, 4 })
+
+    assert.array(selected_lines).has.no.holes()
+    assert.array(selected_hunks).has.no.holes()
+    assert.are.equal(2, #selected_hunks)
+    assert.are.same({ hunks[2], hunks[4] }, selected_hunks)
+    assert.are.equal(hunks[2].num_lines + hunks[4].num_lines + 2, #selected_lines)
+    assert.are.same(
+      vim.list_extend(
+        vim.list_slice(patch_lines, hunks[1].num_lines + 2, hunks[1].num_lines + hunks[2].num_lines + 2),
+        vim.list_slice(patch_lines, 65, 65 + hunks[4].num_lines)
+      ),
+      selected_lines
+    )
+  end)
+end)
+
+describe("select_hunk_lines", function()
+  it("selects none when out of range", function()
+    local hunk_raw = vim.trim [[
+@@ -38,7 +39,7 @@ M.link_colors = {
+   Fugit2RebasePick = "diffAdded", -- green
+   Fugit2RebaseDrop = "diffRemoved", -- red
+   Fugit2RebaseSquash = "Type", -- yellow
+-  Fugit2BlameDate = "Comment",
++  Fugit2BlameDate = "Constant",
+   Fugit2BlameBorder = "Comment",
+   Fugit2Branch1 = "diffAdded", -- green
+   Fugit2Branch2 = "DiagnosticInfo", --dark blue
+    ]]
+    local hunk_lines = vim.split(hunk_raw, "\n", { plain = true, trimempty = true })
+    local hunk = { old_start = 38, old_lines = 7, new_start = 39, new_lines = 7, header = hunk_lines[1] }
+
+    local select1 = diff.select_hunk_lines(hunk, hunk_lines, 20, 8)
+    local select2 = diff.select_hunk_lines(hunk, hunk_lines, 28, 6)
+    local select3 = diff.select_hunk_lines(hunk, hunk_lines, 38, 1)
+    local select4 = diff.select_hunk_lines(hunk, hunk_lines, 46, 1)
+    local select5 = diff.select_hunk_lines(hunk, hunk_lines, 47, 10)
+
+    assert.is_nil(select1)
+    assert.is_nil(select2)
+    assert.is_nil(select3)
+    assert.is_nil(select4)
+    assert.is_nil(select5)
+  end)
+
+  it("selects added and removed lines", function()
+    local hunk_raw = vim.trim [[
+@@ -38,7 +39,7 @@ M.link_colors = {
+   Fugit2RebasePick = "diffAdded", -- green
+   Fugit2RebaseDrop = "diffRemoved", -- red
+   Fugit2RebaseSquash = "Type", -- yellow
+-  Fugit2BlameDate = "Comment",
++  Fugit2BlameDate = "Constant",
+   Fugit2BlameBorder = "Comment",
+   Fugit2Branch1 = "diffAdded", -- green
+   Fugit2Branch2 = "DiagnosticInfo", --dark blue
+    ]]
+    local hunk_lines = vim.split(hunk_raw, "\n", { plain = true, trimempty = true })
+    local hunk = { old_start = 38, old_lines = 7, new_start = 39, new_lines = 7, header = hunk_lines[1] }
+
+    local select1 = diff.select_hunk_lines(hunk, hunk_lines, 42, 1)
+    local select2 = diff.select_hunk_lines(hunk, hunk_lines, 41, 2)
+    local select3 = diff.select_hunk_lines(hunk, hunk_lines, 42, 2)
+
+    assert.array(select1).has.no.holes()
+    assert.array(select2).has.no.holes()
+    assert.array(select3).has.no.holes()
+    assert.are.same(vim.list_slice(hunk_lines, 5, 6), select1)
+    assert.are.same(vim.list_slice(hunk_lines, 4, 6), select2)
+    assert.are.same(vim.list_slice(hunk_lines, 5, 7), select3)
+  end)
+
+  it("selects context lines", function()
+    local hunk_raw = vim.trim [[
+@@ -10,4 +10,7 @@
+ ---Diff helper module
++
++local table_new = require "table.new"
++
+ ---@module 'Fugit2DiffHelper'
+ local M = {}
+ 
+    ]]
+    local hunk_lines = vim.split(hunk_raw, "\n", { plain = true, trimempty = true })
+    local hunk = { old_start = 10, old_lines = 4, new_start = 10, new_lines = 7, header = hunk_lines[1] }
+
+    local select1 = diff.select_hunk_lines(hunk, hunk_lines, 10, 1)
+    local select2 = diff.select_hunk_lines(hunk, hunk_lines, 8, 4)
+    local select3 = diff.select_hunk_lines(hunk, hunk_lines, 14, 8)
+
+    assert.array(select1).has.no.holes()
+    assert.array(select2).has.no.holes()
+    assert.array(select3).has.no.holes()
+    assert.are.same(vim.list_slice(hunk_lines, 2, 2), select1)
+    assert.are.same(vim.list_slice(hunk_lines, 2, 3), select2)
+    assert.are.same(vim.list_slice(hunk_lines, 6, 8), select3)
+  end)
+
+  it("selects sub lines", function()
+    local hunk_raw = vim.trim [[
+@@ -10,8 +10,8 @@
+ ---Diff helper module
+-hello1
+-hello2
+-hello3
+-hello4
++
++local table_new = require "table.new"
++local git2 = require "fugit2.git2"
++
+ ---@module 'Fugit2DiffHelper'
+ local M = {}
+ 
+    ]]
+    local hunk_lines = vim.split(hunk_raw, "\n", { plain = true, trimempty = true })
+    local hunk = { old_start = 10, old_lines = 8, new_start = 10, new_lines = 8, header = hunk_lines[1] }
+
+    local select1 = diff.select_hunk_lines(hunk, hunk_lines, 11, 1)
+    local select2 = diff.select_hunk_lines(hunk, hunk_lines, 12, 1)
+    local select3 = diff.select_hunk_lines(hunk, hunk_lines, 12, 2)
+    local select4 = diff.select_hunk_lines(hunk, hunk_lines, 11, 4)
+
+    assert.array(select1).has.no.holes()
+    assert.array(select2).has.no.holes()
+    assert.array(select3).has.no.holes()
+    assert.array(select4).has.no.holes()
+    assert.are.same({ hunk_lines[3], hunk_lines[7] }, select1)
+    assert.are.same({ hunk_lines[4], hunk_lines[8] }, select2)
+    assert.are.same({ hunk_lines[4], hunk_lines[5], hunk_lines[8], hunk_lines[9] }, select3)
+    assert.are.same(vim.list_slice(hunk_lines, 3, 10), select4)
+  end)
+end)
+
+describe("numbering_hunk_lines", function()
+  it("numbering added only hunk", function()
+    local hunk_raw = vim.trim [[
+@@ -6,6 +6,7 @@ M.link_colors = {
+   Fugit2Header = "Label",
+   Fugit2ObjectId = "Comment",
+   Fugit2Author = "Tag",
++  Fugit2AuthorEmail = "Label",
+   Fugit2HelpHeader = "Label",
+   Fugit2HelpTag = "Tag",
+   Fugit2Heading = "PreProc",
+    ]]
+    local hunk_lines = vim.split(hunk_raw, "\n", { plain = true, trimempty = true })
+    local hunk =
+      { num_lines = #hunk_lines, old_start = 6, old_lines = 6, new_start = 6, new_lines = 7, header = hunk_lines[1] }
+    local numbers = diff.numbering_hunk_lines(hunk, hunk_lines)
+
+    assert.array(numbers).has.no.holes()
+    assert.are.equal(#hunk_lines, #numbers)
+    assert.are.same({ 0, 6, 7, 8, 9, 10, 11, 12 }, numbers)
+  end)
+
+  it("numbering minus only hunk", function()
+    local hunk_raw = vim.trim [[
+@@ -73,7 +73,6 @@ end
+ ---@param n number
+ ---@return number
+ function M.round(n)
+-  return math.floor((math.floor(n * 2) + 1) / 2)
+ end
+ 
+ ---@param str string
+    ]]
+    local hunk_lines = vim.split(hunk_raw, "\n", { plain = true, trimempty = true })
+    local hunk =
+      { num_lines = #hunk_lines, old_start = 73, old_lines = 7, new_start = 73, new_lines = 6, header = hunk_lines[1] }
+
+    local numbers = diff.numbering_hunk_lines(hunk, hunk_lines)
+
+    assert.array(numbers).has.no.holes()
+    assert.are.equal(#hunk_lines, #numbers)
+    assert.are.same({ 0, 73, 74, 75, 76, 76, 77, 78 }, numbers)
+  end)
+
+  it("numbering complex hunk", function()
+    local hunk_raw = vim.trim [[
+@@ -102,17 +102,7 @@ function PatchView:update(patch_item)
+     )
+   end
+ 
+-  local lines = vim.split(tostring(patch), "\n", { plain = true, trimempty = true })
+-
+-  for i, l in ipairs(lines) do
+-    if l:sub(1, 1) ~= "@" then
+-      header[i] = l
+-    else
+-      break
+-    end
+-  end
+-
+-  local render_lines = vim.list_slice(lines, #header + 1)
++  local header, hunk_lines = diff_utils.split_patch(tostring(patch))
+ 
+   local line_num = hunk_offsets[1]
+   for i = 0, patch_item.num_hunks - 1 do
+    ]]
+    local hunk_lines = vim.split(hunk_raw, "\n", { plain = true, trimempty = true })
+    local hunk = {
+      num_lines = #hunk_lines,
+      old_start = 102,
+      old_lines = 17,
+      new_start = 102,
+      new_lines = 7,
+      header = hunk_lines[1],
+    }
+
+    local numbers = diff.numbering_hunk_lines(hunk, hunk_lines)
+
+    assert.array(numbers).has.no.holes()
+    assert.are.equal(#hunk_lines, #numbers)
+    assert.are.same(
+      { 0, 102, 103, 104, 105, 106, 107, 108, 109, 110, 111, 112, 113, 114, 115, 105, 106, 107, 108 },
+      numbers
+    )
+  end)
+end)
+
 describe("partial_patch_from_hunk", function()
   local patch = read_patch_file "spec/resources/patch_a.diff"
   local function read_hunk(idx)
