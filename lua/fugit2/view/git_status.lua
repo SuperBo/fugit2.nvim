@@ -2028,22 +2028,23 @@ function GitStatus:push_current_to_upstream(args)
     return
   end
 
-  local upstream_names = vim.split(upstream.name, "/", { plain = true })
-  if #upstream_names < 2 then
+  local split, _ = upstream.name:find("/", 1, true)
+  if not split then
     error "[Fugit2] Invalid upstream name"
     return
   end
+  local upstream_name = upstream.name:sub(split + 1)
 
   if args[1] == "--force" then
     git_args[#git_args + 1] = args[1]
   elseif args[1] == "--force-with-lease" then
     -- force with lease
-    git_args[#git_args + 1] = string.format("--force-with-lease=%s:%s", upstream_names[2], upstream.oid)
+    git_args[#git_args + 1] = string.format("--force-with-lease=%s:%s", upstream_name, upstream.oid)
   end
 
   git_args[#git_args + 1] = upstream.remote
 
-  git_args[#git_args + 1] = current.name .. ":" .. upstream_names[2]
+  git_args[#git_args + 1] = current.name .. ":" .. upstream_name
 
   self:run_command("git", git_args, true)
 end
