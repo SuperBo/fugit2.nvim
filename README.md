@@ -91,7 +91,7 @@ In case you want to use more stable [diffview.nvim](https://github.com/sindrets/
       dependencies = { 'stevearc/dressing.nvim' }
     },
   },
-  cmd = { 'Fugit2', 'Fugit2Diff', 'Fugit2Graph' },
+  cmd = { 'Fugit2', 'Fugit2Blame', 'Fugit2Diff', 'Fugit2Graph' },
   keys = {
     { '<leader>F', mode = 'n', '<cmd>Fugit2<cr>' }
   }
@@ -123,6 +123,9 @@ Default options dictionary
 ---@field height integer|string Main popup height
 ---@field libgit2_path string? path to libgit2 lib if not set via environments
 ---@field external_diffview boolean whether to use external diffview.nvim or Fugit2 implementation
+---@field blame_priority integer priority of blame virtual text
+---@field blame_info_width integer width of blame hunk detail popup
+---@field blame_info_height integer height of blame hunk detail popup
 ---@field colorscheme string? custom color scheme override
 local opts = {
   width = 100,
@@ -131,6 +134,9 @@ local opts = {
   max_width = "80%",
   height = "60%",
   external_diffview = false,
+  blame_priority = 1,
+  blame_info_height = 10,
+  blame_info_width = 60,
 }
 ```
 
