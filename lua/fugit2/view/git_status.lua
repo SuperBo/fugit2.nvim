@@ -1841,7 +1841,7 @@ function GitStatus:_init_branch_input()
         notifier.info("Created and checked out " .. ref:shorthand())
       end
     else
-      notifier.info("New branch " .. ref:shorthand())
+      notifier.info("Created new branch " .. ref:shorthand())
     end
 
     self:hide_input(true)
