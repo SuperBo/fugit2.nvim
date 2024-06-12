@@ -4,6 +4,7 @@ local NuiPopup = require "nui.popup"
 local NuiText = require "nui.text"
 local Object = require "nui.object"
 local event = require("nui.utils.autocmd").event
+local strings = require "plenary.strings"
 
 local diff_utils = require "fugit2.diff"
 local utils = require "fugit2.utils"
@@ -118,15 +119,47 @@ function PatchView:update(patch_item)
   self._hunk_offsets = hunk_offsets
   self._hunk_diffs = hunk_diffs
 
-  self:render(hunk_lines)
+  self:render(hunk_lines, hunk_diffs)
 end
 
----@param lines string[]
-function PatchView:render(lines)
+---@param lines string[] patch lines
+---@param hunks GitDiffHunk[] hunks info in this patch
+function PatchView:render(lines, hunks)
   vim.api.nvim_buf_set_option(self.popup.bufnr, "modifiable", true)
   vim.api.nvim_buf_set_option(self.popup.bufnr, "readonly", false)
 
-  vim.api.nvim_buf_set_lines(self.popup.bufnr, 0, -1, true, lines)
+  -- render patch info
+  local bufnr, ns_id = self.popup.bufnr, self.ns_id
+  vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, lines)
+
+  -- render line number
+  vim.api.nvim_buf_clear_namespace(bufnr, ns_id, 0, -1)
+  local num_line_max = 1
+  for _, h in ipairs(hunks) do
+    local num_line = h.new_start + h.new_lines - 1
+    if num_line > num_line_max then
+      num_line_max = num_line
+    end
+  end
+  local num_line_width = math.log10(num_line_max) + 1
+  local linenr = 0
+  for _, h in ipairs(hunks) do
+    local hunk_lines = vim.list_slice(lines, linenr + 1, linenr + h.num_lines + 1)
+    local numbers = diff_utils.numbering_hunk_lines(h, hunk_lines)
+    for i = 2, #numbers do
+      vim.api.nvim_buf_set_extmark(bufnr, ns_id, linenr + i - 1, 0, {
+        id = linenr + i - 1,
+        virt_text = {
+          { strings.align_str(tostring(numbers[i]), num_line_width, true), "LineNr" },
+          { " " },
+        },
+        virt_text_pos = "inline",
+        virt_text_repeat_linebreak = true,
+      })
+    end
+
+    linenr = linenr + h.num_lines + 1
+  end
 
   vim.api.nvim_buf_set_option(self.popup.bufnr, "modifiable", false)
   vim.api.nvim_buf_set_option(self.popup.bufnr, "readonly", true)
