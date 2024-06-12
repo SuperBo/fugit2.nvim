@@ -3,10 +3,11 @@
 ---@class Fugit2Config
 ---@field width integer|string main popup width
 ---@field max_width integer|string expand popup width
----@field min_width integer
----@field content_width integer
+---@field min_width integer file view width when expand patch view
+---@field content_width integer file view content width
 ---@field height integer|string main file popup height
 ---@field libgit2_path string? path to libgit2 lib if not set via environments
+---@field gpgme_path string? path to gpgme lib, default: "gpgme"
 ---@field external_diffview boolean whether to use external diffview.nvim or Fugit2 implementation
 ---@field blame_priority integer priority of blame virtual text
 ---@field blame_info_width integer width of blame hunk detail popup

@@ -1,9 +1,9 @@
 ---Module contains libgit2 with gpgme integration
 
-local uv = vim.loop
+local uv = vim.uv or vim.loop
 local PlenaryJob = require "plenary.job"
 
-local gpgme = require "fugit2.gpgme"
+local gpgme = require "fugit2.core.gpgme"
 local utils = require "fugit2.utils"
 
 local M = {}

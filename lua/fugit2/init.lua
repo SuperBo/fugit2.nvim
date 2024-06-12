@@ -19,6 +19,7 @@ M.setup = function(args)
 
   -- Load C Library
   require("fugit2.git2").init(cfg.libgit2_path)
+  require("fugit2.core.gpgme").init(cfg.gpgme_path)
 
   if M.namespace == 0 then
     M.namespace = vim.api.nvim_create_namespace "Fugit2"
