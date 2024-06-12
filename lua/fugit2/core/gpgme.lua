@@ -2,6 +2,8 @@ local ffi = require "ffi"
 
 local char_array = ffi.typeof "char[?]"
 
+local gpgme_library_path = "gpgme"
+
 -- Loads GPGme C library
 ---@return ffi.cdata*
 ---@return table
@@ -240,7 +242,7 @@ local function load_gpgme()
     gpgme_verify_result_t gpgme_op_verify_result(gpgme_ctx_t ctx);
   ]]
 
-  local gpgme = ffi.load "gpgme"
+  local gpgme = ffi.load(gpgme_library_path)
 
   local gpgme_type = {
     gpgme_ctx_pointer = ffi.typeof "struct gpgme_context *",
@@ -286,6 +288,18 @@ setmetatable(lazy_types, lazy_types)
 
 M.C = lazy_C
 M.types = lazy_types
+
+-- ==================
+-- | Init functions |
+-- ==================
+
+-- Inits gpgme libpath
+---@param path string? optional path to libgit2 lib
+function M.init(path)
+  if path then
+    gpgme_library_path = path
+  end
+end
 
 -- ==============================
 -- | GPGme error code functions |
