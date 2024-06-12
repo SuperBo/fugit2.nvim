@@ -9,6 +9,8 @@
 ---@field libgit2_path string? path to libgit2 lib if not set via environments
 ---@field external_diffview boolean whether to use external diffview.nvim or Fugit2 implementation
 ---@field blame_priority integer priority of blame virtual text
+---@field blame_info_width integer width of blame hunk detail popup
+---@field blame_info_height integer height of blame hunk detail popup
 ---@field colorscheme string? custom colorscheme specification
 local DEFAULT_CONFIG = {
   width = 100,
@@ -18,6 +20,8 @@ local DEFAULT_CONFIG = {
   height = "60%",
   external_diffview = false,
   blame_priority = 1,
+  blame_info_height = 10,
+  blame_info_width = 60,
 }
 
 local M = {}
@@ -46,7 +50,7 @@ function M.get_string(setting)
 end
 
 -- Returns Fugit2 config setting as number
----@param setting "blame_priority"|"content_width"|"min_width" setting key
+---@param setting "blame_info_height"|"blame_info_width"|"blame_priority"|"content_width"|"min_width" setting key
 ---@return number?
 function M.get_number(setting)
   return tonumber(M.config[setting])

@@ -279,7 +279,7 @@ function GitGraph:update_log(refname)
 
     ---@type Fugit2GitGraphCommitNode
     local commit_node =
-      LogView.CommitNode(id:tostring(GIT_OID_LENGTH), commit:message(), commit:author(), parents, refs)
+      LogView.CommitNode(id:tostring(GIT_OID_LENGTH), commit:summary(), commit:author(), parents, refs)
 
     i = i + 1
     commit_list[i] = commit_node

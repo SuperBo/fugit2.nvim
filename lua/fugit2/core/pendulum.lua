@@ -3,6 +3,40 @@
 
 local Matrix = require "fugit2.core.matrix"
 
+-- =============
+-- | Constants |
+-- =============
+
+local MONTHS_ABBR = {
+  "Jan",
+  "Feb",
+  "Mar",
+  "Apr",
+  "May",
+  "Jun",
+  "Jul",
+  "Aug",
+  "Sep",
+  "Oct",
+  "Nov",
+  "Dec",
+}
+
+local MONTHS = {
+  "January",
+  "February",
+  "March",
+  "April",
+  "May",
+  "June",
+  "July",
+  "August",
+  "September",
+  "October",
+  "November",
+  "December",
+}
+
 -- ================
 -- | Precise Diff |
 -- ================
@@ -158,6 +192,7 @@ end
 ---@param hour integer?
 ---@param minute integer?
 ---@param second integer?
+---@return osdateparam
 function M.datetime(year, month, day, hour, minute, second)
   return {
     year = year,
@@ -167,6 +202,19 @@ function M.datetime(year, month, day, hour, minute, second)
     min = math.min(minute or 0, 60),
     sec = math.min(second or 0, 60),
   }
+end
+
+-- Formats datetime to string, use ISO format by default.
+---@param date osdateparam
+---@param use_abbr boolean? use abbreviated month format
+---@return string
+function M.datetime_tostring(date, use_abbr)
+  if use_abbr then
+    local m = MONTHS_ABBR[date.month]
+    return string.format("%s %d, %d", m, date.day, date.year)
+  end
+
+  return string.format("%04d-%02d-%02d", date.year, date.month, date.day)
 end
 
 -- Checks leaf year

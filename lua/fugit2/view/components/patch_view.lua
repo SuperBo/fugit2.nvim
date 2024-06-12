@@ -91,7 +91,7 @@ end
 function PatchView:update(patch_item)
   local patch = patch_item.patch
   local stats
-  local header, hunk_offsets, hunk_diffs = {}, { 1 }, {}
+  local hunk_offsets, hunk_diffs = { 1 }, {}
 
   stats, _ = patch:stats()
   if stats then
@@ -102,17 +102,7 @@ function PatchView:update(patch_item)
     )
   end
 
-  local lines = vim.split(tostring(patch), "\n", { plain = true, trimempty = true })
-
-  for i, l in ipairs(lines) do
-    if l:sub(1, 1) ~= "@" then
-      header[i] = l
-    else
-      break
-    end
-  end
-
-  local render_lines = vim.list_slice(lines, #header + 1)
+  local header, hunk_lines = diff_utils.split_patch(tostring(patch))
 
   local line_num = hunk_offsets[1]
   for i = 0, patch_item.num_hunks - 1 do
@@ -128,7 +118,7 @@ function PatchView:update(patch_item)
   self._hunk_offsets = hunk_offsets
   self._hunk_diffs = hunk_diffs
 
-  self:render(render_lines)
+  self:render(hunk_lines)
 end
 
 ---@param lines string[]
