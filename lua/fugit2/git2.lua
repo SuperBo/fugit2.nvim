@@ -1022,8 +1022,8 @@ function Reference:target()
   return nil, 0
 end
 
--- Conditionally creates a new reference
--- with the same name as the given reference.
+---Conditionally creates a new reference
+---with the same name as the given reference.
 ---@param oid GitObjectId
 ---@param message string
 ---@return GitReference?
@@ -1038,7 +1038,20 @@ function Reference:set_target(oid, message)
   return Reference.new(ref[0]), 0
 end
 
--- Recursively peel reference until object of the specified type is found.
+---Resolves a symbolic reference to a direct reference.
+---@return GitReference? ref git reference
+---@return GIT_ERROR err error code
+function Reference:resolve()
+  local ref = libgit2.git_reference_double_pointer()
+  local err = libgit2.C.git_reference_resolve(ref, self.ref)
+  if err ~= 0 then
+    return nil, err
+  end
+
+  return Reference.new(ref[0]), 0
+end
+
+---Recursively peel reference until object of the specified type is found.
 ---@param type GIT_OBJECT
 ---@return GitObject?
 ---@return integer Git Error code
@@ -2406,7 +2419,26 @@ function Repository:reference_name_to_id(refname)
   return ObjectId.borrow(oid), 0
 end
 
--- Gets commit from a reference.
+---Creates a new direct reference.
+---@param name string name of the reference.
+---@param oid GitObjectId object id pointed to by the reference.
+---@param is_force boolean is force.
+---@param log_message string line long message to be appended to the reflog.
+---@return GitReference? ref direct reference
+---@return GIT_ERROR err error code
+function Repository:create_reference(name, oid, is_force, log_message)
+  local git_ref = libgit2.git_reference_double_pointer()
+  local force = is_force and 1 or 0
+
+  local err = libgit2.C.git_reference_create(git_ref, self.repo, name, oid.oid, force, log_message)
+  if err ~= 0 then
+    return nil, err
+  end
+
+  return Reference.new(git_ref[0]), 0
+end
+
+---Gets commit from a reference.
 ---@param oid GitObjectId
 ---@return GitCommit?
 ---@return GIT_ERROR

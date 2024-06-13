@@ -500,6 +500,8 @@ ffi.cdef [[
   int git_reference_name_to_id(git_oid *out, git_repository *repo, const char *name);
   int git_reference_lookup(git_reference **out, git_repository *repo, const char *name);
   const char * git_reference_symbolic_target(const git_reference *ref);
+  int git_reference_create(git_reference **out, git_repository *repo, const char *name, const git_oid *id, int force, const char *log_message);
+  int git_reference_symbolic_create(git_reference **out, git_repository *repo, const char *name, const char *target, int force, const char *log_message);
 
   int git_revwalk_new(git_revwalk **walker, git_repository *repo);
   int git_revwalk_push(git_revwalk *walk, const git_oid *oid);

@@ -1,6 +1,6 @@
 -- Fugit2 Git Status module
 
-local uv = vim.loop
+local uv = vim.uv or vim.loop
 
 local NuiLayout = require "nui.layout"
 local NuiLine = require "nui.line"
