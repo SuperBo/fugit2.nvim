@@ -112,8 +112,13 @@ function M.set_hl(ns_id, colorscheme)
   local blame_latest = "Todo" -- Todo
   local blame_base_hl = vim.api.nvim_get_hl(0, { name = blame_latest })
   if blame_base_hl then
-    blame_text = blame_base_hl.fg
-    blame_base = blame_base_hl.bg
+    if blame_base_hl.bg then
+      blame_text = blame_base_hl.fg
+      blame_base = blame_base_hl.bg
+    elseif blame_base_hl.fg then
+      blame_base = blame_base_hl.fg
+      blame_text = blame_base_hl.bg
+    end
   end
 
   local blame_palette = color.generate_palette(blame_base, 10, 0.1)
