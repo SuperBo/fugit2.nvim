@@ -1,4 +1,4 @@
-*fugit2.nvim.txt*         For Neovim >= 0.8.0        Last change: 2024 June 12
+*fugit2.nvim.txt*         For Neovim >= 0.8.0        Last change: 2024 June 13
 
 ==============================================================================
 Table of Contents                              *fugit2.nvim-table-of-contents*
