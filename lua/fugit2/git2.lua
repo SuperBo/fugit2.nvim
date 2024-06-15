@@ -475,10 +475,10 @@ function ObjectId:copy_to(oid)
   return libgit2.C.git_oid_cpy(oid.oid, self.oid)
 end
 
----@param n integer number of git id
+---@param n integer? number of git id
 ---@return string
 function ObjectId:tostring(n)
-  if n < 0 or n > 40 then
+  if not n or n < 0 or n > 40 then
     n = 40
   end
 
@@ -1185,14 +1185,14 @@ function RevisionWalker:push_head()
   return libgit2.C.git_revwalk_push_head(self.revwalk)
 end
 
--- Push matching references
+---Push matching references
 ---@param glob string
 ---@return GIT_ERROR
 function RevisionWalker:push_glob(glob)
   return libgit2.C.git_revwalk_push_glob(self.revwalk, glob)
 end
 
--- Push the OID pointed to by a reference
+---Push the OID pointed to by a reference
 ---@param refname string
 ---@return GIT_ERROR
 function RevisionWalker:push_ref(refname)
@@ -1203,6 +1203,26 @@ end
 ---@return GIT_ERROR
 function RevisionWalker:hide(oid)
   return libgit2.C.git_revwalk_hide(self.revwalk, oid.oid)
+end
+
+---Gets next oid, commit in the walker
+---@return GitObjectId?
+---@return GitCommit?
+---@return GIT_ERROR err error codd
+function RevisionWalker:next()
+  local git_oid = libgit2.git_oid()
+  local err = libgit2.C.git_revwalk_next(git_oid, self.revwalk)
+  if err ~= 0 then
+    return nil, nil, err
+  end
+
+  local c_commit = libgit2.git_commit_double_pointer()
+  err = libgit2.C.git_commit_lookup(c_commit, self.repo, git_oid)
+  if err ~= 0 then
+    return nil, nil, err
+  end
+
+  return ObjectId.borrow(git_oid), Commit.new(c_commit[0]), 0
 end
 
 ---Iterates through git_oid revisions.

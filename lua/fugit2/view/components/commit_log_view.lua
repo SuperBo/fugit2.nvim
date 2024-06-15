@@ -7,6 +7,7 @@ local Object = require "nui.object"
 local string_utils = require "plenary.strings"
 
 local git2 = require "fugit2.git2"
+local pendulum = require "fugit2.core.pendulum"
 local utils = require "fugit2.utils"
 
 local TAG_PRE_WIDTH = 40
@@ -63,6 +64,7 @@ local SYMBOLS = {
 ---@field oid string commit oid
 ---@field message string commit message
 ---@field author string commit author
+---@field date osdateparam
 ---@field parents string[]
 ---@field refs string[] Tags to show beside commit
 ---@field vis Fugit2GitGraphCommitNodeVis?
@@ -73,14 +75,17 @@ local GitGraphCommitNode = Object "Fugit2GitGraphCommitNode"
 ---Inits Fugit2GitGraphCommitNode
 ---@param oid string
 ---@param msg string
+---@param author string
+---@param date osdateparam
 ---@param parents Fugit2GitGraphCommitNode[]
 ---@param refs string[] List of full refname to tag
 ---@param symbol string? Commit symbol
 ---@param pre_message NuiText?
-function GitGraphCommitNode:init(oid, msg, author, parents, refs, symbol, pre_message)
+function GitGraphCommitNode:init(oid, msg, author, date, parents, refs, symbol, pre_message)
   self.oid = oid
   self.author = author
   self.message = msg
+  self.date = date
   self.parents = parents
   self.refs = refs
   self.symbol = symbol
@@ -94,7 +99,6 @@ local GitGraphCommitGraph = Object "Fugit2GitGraphCommitGraph"
 ---@field popup NuiPopup Commit popup.
 ---@field ns_id integer Namespace id.
 ---@field repo GitRepository
----
 
 local CommitLogView = Object "Fugit2CommitLogView"
 
@@ -140,8 +144,6 @@ function CommitLogView:init(ns_id, title, enter)
   }
 
   -- sub components
-  ---@type GitRevisionWalker?
-  self._walker = nil
   ---@type NuiLine[]
   self._branch_lines, self._commit_lines = {}, {}
   ---@type Fugit2GitGraphCommitNode[]
@@ -154,6 +156,12 @@ end
 ---@param opts table
 function CommitLogView:map(mode, key, fn, opts)
   return self.popup:map(mode, key, fn, opts)
+end
+
+---@param event string | string[]
+---@param handler fun()
+function CommitLogView:on(event, handler)
+  return self.popup:on(event, handler)
 end
 
 ---@return integer Windid
@@ -174,6 +182,13 @@ function CommitLogView:update(commits, remote_icons)
   local width
   self._commits, width = self.prepare_commit_node_visualisation(commits)
   self._commit_lines = self.draw_commit_nodes(self._commits, width, true, remote_icons)
+end
+
+---Updates buffer content incrementally
+---@param commits Fugit2GitGraphCommitNode[]
+---@param remote_icons { [string]: string }
+function CommitLogView:update_incremental(commits, remote_icons)
+  --TODO
 end
 
 ---Draws tag text with icon
@@ -201,7 +216,7 @@ end
 -- Prepares node visulasation information for each commit
 ---@param nodes Fugit2GitGraphCommitNode[] Commit Node in topo order.
 ---@return Fugit2GitGraphCommitNode[] out_nodes
----@return integer graph_widt
+---@return integer graph_width
 function CommitLogView.prepare_commit_node_visualisation(nodes)
   ---@type {[string]: Fugit2GitGraphActiveBranch}
   local active_branches = {} -- mapping from oid to {j, out_cols? }
@@ -593,12 +608,20 @@ function CommitLogView.draw_commit_nodes(nodes, width, draw_meta, remote_icons)
       if pre_line_meta then
         pre_line:append(pre_line_meta)
       end
-      local author_text = string.format("  %s %s", commit.author, commit.oid:sub(1, 8))
-      if #commit.refs < 1 then
-        pre_line_meta = NuiText(author_text, "Fugit2ObjectId")
-      else
-        pre_line_meta = NuiLine()
-        pre_line_meta:append(string_utils.align_str(author_text, TAG_PRE_WIDTH), "Fugit2ObjectId")
+
+      pre_line_meta = NuiLine {
+        NuiText "  ",
+        NuiText(commit.oid:sub(1, 8), "Fugit2ObjectId"),
+        NuiText " ",
+        NuiText(commit.author, "Fugit2ObjectId"),
+        NuiText " ",
+        NuiText(pendulum.datetime_tostring(commit.date), "Fugit2GraphDate"),
+      }
+
+      if #commit.refs > 0 then
+        local padding = math.max(TAG_PRE_WIDTH - pre_line_meta:width(), 1)
+        pre_line_meta:append(string.rep(" ", padding))
+
         local hl = commit.vis and tag_hl(commit.vis.j) or nil
         for k, refname in ipairs(commit.refs) do
           pre_line_meta:append(draw_tag(refname, remote_icons), hl)
