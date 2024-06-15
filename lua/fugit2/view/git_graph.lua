@@ -14,6 +14,7 @@ local utils = require "fugit2.utils"
 
 local BRANCH_WINDOW_WIDTH = 36
 local GIT_OID_LENGTH = 16
+local NUM_COMMIT = 30
 
 ---@enum Fugit2GitGraphEntity
 local ENTITY = {
@@ -57,6 +58,7 @@ function GitGraph:init(ns_id, repo)
   ---@alias Fugit2GitCommitLogCache { [string]: Fugit2GitGraphCommitNode[] }
   self._git = {
     commits = {} --[[@as Fugit2GitCommitLogCache]],
+    commits_iter_over = {} --[[@as {[string]: boolean} ]],
     refs = {} --[[@as { [string]: string }]],
     default_branch = nil --[[@as string?]],
     default_branch_oid = nil --[[@as string?]],
@@ -86,6 +88,8 @@ function GitGraph:init(ns_id, repo)
   self._states = {
     entity = ENTITY.BRANCH_LOCAL,
     last_branch_linenr = -1,
+    last_walker_tip = nil,
+    walker_tip = nil,
     contents = {},
   }
 
@@ -195,12 +199,56 @@ function GitGraph:clear_log()
   self._views.log:clear()
 end
 
+---Converts git commit to Fugit2GitGraphCommitNode
+---@param repo GitRepository
+---@param id GitObjectId
+---@param commit GitCommit
+---@param tip string
+---@param refname string?
+---@param upstream string?
+---@param upstream_id string?
+---@param git table
+---@return Fugit2GitGraphCommitNode
+local function commit_to_node(repo, id, commit, tip, refname, upstream, upstream_id, git)
+  local parents = vim.tbl_map(function(p)
+    return p:tostring()
+  end, commit:parent_oids())
+
+  --Retrieve tag and branches
+  local refs = {}
+  local tag, _ = repo:tag_lookup(id)
+  if tag then
+    refs[1] = tag
+  end
+
+  local id_str = id:tostring(GIT_OID_LENGTH)
+
+  if git.default_branch and id_str == git.default_branch_oid then
+    refs[#refs + 1] = git.default_branch
+  end
+  if git.default_remote_branch and id_str == git.default_remote_branch_oid then
+    refs[#refs + 1] = git.default_remote_branch
+  end
+  if refname and refname ~= git.default_branch and id_str == tip then
+    refs[#refs + 1] = refname
+  end
+  if upstream and id_str == upstream_id then
+    refs[#refs + 1] = upstream
+  end
+
+  ---@type Fugit2GitGraphCommitNode
+  local commit_node = LogView.CommitNode(id:tostring(), commit:summary(), commit:author(), parents, refs)
+
+  return commit_node
+end
+
 ---Updates log commits
 ---@param refname string
 function GitGraph:update_log(refname)
   local err
   local walker = self._git.walker
   local git = self._git
+  local states = self._states
   local tip, commit_list, upstream, upstream_id, oid
 
   -- Check cache
@@ -208,16 +256,18 @@ function GitGraph:update_log(refname)
   commit_list = self._git.commits[tip]
   if tip and commit_list then
     self._views.log:update(commit_list, self._git.remote_icons)
+    states.walker_tip = tip
     return
   elseif not tip then
-    oid, _ = self.repo:reference_name_to_id(refname)
+    oid, err = self.repo:reference_name_to_id(refname)
     if not oid then
-      vim.notify("[Fugit2] Failed to resolve " .. refname, vim.log.levels.ERROR)
+      notifier.error("Failed to resolve " .. refname, err)
       return
     end
 
     tip = oid:tostring(GIT_OID_LENGTH)
     self._git.refs[refname] = tip
+    states.walker_tip = tip
 
     commit_list = self._git.commits[tip]
     if commit_list then
@@ -227,6 +277,7 @@ function GitGraph:update_log(refname)
   end
 
   walker:reset()
+  states.last_walker_tip = tip
 
   -- Get upstream if refname is not default and is branch
   if refname == git.default_branch and git.default_remote_branch then
@@ -244,50 +295,26 @@ function GitGraph:update_log(refname)
 
   err = walker:push_ref(refname)
   if err ~= 0 then
-    vim.notify(string.format("[Fugit2] Failed to get revision for %s!", refname), vim.log.levels.ERROR)
+    notifier.error("Failed to get revision for " .. refname, err)
     return
   end
 
   commit_list = {}
   local i = 0
   for id, commit in walker:iter() do
-    local parents = vim.tbl_map(function(p)
-      return p:tostring(GIT_OID_LENGTH)
-    end, commit:parent_oids())
-
-    --Retrieve tag and branches
-    local refs = {}
-    local tag, _ = self.repo:tag_lookup(id)
-    if tag then
-      refs[1] = tag
-    end
-
-    local id_str = id:tostring(GIT_OID_LENGTH)
-
-    if git.default_branch and id_str == git.default_branch_oid then
-      refs[#refs + 1] = git.default_branch
-    end
-    if git.default_remote_branch and id_str == git.default_remote_branch_oid then
-      refs[#refs + 1] = git.default_remote_branch
-    end
-    if refname ~= git.default_branch and id_str == tip then
-      refs[#refs + 1] = refname
-    end
-    if upstream and id_str == upstream_id then
-      refs[#refs + 1] = upstream
-    end
-
-    ---@type Fugit2GitGraphCommitNode
-    local commit_node =
-      LogView.CommitNode(id:tostring(GIT_OID_LENGTH), commit:summary(), commit:author(), parents, refs)
+    local commit_node = commit_to_node(self.repo, id, commit, tip, refname, upstream, upstream_id, git)
 
     i = i + 1
     commit_list[i] = commit_node
 
-    if i >= 30 then
+    if i >= NUM_COMMIT then
       -- get first 30 commit only
       break
     end
+  end
+
+  if i < NUM_COMMIT then
+    self._git.commits_iter_over[tip] = true
   end
 
   -- cache commits list with head oid
@@ -295,7 +322,75 @@ function GitGraph:update_log(refname)
   self._views.log:update(commit_list, self._git.remote_icons)
 end
 
--- Renders content for NuiGitGraph.
+---Loads more commits to log view.
+---@param n integer number of commits to load more
+function GitGraph:load_more_log(n)
+  local states = self._states
+  local git = self._git
+  local walker = git.walker
+
+  local tip = states.walker_tip
+  local commit_list = git.commits[tip]
+
+  if not tip or not commit_list then
+    notifier.error "Failed to get current commit list"
+    return
+  end
+
+  if git.commits_iter_over[tip] then
+    return
+  end
+
+  if states.last_walker_tip ~= states.walker_tip then
+    -- need to reset walker
+    walker:reset()
+    states.last_walker_tip = tip
+
+    local last_commit = commit_list[#commit_list]
+    local oid, err = git2.ObjectId.from_string(last_commit.oid)
+    if not oid then
+      notifier.error("Failed to construct git2 object id", err)
+      return
+    end
+
+    err = walker:push(oid)
+    if err ~= 0 then
+      notifier.error("Failed to push oid to git walker", err)
+      return
+    end
+
+    _, _, err = walker:next()
+    if err == git2.GIT_ERROR.GIT_ITEROVER then
+      git.commits_iter_over[tip] = true
+      return
+    elseif err ~= 0 then
+      notifier.error("Failed to iter", err)
+      return
+    end
+  end
+
+  local i = 0
+  for id, commit in walker:iter() do
+    local commit_node = commit_to_node(self.repo, id, commit, tip, nil, nil, nil, git)
+
+    i = i + 1
+    commit_list[#commit_list + 1] = commit_node
+
+    if i >= n then
+      -- get first n commit only
+      break
+    end
+  end
+
+  if i < n then
+    git.commits_iter_over[tip] = true
+  end
+
+  --TODO: switch to update_incremental when it is implemented
+  self._views.log:update(commit_list, self._git.remote_icons)
+end
+
+---Renders content for NuiGitGraph.
 function GitGraph:render()
   self._views.branch:render()
   self._views.log:render()
@@ -410,6 +505,18 @@ function GitGraph:setup_handlers()
       vim.fn.setreg("+", commit.oid)
     end
   end, map_options)
+
+  -- log lazy load handling
+  log_view:on(event.WinScrolled, function(ev)
+    local winid = tonumber(ev.file or ev.match)
+    local num_lines = vim.api.nvim_buf_line_count(ev.buf)
+    local last_visible_line = vim.fn.line("w$", winid)
+    if last_visible_line >= num_lines then
+      -- lazy load
+      self:load_more_log(20)
+      self:render()
+    end
+  end)
 end
 
 return GitGraph

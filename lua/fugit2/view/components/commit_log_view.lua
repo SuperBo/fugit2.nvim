@@ -94,7 +94,6 @@ local GitGraphCommitGraph = Object "Fugit2GitGraphCommitGraph"
 ---@field popup NuiPopup Commit popup.
 ---@field ns_id integer Namespace id.
 ---@field repo GitRepository
----
 
 local CommitLogView = Object "Fugit2CommitLogView"
 
@@ -140,8 +139,6 @@ function CommitLogView:init(ns_id, title, enter)
   }
 
   -- sub components
-  ---@type GitRevisionWalker?
-  self._walker = nil
   ---@type NuiLine[]
   self._branch_lines, self._commit_lines = {}, {}
   ---@type Fugit2GitGraphCommitNode[]
@@ -154,6 +151,12 @@ end
 ---@param opts table
 function CommitLogView:map(mode, key, fn, opts)
   return self.popup:map(mode, key, fn, opts)
+end
+
+---@param event string | string[]
+---@param handler fun()
+function CommitLogView:on(event, handler)
+  return self.popup:on(event, handler)
 end
 
 ---@return integer Windid
@@ -174,6 +177,13 @@ function CommitLogView:update(commits, remote_icons)
   local width
   self._commits, width = self.prepare_commit_node_visualisation(commits)
   self._commit_lines = self.draw_commit_nodes(self._commits, width, true, remote_icons)
+end
+
+---Updates buffer content incrementally
+---@param commits Fugit2GitGraphCommitNode[]
+---@param remote_icons { [string]: string }
+function CommitLogView:update_incremental(commits, remote_icons)
+  --TODO
 end
 
 ---Draws tag text with icon
@@ -201,7 +211,7 @@ end
 -- Prepares node visulasation information for each commit
 ---@param nodes Fugit2GitGraphCommitNode[] Commit Node in topo order.
 ---@return Fugit2GitGraphCommitNode[] out_nodes
----@return integer graph_widt
+---@return integer graph_width
 function CommitLogView.prepare_commit_node_visualisation(nodes)
   ---@type {[string]: Fugit2GitGraphActiveBranch}
   local active_branches = {} -- mapping from oid to {j, out_cols? }
