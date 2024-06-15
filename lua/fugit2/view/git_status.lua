@@ -1025,7 +1025,8 @@ function GitStatus:update(callback)
           refs[#refs + 1] = "refs/remotes/" .. status_upstream.name
         end
 
-        commits[#commits + 1] = LogView.CommitNode(id_str, commit:message(), commit:author(), parents, refs)
+        commits[#commits + 1] =
+          LogView.CommitNode(id_str, commit:summary(), commit:author(), commit:time(), parents, refs)
 
         if #commits > GIT_LOG_MAX_COMMITS then
           break

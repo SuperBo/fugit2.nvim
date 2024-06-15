@@ -41,6 +41,7 @@ M.link_colors = {
   Fugit2RebaseSquash = "Type", -- yellow
   Fugit2BlameDate = "Constant",
   Fugit2BlameBorder = "Comment",
+  Fugit2GraphDate = "Type",
   Fugit2Branch1 = "diffAdded", -- green
   Fugit2Branch2 = "DiagnosticInfo", --dark blue
   Fugit2Branch3 = "Type", -- yellow

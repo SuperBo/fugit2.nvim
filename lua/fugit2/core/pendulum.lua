@@ -205,7 +205,7 @@ function M.datetime(year, month, day, hour, minute, second)
 end
 
 -- Formats datetime to string, use ISO format by default.
----@param date osdateparam
+---@param date osdateparam|osdate
 ---@param use_abbr boolean? use abbreviated month format
 ---@return string
 function M.datetime_tostring(date, use_abbr)

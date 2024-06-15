@@ -237,7 +237,7 @@ local function commit_to_node(repo, id, commit, tip, refname, upstream, upstream
   end
 
   ---@type Fugit2GitGraphCommitNode
-  local commit_node = LogView.CommitNode(id:tostring(), commit:summary(), commit:author(), parents, refs)
+  local commit_node = LogView.CommitNode(id:tostring(), commit:summary(), commit:author(), commit:time(), parents, refs)
 
   return commit_node
 end
