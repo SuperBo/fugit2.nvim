@@ -28,11 +28,13 @@ Git plugin for Neovim (based on libgit2).
 
 ## 📦 Installation
 
-Third party libraries:
-  - Required: [Libgit2](https://libgit2.org)
-  - Optional (if use gpg signing): [GPGme](https://gnupg.org/software/gpgme/index.html)
+Please [install libgit2](https://github.com/SuperBo/fugit2.nvim/wiki/Install-libgit2) before installing plugin.
 
-Please refer to [Installation Guide](https://github.com/SuperBo/fugit2.nvim/wiki/%F0%9F%93%A6-Installation).
+[Install GPGme](https://github.com/SuperBo/fugit2.nvim/wiki/GPG-Singing-and-SSH-Signing) if you use gpg key for commit signing.
+
+Third party libraries:
+  - Required: [libgit2](https://libgit2.org)
+  - Optional (if use gpg signing): [GPGme](https://gnupg.org/software/gpgme/index.html)
 
 ### Neovim
 
