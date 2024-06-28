@@ -32,25 +32,29 @@ local utils = require "fugit2.utils"
 ---@param dir_tree table
 ---@param prefix string Name to concat to form id
 ---@return NuiTree.Node[]
+---@return integer num_leaves number of leaf nodes
 local function tree_construct_nodes(dir_tree, prefix)
   local files = {}
+  local num_leaves = 0
   local dir_idx = 1 -- index to insert directory
   for k, v in pairs(dir_tree) do
     if k == "." then
       for _, f in ipairs(v) do
         table.insert(files, NuiTree.Node(f))
       end
+      num_leaves = num_leaves + #v
     else
       local id = prefix .. "/" .. k
-      local children = tree_construct_nodes(v, id)
-      local node = NuiTree.Node({ text = k, id = id }, children)
+      local children, child_leaves = tree_construct_nodes(v, id)
+      local node = NuiTree.Node({ text = k, id = id, num_leaves = child_leaves }, children)
       node:expand()
       table.insert(files, dir_idx, node)
       dir_idx = dir_idx + 1
+      num_leaves = num_leaves + child_leaves
     end
   end
 
-  return files
+  return files, num_leaves
 end
 
 -- Gets colors for a tree node
@@ -170,6 +174,9 @@ local function create_tree_prepare_node_fn(states)
     if node:has_children() then
       line:append(node:is_expanded() and "  " or "  ", "Fugit2SymbolicRef")
       line:append(node.text, "Fugit2SymbolicRef")
+      if not node:is_expanded() then
+        line:append(" (" .. tostring(node.num_leaves) .. ")", "Fugit2ObjectId")
+      end
     else
       local insertions = node.insertions and string.format(" +%d", node.insertions)
       local deletions = node.deletions and string.format(" -%d", node.deletions)
@@ -331,7 +338,8 @@ function GitStatusTree:update(status, git_path, diff_head_to_index)
     end
   end
 
-  self.tree:set_nodes(tree_construct_nodes(dir_tree, ""))
+  local nodes, _ = tree_construct_nodes(dir_tree, "")
+  self.tree:set_nodes(nodes)
 end
 
 -- Returns git path from a NuiTree.Node
