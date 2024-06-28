@@ -63,6 +63,7 @@ function GitBlame:init(ns_id, repo, file_bufnr)
     vim.api.nvim_buf_set_name(bufnr, buf_name)
     vim.api.nvim_buf_set_option(bufnr, "swapfile", false)
     vim.api.nvim_buf_set_option(bufnr, "buftype", "nofile")
+    vim.api.nvim_buf_set_option(bufnr, "filetype", "fugit2-blame")
   end
 
   self:setup_handlers()

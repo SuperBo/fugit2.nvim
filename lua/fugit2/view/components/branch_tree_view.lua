@@ -62,6 +62,7 @@ function GitBranchTree:init(ns_id, width, enter)
     buf_options = {
       buftype = "nofile",
       swapfile = false,
+      filetype = "fugit2-ref-tree",
     },
     prepare_node = self._prepare_node(self.width - 6),
     nodes = {},
