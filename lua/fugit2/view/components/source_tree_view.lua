@@ -202,6 +202,7 @@ function SourceTree:init(ns_id)
     buf_options = {
       buftype = "nofile",
       swapfile = false,
+      filetype = "fugit2-source-tree",
     },
     win_options = {
       foldcolumn = "0",

@@ -192,7 +192,9 @@ function GitStatus:init(ns_id, repo, last_window, current_file, opts)
       winhighlight = win_hl,
       wrap = false,
     },
-    buf_options = buf_readonly_opts,
+    buf_options = vim.tbl_extend("force", buf_readonly_opts, {
+      filetype = "fugit2-status-info",
+    }),
   }
 
   self.command_popup = NuiPopup {
@@ -212,7 +214,9 @@ function GitStatus:init(ns_id, repo, last_window, current_file, opts)
     win_options = {
       winhighlight = win_hl,
     },
-    buf_options = buf_readonly_opts,
+    buf_options = vim.tbl_extend("force", buf_readonly_opts, {
+      filetype = "fugit2-status-command",
+    }),
   }
 
   ---@type Fugit2CommitLogView

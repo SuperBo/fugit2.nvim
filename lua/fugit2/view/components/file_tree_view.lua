@@ -238,6 +238,7 @@ function GitStatusTree:init(ns_id, top_title, bottom_title, min_width)
       readonly = true,
       swapfile = false,
       buftype = "nofile",
+      filetype = "fugit2-file-tree",
     },
   }
 

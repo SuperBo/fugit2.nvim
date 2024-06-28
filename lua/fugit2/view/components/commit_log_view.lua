@@ -140,6 +140,7 @@ function CommitLogView:init(ns_id, title, enter)
       buftype = "nofile",
       swapfile = false,
       syntax = "fugit2commitlog",
+      filetype = "fugit2-log",
     },
   }
 
