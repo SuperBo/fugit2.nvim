@@ -46,6 +46,8 @@ Third party libraries:
 :Rocks install fugit2.nvim
 ```
 
+The setup function must be called before using this plugin, see [Installation Guide](https://github.com/SuperBo/fugit2.nvim/wiki/%F0%9F%93%A6-Installation#rocksnvim).
+
 #### Lazy
 
 If you are using lazy, you can use this config
@@ -55,7 +57,7 @@ If you are using lazy, you can use this config
 {
   'SuperBo/fugit2.nvim',
   opts = {
-    width = 70,
+    width = 100,
   },
   dependencies = {
     'MunifTanjim/nui.nvim',
@@ -114,7 +116,7 @@ In case you want to use more stable [diffview.nvim](https://github.com/sindrets/
 
 TODO: add later
 
-Default options dictionary
+#### Default options/setup dictionary
 
 ```lua
 ---@class Fugit2Config
