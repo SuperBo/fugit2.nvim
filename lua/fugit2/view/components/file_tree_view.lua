@@ -223,7 +223,7 @@ function GitStatusTree:init(ns_id, top_title, bottom_title, min_width)
 
   self.popup = NuiPopup {
     ns_id = ns_id,
-    enter = true,
+    enter = false,
     focusable = true,
     zindex = 50,
     border = {
