@@ -1100,6 +1100,7 @@ end
 
 function GitStatus:mount()
   self._layout:mount()
+  self:focus_file()
 end
 
 ---Exit function

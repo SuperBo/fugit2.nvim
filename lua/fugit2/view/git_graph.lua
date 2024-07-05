@@ -45,7 +45,7 @@ function GitGraph:init(ns_id, repo)
 
   local views = {
     branch = BranchView(ns_id, BRANCH_WINDOW_WIDTH),
-    log = LogView(ns_id, " 󱁉 Commits Log ", true),
+    log = LogView(ns_id, " 󱁉 Commits Log ", false),
   }
   if self._views then
     self._views = vim.tbl_extend("keep", views, self._views)
@@ -390,14 +390,21 @@ function GitGraph:load_more_log(n)
   self._views.log:update(commit_list, self._git.remote_icons)
 end
 
----Renders content for NuiGitGraph.
+-- Renders content for NuiGitGraph.
 function GitGraph:render()
   self._views.branch:render()
   self._views.log:render()
 end
 
+-- Focus log view
+function GitGraph:focus_log()
+  self._views.log:focus()
+end
+
 function GitGraph:mount()
   self._layout:mount()
+  self:focus_log()
+
   local linenr = self._views.branch:scroll_to_active_branch()
   if linenr then
     self._states.last_branch_linenr = linenr
@@ -412,6 +419,7 @@ function GitGraph:unmount()
   self.repo = nil
   self._git = nil
   self._layout = nil
+  self.closed = true
 end
 
 ---Set callback to be called when user select commit

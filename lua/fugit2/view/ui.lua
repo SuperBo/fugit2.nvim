@@ -2,6 +2,7 @@
 local M = {}
 
 local last_status_window = nil
+local last_graph_window = nil
 
 -- Creates Fugit2 Main Floating Window
 ---@param namespace integer Nvim namespace
@@ -28,10 +29,15 @@ end
 ---@param repo GitRepository
 ---@return NuiLayout
 function M.new_fugit2_graph_window(namespace, repo)
+  if last_graph_window and not last_graph_window.closed then
+    return last_graph_window
+  end
+
   -- Status content
   local GitGraph = require "fugit2.view.git_graph"
   local graph = GitGraph(namespace, repo)
   graph:render()
+  last_graph_window = graph
 
   return graph
 end
