@@ -41,6 +41,25 @@ function GitStatusDiffBase:_remove_cached_states(node) end
 
 function GitStatusDiffBase:_refresh_views() end
 
+---@param tree NuiTree
+---@param node NuiTree.Node?
+---@return NuiTree.Node[]
+local function get_leaves(tree, node)
+  local parent_id = node and node:get_id() or nil
+  local nodes = {}
+  local children = tree:get_nodes(parent_id)
+  for _, child in ipairs(children) do
+    if not child:has_children() then
+      nodes[#nodes + 1] = child
+    else
+      local sub_nodes = get_leaves(tree, child)
+      vim.list_extend(nodes, sub_nodes)
+    end
+  end
+
+  return nodes
+end
+
 ---@param is_visual_mode boolean
 ---@param action Fugit2IndexAction
 function GitStatusDiffBase:_index_add_reset_discard(is_visual_mode, action)
@@ -50,7 +69,13 @@ function GitStatusDiffBase:_index_add_reset_discard(is_visual_mode, action)
 
   if not is_visual_mode then
     local node, _ = tree.tree:get_node()
-    nodes = iterators.iter { node }
+
+    if not node:has_children() then
+      nodes = iterators.iter { node }
+    else
+      node:expand()
+      nodes = iterators.iter(get_leaves(tree.tree, node))
+    end
   else
     local cursor_start = vim.fn.getpos("v")[2]
     local cursor_end = vim.fn.getpos(".")[2]
@@ -62,12 +87,12 @@ function GitStatusDiffBase:_index_add_reset_discard(is_visual_mode, action)
       return tree.tree:get_node(linenr)
     end)
 
+    nodes = nodes:filter(function(node)
+      return not node:has_children()
+    end)
+
     vim.api.nvim_feedkeys(utils.KEY_ESC, "n", false)
   end
-
-  nodes = nodes:filter(function(node)
-    return not node:has_children()
-  end)
 
   local results = nodes
     :map(function(node)
