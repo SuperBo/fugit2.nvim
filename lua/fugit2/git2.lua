@@ -416,7 +416,7 @@ function ObjectId.from(oid)
     return nil, err
   end
 
-  return ObjectId.borrow(git_object_id), 0
+  return ObjectId.new(git_object_id), 0
 end
 
 ---Creates new libgit2 oid, then copy value from old oid.
@@ -431,7 +431,7 @@ function ObjectId.from_git_oid(git_oid)
     return nil, err
   end
 
-  return ObjectId.borrow(git_object_id), 0
+  return ObjectId.new(git_object_id), 0
 end
 
 -- Creates new ObjectId from string
@@ -444,12 +444,18 @@ function ObjectId.from_string(oid_str)
   if err ~= 0 then
     return nil, err
   end
-  return ObjectId.borrow(git_object_id), 0
+  return ObjectId.new(git_object_id), 0
 end
 
 ---@param oid ffi.cdata* libgit2 git_oid*, borrow data
 function ObjectId.borrow(oid)
   local object_id = { oid = ffi.cast(libgit2.git_oid_pointer, oid) }
+  setmetatable(object_id, ObjectId)
+  return object_id
+end
+
+function ObjectId.new(oid)
+  local object_id = { oid = oid }
   setmetatable(object_id, ObjectId)
   return object_id
 end
@@ -1222,7 +1228,7 @@ function RevisionWalker:next()
     return nil, nil, err
   end
 
-  return ObjectId.borrow(git_oid), Commit.new(c_commit[0]), 0
+  return ObjectId.new(git_oid), Commit.new(c_commit[0]), 0
 end
 
 ---Iterates through git_oid revisions.
@@ -1242,7 +1248,7 @@ function RevisionWalker:iter()
       return nil, nil
     end
 
-    return ObjectId.borrow(git_oid), Commit.new(c_commit[0])
+    return ObjectId.new(git_oid), Commit.new(c_commit[0])
   end
 end
 
@@ -1433,7 +1439,7 @@ function Index:write_tree()
   if err ~= 0 then
     return nil, err
   end
-  return ObjectId.borrow(tree_oid), 0
+  return ObjectId.new(tree_oid), 0
 end
 
 -- Get the full path to the index file on disk.
@@ -1934,7 +1940,7 @@ function Rebase:commit(author, commiter, message)
     return nil, err
   end
 
-  return ObjectId.borrow(new_oid), 0
+  return ObjectId.new(new_oid), 0
 end
 
 ---Finishes a rebase that is currently in progress once all patches have been applied.
@@ -2436,7 +2442,7 @@ function Repository:reference_name_to_id(refname)
     return nil, err
   end
 
-  return ObjectId.borrow(oid), 0
+  return ObjectId.new(oid), 0
 end
 
 ---Creates a new direct reference.
@@ -3041,7 +3047,7 @@ function Repository:create_commit(index, signature, message)
     return nil, err
   end
 
-  return ObjectId.borrow(git_oid), 0
+  return ObjectId.new(git_oid), 0
 end
 
 -- Creates new commit object as string.
@@ -3093,7 +3099,7 @@ function Repository:create_commit_with_signature(commit_content, signature, sign
     return nil, 0
   end
 
-  return ObjectId.borrow(git_oid), 0
+  return ObjectId.new(git_oid), 0
 end
 
 -- Lookups a blob object from a repository.
@@ -3211,7 +3217,7 @@ function Repository:amend(index, signature, message)
     return nil, err
   end
 
-  return ObjectId.borrow(git_oid), 0
+  return ObjectId.new(git_oid), 0
 end
 
 -- Creates amend commit as string
