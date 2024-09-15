@@ -309,8 +309,14 @@ function GitStatusTree:update(status, git_path, diff_head_to_index)
   end
 
   -- prepare tree
-  local dir_tree = {}
+  -- local dir_tree = utils.build_dir_tree(function(sts)
+  --   if sts.renamed and sts.worktree_status == git2.GIT_DELTA.UNMODIFIED then
+  --     return sts.new_path
+  --   end
+  --   return sts.path
+  -- end, status)
 
+  local dir_tree = {}
   for _, item in ipairs(status) do
     local dirname = vim.fs.dirname(item.path)
     if item.renamed and item.worktree_status == git2.GIT_DELTA.UNMODIFIED then
@@ -338,6 +344,7 @@ function GitStatusTree:update(status, git_path, diff_head_to_index)
     end
   end
 
+  dir_tree = utils.compress_dir_tree(dir_tree)
   local nodes, _ = tree_construct_nodes(dir_tree, "")
   self.tree:set_nodes(nodes)
 end
