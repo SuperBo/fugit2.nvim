@@ -239,6 +239,52 @@ function M.build_dir_tree(path_fn, lst)
   return dir_tree
 end
 
+---@param dir_tree Fugit2DirectoryNode dir tree built from build_dir_tree
+---@return string?
+---@return Fugit2DirectoryNode?
+local function try_compresss_sub_dir_tree(dir_tree)
+  local num_sub_dir = 0
+  local sub_name = nil
+  for name, sub_dir in pairs(dir_tree) do
+    if name ~= "." then
+      sub_name = name
+      num_sub_dir = num_sub_dir + 1
+    end
+  end
+
+  if num_sub_dir == 1 and not dir_tree["."] then
+    -- compress
+    return sub_name, dir_tree[sub_name]
+  end
+
+  return nil, nil
+end
+
+-- Compress Directory Tree
+---@param dir_tree Fugit2DirectoryNode dir tree built from build_dir_tree
+---@return Fugit2DirectoryNode
+function M.compress_dir_tree(dir_tree)
+  local compressed_tree = {}
+
+  for name, sub_dir in pairs(dir_tree) do
+    if name == "." then
+      compressed_tree["."] = sub_dir
+    else
+      sub_dir = M.compress_dir_tree(sub_dir)
+
+      local sub_name, new_sub_dir = try_compresss_sub_dir_tree(sub_dir)
+      if sub_name and new_sub_dir then
+        compressed_tree[name .. "/" .. sub_name] = new_sub_dir
+      else
+        compressed_tree[name] = sub_dir
+      end
+    end
+  end
+
+  return compressed_tree
+end
+
+-- Builds NuiTree from dirctory tree
 ---@generic T
 ---@param node_fn fun(val: T): NuiTree.Node function which returns node from T.
 ---@param dir_tree Fugit2DirectoryNode dir tree built from build_dir_tree

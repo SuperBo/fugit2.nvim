@@ -103,6 +103,46 @@ describe("build_dir_tree/build_nui_tree_nodes", function()
     assert.are.equal(true, tree[1]:has_children())
     assert.are.equal(false, tree[2]:has_children())
   end)
+
+  it("compress dir tree simple", function()
+    local dir_tree = {
+      a = {
+        b = {
+          c = { ["."] = { "file1", "file2" } },
+        },
+      },
+    }
+
+    local compressed = utils.compress_dir_tree(dir_tree)
+
+    assert.is.not_nil(compressed)
+    assert.is_nil(compressed["a"])
+    assert.is_nil(compressed["b"])
+    assert.is_nil(compressed["c"])
+    assert.is.not_nil(compressed["a/b/c"])
+    assert.are.same({ ["."] = { "file1", "file2" } }, compressed["a/b/c"])
+  end)
+
+  it("compress dir tree complex", function()
+    local nodes = {
+      { path = "a/a.txt", id = 1 },
+      { path = "a/b.txt", id = 2 },
+      { path = "c.txt", id = 3 },
+      { path = "d/e/g/h/file1.txt", id = 4 },
+      { path = "d/e/g/h/file2.txt", id = 5 },
+    }
+
+    local tree = utils.build_dir_tree(function(n)
+      return n.path
+    end, nodes)
+    local compressed = utils.compress_dir_tree(tree)
+
+    assert.is.not_nil(compressed)
+    assert.same({ nodes[3] }, tree["."])
+    assert.is_nil(compressed["d"])
+    assert.are.same({ ["."] = { nodes[1], nodes[2] } }, compressed["a"])
+    assert.are.same({ ["."] = { nodes[4], nodes[5] } }, compressed["d/e/g/h"])
+  end)
 end)
 
 describe("bitarray", function()

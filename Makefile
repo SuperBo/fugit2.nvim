@@ -1,4 +1,4 @@
-.PHONY: test format
+.PHONY: test format deps
 
 test:
 	luarocks test --local -- --config-file=nlua.busted
@@ -6,3 +6,6 @@ test:
 format:
 	stylua lua
 	stylua spec
+
+deps:
+	luarocks install --local fugit2.nvim-scm-1.rockspec
