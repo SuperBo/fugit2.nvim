@@ -299,7 +299,7 @@ function M.build_nui_tree_nodes(node_fn, dir_tree)
           table.insert(files, node_fn(f))
         end
       else
-        local id = prefix .. "/" .. k
+        local id = prefix == "" and k or prefix .. "/" .. k
         local children = construct_tree_nodes(v, id)
         local node = NuiTree.Node({ text = k, id = id }, children)
         node:expand()

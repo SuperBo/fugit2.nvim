@@ -44,7 +44,7 @@ local function tree_construct_nodes(dir_tree, prefix)
       end
       num_leaves = num_leaves + #v
     else
-      local id = prefix .. "/" .. k
+      local id = prefix == "" and k or prefix .. "/" .. k
       local children, child_leaves = tree_construct_nodes(v, id)
       local node = NuiTree.Node({ text = k, id = id, num_leaves = child_leaves }, children)
       node:expand()

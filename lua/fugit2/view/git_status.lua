@@ -1154,7 +1154,7 @@ function GitStatus:_refresh_views()
   local states = self._states
 
   -- old node at current cursor maybe deleted after stage/unstage
-  local node, linenr = tree.tree:get_node()
+  local node, linenr = tree:get_child_node_linenr()
   if node and linenr then
     if states.side_panel == SidePanel.NONE then
       states.last_patch_line = -1 -- remove cache behaviors
