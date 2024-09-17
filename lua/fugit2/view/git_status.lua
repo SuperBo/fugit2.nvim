@@ -2548,8 +2548,16 @@ function GitStatus:setup_handlers()
 
   --- [D]/[x]: discard file changes
   -- file_tree:map("n", {"D", "x"}, self:index_add_reset_handler(false, false, false, true), map_options)
-  self._prompts.discard_confirm:on_yes(self:_index_add_reset_handler(true, TreeBase.IndexAction.DISCARD))
+  self._prompts.discard_confirm:on_yes(self:_index_add_reset_handler(false, TreeBase.IndexAction.DISCARD))
   file_tree:map("n", { "D", "x" }, function()
+    local node = file_tree.tree:get_node()
+    if node then
+      self._prompts.discard_confirm:set_text(NuiLine {
+        NuiText("󰮈 Discard ", "Fugit2Unstaged"),
+        NuiText(node.id, "Fugit2MenuHead"),
+        NuiText "?",
+      })
+    end
     self._prompts.discard_confirm:show()
   end, map_options)
 
@@ -2569,6 +2577,9 @@ function GitStatus:setup_handlers()
 
   --- Visual [x][d]: discard files in range
   file_tree:map("v", { "x", "d" }, function()
+    self._prompts.discard_confirm:set_text(NuiLine {
+      NuiText("󰮈 Discard selected changes?", "Fugit2Unstaged"),
+    })
     self._prompts.discard_confirm:show()
   end, map_options)
 
