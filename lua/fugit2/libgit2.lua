@@ -4,6 +4,8 @@ local ffi = require "ffi"
 -- | Libgit2 C section |
 -- =====================
 
+local libgit2_library_path = "libgit2"
+
 --- Load libgit2 via ffi
 ffi.cdef [[
   typedef uint64_t git_object_size_t;
@@ -619,12 +621,30 @@ ffi.cdef [[
 
 ---@class Libgit2Module
 ---@field C ffi.namespace*
+---@field libgit2_init_count integer
 local M = {}
+--- Libgit2 init counter
+M.libgit2_init_count = 0
+
+-- A lazy placeholder for Libgit2 C lib
+-- Only loads libgit2 when called for the first time.
+local lazy_C = {
+  __index = function(table, key)
+    local libgit2 = ffi.load(libgit2_library_path)
+    if M.libgit2_init_count == 0 then
+      M.libgit2_init_count = libgit2.git_libgit2_init()
+    end
+    rawset(M, "C", libgit2)
+    return libgit2[key]
+  end,
+}
+setmetatable(lazy_C, lazy_C)
+M.C = lazy_C
 
 ---@param path string?
-M.load_library = function(path)
-  if not M.C then
-    rawset(M, "C", ffi.load(path or "libgit2"))
+function M.setup_lib(path)
+  if path then
+    libgit2_library_path = path
   end
 end
 

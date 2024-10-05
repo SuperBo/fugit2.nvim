@@ -364,7 +364,7 @@ describe("partial_patch_from_hunk", function()
 
   setup(function()
     local path = require("os").getenv "GIT2_DIR"
-    git2.init(path and path .. "/lib/libgit2.so" or nil)
+    require("fugit2.libgit2").setup_lib(path and path .. "/lib/libgit2.so" or nil)
   end)
 
   it("creates partial patch", function()
