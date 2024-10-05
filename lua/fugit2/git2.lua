@@ -4,9 +4,6 @@ local stat = require "fugit2.core.stat"
 local table_new = require "table.new"
 local uv = vim.uv or vim.loop
 
---- Libgit2 init counter
-local libgit2_init_count = 0
-
 ---@type string?
 local libgit2_library_path
 
@@ -3702,7 +3699,7 @@ function Repository:blame_file_async(path, opts, callback)
 
   local work_fn = function(lib, repo_ptr, p, opts_ptr)
     local lg2 = require "fugit2.libgit2"
-    lg2.load_library(lib)
+    lg2.setup_lib(lib)
     local ffi_ = require "ffi"
 
     local repo = ffi_.cast(lg2.git_repository_pointer, repo_ptr)
@@ -3745,7 +3742,7 @@ function Repository:status_async(callback)
   ---@return GIT_ERROR
   local function new_git_status_list(lib, repo_ptr, flags)
     local lg2 = require "fugit2.libgit2"
-    lg2.load_library(lib)
+    lg2.setup_lib(lib)
     local ffi_ = require "ffi"
 
     local opts = lg2.git_status_options(lg2.GIT_STATUS_OPTIONS_INIT)
@@ -3850,16 +3847,6 @@ end
 ---@class Git2Module
 local M = {}
 
--- Inits luajit-git2 lib
----@param path string? optional path to libgit2 lib
-function M.init(path)
-  libgit2.load_library(path)
-  libgit2_library_path = path
-  if libgit2_init_count == 0 then
-    libgit2_init_count = libgit2.C.git_libgit2_init()
-  end
-end
-
 M.Config = Config
 M.Diff = Diff
 M.IndexEntry = IndexEntry
@@ -3892,7 +3879,7 @@ M.status_char_dash = status_char_dash
 M.status_string = status_string
 
 function M.destroy()
-  libgit2_init_count = libgit2.C.git_libgit2_shutdown()
+  libgit2.libgit2_init_count = libgit2.C.git_libgit2_shutdown()
 end
 
 return M

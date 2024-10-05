@@ -6,10 +6,11 @@ local ui = require "fugit2.view.ui"
 local M = {}
 
 ---@type integer
-M.namespace = 0
+M.namespace = vim.api.nvim_create_namespace "Fugit2"
+require("fugit2.view.colors").set_hl(0)
 
 ---@type integer
-M.autocmd_group = -1
+M.autocmd_group = vim.api.nvim_create_augroup("Fugit2", { clear = true })
 
 ---@param args Fugit2Config?
 -- Usually configurations can be merged, accepting outside params and
@@ -17,18 +18,11 @@ M.autocmd_group = -1
 M.setup = function(args)
   local cfg = config.merge(args)
 
-  -- Load C Library
-  require("fugit2.git2").init(cfg.libgit2_path)
-  require("fugit2.core.gpgme").init(cfg.gpgme_path)
+  -- setup C Library
+  require("fugit2.libgit2").setup_lib(cfg.libgit2_path)
+  require("fugit2.core.gpgme").setup_lib(cfg.gpgme_path)
 
-  if M.namespace == 0 then
-    M.namespace = vim.api.nvim_create_namespace "Fugit2"
-    require("fugit2.view.colors").set_hl(0, cfg.colorscheme)
-  end
-
-  if M.autocmd_group < 0 then
-    M.autocmd_group = vim.api.nvim_create_augroup("Fugit2", { clear = true })
-  end
+  require("fugit2.view.colors").set_hl(0, cfg.colorscheme)
 end
 
 ---@type { [string]: GitRepository }

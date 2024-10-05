@@ -295,7 +295,7 @@ M.types = lazy_types
 
 -- Inits gpgme libpath
 ---@param path string? optional path to libgit2 lib
-function M.init(path)
+function M.setup_lib(path)
   if path then
     gpgme_library_path = path
   end
