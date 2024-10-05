@@ -29,34 +29,6 @@ local utils = require "fugit2.utils"
 ---@field modified boolean Buffer is modifed or not
 ---@field loaded boolean Buffer is loaded or not
 
----@param dir_tree table
----@param prefix string Name to concat to form id
----@return NuiTree.Node[]
----@return integer num_leaves number of leaf nodes
-local function tree_construct_nodes(dir_tree, prefix)
-  local files = {}
-  local num_leaves = 0
-  local dir_idx = 1 -- index to insert directory
-  for k, v in pairs(dir_tree) do
-    if k == "." then
-      for _, f in ipairs(v) do
-        table.insert(files, NuiTree.Node(f))
-      end
-      num_leaves = num_leaves + #v
-    else
-      local id = prefix == "" and k or prefix .. "/" .. k
-      local children, child_leaves = tree_construct_nodes(v, id)
-      local node = NuiTree.Node({ text = k, id = id, num_leaves = child_leaves }, children)
-      node:expand()
-      table.insert(files, dir_idx, node)
-      dir_idx = dir_idx + 1
-      num_leaves = num_leaves + child_leaves
-    end
-  end
-
-  return files, num_leaves
-end
-
 -- Gets colors for a tree node
 ---@param worktree_status GIT_DELTA
 ---@param index_status GIT_DELTA
@@ -101,7 +73,7 @@ end
 ---@param item GitStatusItem
 ---@param bufs table
 ---@param stats_head_to_index { [string]: GitDiffStats }
----@return Fugit2StatusTreeNodeData
+---@return NuiTree.Node
 local function tree_node_data_from_item(item, bufs, stats_head_to_index)
   local path = item.path
   local alt_path
@@ -143,7 +115,7 @@ local function tree_node_data_from_item(item, bufs, stats_head_to_index)
 
   local text = filename .. rename
 
-  return {
+  return NuiTree.Node {
     id = path,
     alt_path = alt_path,
     text = text,
@@ -309,43 +281,18 @@ function GitStatusTree:update(status, git_path, diff_head_to_index)
   end
 
   -- prepare tree
-  -- local dir_tree = utils.build_dir_tree(function(sts)
-  --   if sts.renamed and sts.worktree_status == git2.GIT_DELTA.UNMODIFIED then
-  --     return sts.new_path
-  --   end
-  --   return sts.path
-  -- end, status)
-
-  local dir_tree = {}
-  for _, item in ipairs(status) do
-    local dirname = vim.fs.dirname(item.path)
-    if item.renamed and item.worktree_status == git2.GIT_DELTA.UNMODIFIED then
-      dirname = vim.fs.dirname(item.new_path)
+  local dir_tree = utils.build_dir_tree(function(sts)
+    if sts.renamed and sts.worktree_status == git2.GIT_DELTA.UNMODIFIED then
+      return sts.new_path
     end
-
-    local dir = dir_tree
-    if dirname ~= "" and dirname ~= "." then
-      for s in vim.gsplit(dirname, "/", { plain = true }) do
-        if dir[s] then
-          dir = dir[s]
-        else
-          dir[s] = {}
-          dir = dir[s]
-        end
-      end
-    end
-
-    local entry = tree_node_data_from_item(item, bufs, stats_head_to_index)
-
-    if dir["."] then
-      table.insert(dir["."], entry)
-    else
-      dir["."] = { entry }
-    end
-  end
+    return sts.path
+  end, status)
 
   dir_tree = utils.compress_dir_tree(dir_tree)
-  local nodes, _ = tree_construct_nodes(dir_tree, "")
+
+  local nodes, _ = utils.build_nui_tree_nodes(function(item)
+    return tree_node_data_from_item(item, bufs, stats_head_to_index)
+  end, dir_tree)
   self.tree:set_nodes(nodes)
 end
 

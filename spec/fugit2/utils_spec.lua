@@ -44,16 +44,17 @@ describe("build_dir_tree/build_nui_tree_nodes", function()
     end, nodes)
 
     assert(#vim.tbl_keys(tree), 2)
-    assert.is.not_nil(tree["."])
-    assert.is.not_nil(tree["a"])
-    assert.is.not_nil(tree["a"]["."])
+    assert.is.not_nil(tree.files)
+    assert.is.not_nil(tree.children)
+    assert.is.not_nil(tree.children["a"])
+    assert.is.not_nil(tree.children["a"].files)
     assert.same({
       { path = "c.txt", id = 3 },
-    }, tree["."])
+    }, tree.files)
     assert.same({
       { path = "a/a.txt", id = 1 },
       { path = "a/b.txt", id = 2 },
-    }, tree["a"]["."])
+    }, tree.children["a"].files)
   end)
 
   it("builds branch names", function()
@@ -69,14 +70,14 @@ describe("build_dir_tree/build_nui_tree_nodes", function()
     end, nodes)
 
     assert(#vim.tbl_keys(tree), 2)
-    assert.is.not_nil(tree["."])
-    assert.is.not_nil(tree["feature"])
-    assert.is.not_nil(tree["feature"]["."])
-    assert.is.not_nil(tree["feature"]["project"])
-    assert.is.not_nil(tree["feature"]["project"]["."])
-    assert.are.same({ nodes[1] }, tree["."])
-    assert.are.same({ nodes[2], nodes[4] }, tree["feature"]["."])
-    assert.are.same({ nodes[3] }, tree["feature"]["project"]["."])
+    assert.is.not_nil(tree.files)
+    assert.is.not_nil(tree.children["feature"])
+    assert.is.not_nil(tree.children["feature"].files)
+    assert.is.not_nil(tree.children["feature"].children["project"])
+    assert.is.not_nil(tree.children["feature"].children["project"].files)
+    assert.are.same({ nodes[1] }, tree.files)
+    assert.are.same({ nodes[2], nodes[4] }, tree.children["feature"].files)
+    assert.are.same({ nodes[3] }, tree.children["feature"].children["project"].files)
   end)
 
   it("builds NuiTree for branch names", function()
@@ -106,21 +107,27 @@ describe("build_dir_tree/build_nui_tree_nodes", function()
 
   it("compress dir tree simple", function()
     local dir_tree = {
-      a = {
-        b = {
-          c = { ["."] = { "file1", "file2" } },
+      children = {
+        a = {
+          children = {
+            b = {
+              children = {
+                c = { files = { "file1", "file2" } },
+              },
+            },
+          },
         },
       },
     }
 
     local compressed = utils.compress_dir_tree(dir_tree)
 
-    assert.is.not_nil(compressed)
-    assert.is_nil(compressed["a"])
-    assert.is_nil(compressed["b"])
-    assert.is_nil(compressed["c"])
-    assert.is.not_nil(compressed["a/b/c"])
-    assert.are.same({ ["."] = { "file1", "file2" } }, compressed["a/b/c"])
+    assert.is.not_nil(compressed.children)
+    assert.is_nil(compressed.children["a"])
+    assert.is_nil(compressed.children["b"])
+    assert.is_nil(compressed.children["c"])
+    assert.is.not_nil(compressed.children["a/b/c"])
+    assert.are.same({ files = { "file1", "file2" } }, compressed.children["a/b/c"])
   end)
 
   it("compress dir tree complex", function()
@@ -137,11 +144,11 @@ describe("build_dir_tree/build_nui_tree_nodes", function()
     end, nodes)
     local compressed = utils.compress_dir_tree(tree)
 
-    assert.is.not_nil(compressed)
-    assert.same({ nodes[3] }, tree["."])
-    assert.is_nil(compressed["d"])
-    assert.are.same({ ["."] = { nodes[1], nodes[2] } }, compressed["a"])
-    assert.are.same({ ["."] = { nodes[4], nodes[5] } }, compressed["d/e/g/h"])
+    assert.is.not_nil(compressed.children)
+    assert.same({ nodes[3] }, tree.files)
+    assert.is_nil(compressed.children["d"])
+    assert.are.same({ files = { nodes[1], nodes[2] } }, compressed.children["a"])
+    assert.are.same({ files = { nodes[4], nodes[5] } }, compressed.children["d/e/g/h"])
   end)
 end)
 

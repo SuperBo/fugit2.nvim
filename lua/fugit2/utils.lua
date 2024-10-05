@@ -204,15 +204,19 @@ function M.get_ahead_behind_text(ahead, behind)
   return str
 end
 
+---@class Fugit2DirectoryNode<T>: { files: T[]?, children: {[string]: Fugit2DirectoryNode<T>}? }
+
 ---Build directory tree from a list of paths.
 ---@generic T
----@param path_fn fun(val: T): string function which returns path-like string from ele, e.g: a/b/c.txt
----@param lst T[] list of data from that can get path
----@alias Fugit2DirectoryNode { [string]: T | Fugit2DirectoryNode }
----@return Fugit2DirectoryNode
+---@param path_fn fun(val: T): string function which returns path-like string from elem, e.g: a/b/c.txt
+---@param lst T[] list of elem from that can get path
+---@alias Fugit2DirectoryNodeT Fugit2DirectoryNode<T>
+---@return Fugit2DirectoryNodeT
 function M.build_dir_tree(path_fn, lst)
+  ---@type Fugit2DirectoryNodeT
   local dir_tree = {}
 
+  -- lst:for_each(function(ele)
   for _, ele in ipairs(lst) do
     local path = path_fn(ele)
     local dirname = vim.fs.dirname(path)
@@ -220,95 +224,102 @@ function M.build_dir_tree(path_fn, lst)
     local dir = dir_tree
     if dirname ~= "" and dirname ~= "." then
       for s in vim.gsplit(dirname, "/", { plain = true }) do
-        if dir[s] then
-          dir = dir[s]
+        if dir.children then
+          if dir.children[s] then
+            dir = dir.children[s]
+          else
+            local parent = dir
+            dir = {}
+            parent.children[s] = dir
+          end
         else
-          dir[s] = {}
-          dir = dir[s]
+          local parent = dir
+          dir = {}
+          parent.children = { [s] = dir }
         end
       end
     end
 
-    if dir["."] then
-      table.insert(dir["."], ele)
+    if dir.files then
+      dir.files[#dir.files + 1] = ele
     else
-      dir["."] = { ele }
+      dir.files = { ele }
     end
   end
 
   return dir_tree
 end
 
----@param dir_tree Fugit2DirectoryNode dir tree built from build_dir_tree
----@return string?
----@return Fugit2DirectoryNode?
-local function try_compresss_sub_dir_tree(dir_tree)
-  local num_sub_dir = 0
-  local sub_name = nil
-  for name, sub_dir in pairs(dir_tree) do
-    if name ~= "." then
-      sub_name = name
-      num_sub_dir = num_sub_dir + 1
-    end
-  end
-
-  if num_sub_dir == 1 and not dir_tree["."] then
-    -- compress
-    return sub_name, dir_tree[sub_name]
-  end
-
-  return nil, nil
-end
-
 -- Compress Directory Tree
----@param dir_tree Fugit2DirectoryNode dir tree built from build_dir_tree
----@return Fugit2DirectoryNode
+---@generic T
+---@param dir_tree Fugit2DirectoryNode<T> dir tree built from build_dir_tree
+---@return Fugit2DirectoryNode<T>
 function M.compress_dir_tree(dir_tree)
-  local compressed_tree = {}
+  if not dir_tree.children then
+    -- leaf node, no sub dir
+    return dir_tree
+  end
 
-  for name, sub_dir in pairs(dir_tree) do
-    if name == "." then
-      compressed_tree["."] = sub_dir
-    else
-      sub_dir = M.compress_dir_tree(sub_dir)
+  local compressed_tree = { files = dir_tree.files, children = {} }
 
-      local sub_name, new_sub_dir = try_compresss_sub_dir_tree(sub_dir)
-      if sub_name and new_sub_dir then
-        compressed_tree[name .. "/" .. sub_name] = new_sub_dir
+  for name, sub_dir in pairs(dir_tree.children) do
+    sub_dir = M.compress_dir_tree(sub_dir)
+
+    if not sub_dir.files and sub_dir.children then
+      local sub_names = vim.tbl_keys(sub_dir.children)
+      if #sub_names == 1 then
+        -- can compress
+        local sub_name = sub_names[1]
+        compressed_tree.children[name .. "/" .. sub_name] = sub_dir.children[sub_name]
       else
-        compressed_tree[name] = sub_dir
+        compressed_tree.children[name] = sub_dir
       end
+    else
+      compressed_tree.children[name] = sub_dir
     end
   end
 
   return compressed_tree
 end
 
--- Builds NuiTree from dirctory tree
+-- Builds NuiTree from directory tree
 ---@generic T
 ---@param node_fn fun(val: T): NuiTree.Node function which returns node from T.
----@param dir_tree Fugit2DirectoryNode dir tree built from build_dir_tree
+---@param dir_tree Fugit2DirectoryNode<T> dir tree built from build_dir_tree
 ---@return NuiTree.Node[]
+---@return integer num_leaves number of leaf nodes
 function M.build_nui_tree_nodes(node_fn, dir_tree)
-  local function construct_tree_nodes(dir_sub_tree, prefix)
+  ---@generic T
+  ---@param sub_tree Fugit2DirectoryNode<T>
+  ---@param prefix string
+  ---@return NuiTree.Node[]
+  ---@return integer num_leaves number of leaf nodes
+  local function construct_tree_nodes(sub_tree, prefix)
     local files = {}
-    local dir_idx = 1 -- index to insert directory
-    for k, v in pairs(dir_sub_tree) do
-      if k == "." then
-        for _, f in ipairs(v) do
-          table.insert(files, node_fn(f))
-        end
-      else
+    local num_leaves = 0
+
+    if sub_tree.children then
+      local sub_keys = vim.tbl_keys(sub_tree.children)
+      table.sort(sub_keys)
+
+      for i, k in ipairs(sub_keys) do
         local id = prefix == "" and k or prefix .. "/" .. k
-        local children = construct_tree_nodes(v, id)
-        local node = NuiTree.Node({ text = k, id = id }, children)
+        local children, num_child_leaves = construct_tree_nodes(sub_tree.children[k], id)
+        local node = NuiTree.Node({ text = k, id = id, num_leaves = num_child_leaves }, children)
         node:expand()
-        table.insert(files, dir_idx, node)
-        dir_idx = dir_idx + 1
+        files[i] = node
+        num_leaves = num_leaves + num_child_leaves
       end
     end
 
-    return files
+    if sub_tree.files then
+      num_leaves = num_leaves + #sub_tree.files
+      for _, f in ipairs(sub_tree.files) do
+        files[#files + 1] = node_fn(f)
+      end
+    end
+
+    return files, num_leaves
   end
 
   return construct_tree_nodes(dir_tree, "")
