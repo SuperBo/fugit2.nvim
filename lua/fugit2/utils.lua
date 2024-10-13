@@ -690,4 +690,28 @@ function M.get_hunk(offsets, cursor_row)
   return #offsets, offsets[#offsets]
 end
 
+-- =================
+-- | NUI constants |
+-- =================
+
+M.WIN_HIGHLIGHT = "Normal:Normal,FloatBorder:FloatBorder"
+M.PX_1 = {
+  top = 0,
+  bottom = 0,
+  left = 1,
+  right = 1,
+}
+M.PX_2 = {
+  top = 0,
+  bottom = 0,
+  left = 2,
+  right = 2,
+}
+M.P_1 = {
+  top = 1,
+  bottom = 1,
+  left = 1,
+  right = 1,
+}
+
 return M

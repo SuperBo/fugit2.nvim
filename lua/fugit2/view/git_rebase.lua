@@ -8,10 +8,12 @@ local NuiText = require "nui.text"
 local Object = require "nui.object"
 
 local LogView = require "fugit2.view.components.commit_log_view"
+local Menu = require "fugit2.view.components.menus"
 local StatusTreeView = require "fugit2.view.components.file_tree_view"
 
 local git2 = require "fugit2.git2"
 local notifier = require "fugit2.notifier"
+local utils = require "fugit2.utils"
 
 -- ===========
 -- | Classes |
@@ -40,6 +42,8 @@ local RebaseAction = {
   DROP = 8,
   BREAK = 9,
 }
+
+---@alias Fugit2UIGitRebaseMessage {old: string, new: string}
 
 -- =================
 -- | GitRebaseView |
@@ -138,7 +142,7 @@ function RebaseView:init(ns_id, repo, ref_config, revspec_config)
   end
 
   if not rebase then
-    error("[Fugit2] Failed to create init!" .. err)
+    error("[Fugit2] Failed to create libgit2 rebase, code: " .. err)
     return
   end
   self._git.rebase = rebase
@@ -148,6 +152,10 @@ function RebaseView:init(ns_id, repo, ref_config, revspec_config)
   self._git.actions = {}
   ---@type GitObjectId[]
   self._git.oids = {}
+  ---@type {[string]: Fugit2UIGitRebaseMessage}
+  self._git.messages = {}
+  ---@type string?
+  self._git.current_oid = nil
 
   -- popup views
   self.views = {}
@@ -158,19 +166,14 @@ function RebaseView:init(ns_id, repo, ref_config, revspec_config)
     focusable = false,
     border = {
       style = "rounded",
-      padding = {
-        top = 0,
-        bottom = 0,
-        left = 2,
-        right = 2,
-      },
+      padding = utils.PX_2,
       text = {
         top = NuiText(" 󱖫 Rebase status ", "Fugit2FloatTitle"),
         top_align = "left",
       },
     },
     win_options = {
-      winhighlight = "Normal:Normal,FloatBorder:FloatBorder",
+      winhighlight = utils.WIN_HIGHLIGHT,
     },
     buf_options = {
       modifiable = false,
@@ -179,17 +182,24 @@ function RebaseView:init(ns_id, repo, ref_config, revspec_config)
       buftype = "nofile",
     },
   }
-  self.layout = NuiLayout(
-    {
-      relative = "editor",
-      position = "50%",
-      size = { width = 100, height = "60%" },
-    },
-    NuiLayout.Box({
+  self.views.input = self:_init_input_popup()
+
+  self.boxes = {
+    main = NuiLayout.Box({
       NuiLayout.Box(self.views.status, { size = 4 }),
       NuiLayout.Box(self.views.commits.popup, { grow = 1 }),
-    }, { dir = "col" })
-  )
+    }, { dir = "col" }),
+    input = NuiLayout.Box({
+      NuiLayout.Box(self.views.status, { size = 4 }),
+      NuiLayout.Box(self.views.input, { size = 5 }),
+      NuiLayout.Box(self.views.commits.popup, { grow = 1 }),
+    }, { dir = "col" }),
+  }
+  self.layout = NuiLayout({
+    relative = "editor",
+    position = "50%",
+    size = { width = 100, height = "60%" },
+  }, self.boxes.main)
 
   self._states = {
     help_line = NuiLine {
@@ -230,6 +240,89 @@ local function rebase_action_text(action)
   return NuiText "󰜉 NONE  "
 end
 
+---@return NuiPopup
+function RebaseView:_init_input_popup()
+  local input_popup = NuiPopup {
+    ns_id = self.ns_id,
+    enter = true,
+    focusable = true,
+    border = {
+      style = "rounded",
+      padding = utils.PX_1,
+      text = {
+        top = NuiText(" Reword commit ", "Fugit2MessageHeading"),
+        top_align = "left",
+        bottom = NuiText("[Ctrl-c][󱊷 ][q]uit, [Ctrl 󰌑 ][󰌑 ]", "FloatFooter"),
+        bottom_align = "right",
+      },
+    },
+    win_options = {
+      winhighlight = utils.WIN_HIGHLIGHT,
+    },
+    buf_options = {
+      modifiable = true,
+      filetype = "gitcommit",
+    },
+  }
+
+  local opts = { noremap = true, nowait = true }
+
+  -- keep current reword
+  local exit_fn = function()
+    self.views.commits:focus()
+    self.layout:update(self.boxes.main)
+  end
+
+  -- update new message
+  local enter_fn = function()
+    local lines = vim.api.nvim_buf_get_lines(input_popup.bufnr, 0, -1, true)
+    local new_message = vim.trim(table.concat(lines, "\n"))
+    local message, err = git2.message_prettify(new_message)
+    if not message then
+      notifier.error("Can't prettify commit message", err)
+      return
+    end
+
+    local messages = self._git.messages
+    local oid = self._git.current_oid
+    if not oid then
+      notifier.error "Current commit is not set"
+      return
+    end
+
+    local _, commit_idx = self.views.commits:get_commit()
+    if not commit_idx then
+      notifier.error "Can't retrieve current commit!"
+      return
+    end
+
+    self._git.actions[commit_idx] = RebaseAction.REWORD
+    local commit = self._git.commits[commit_idx]
+    commit.pre_message, commit.symbol = rebase_action_text(RebaseAction.REWORD)
+    messages[oid] = { old = commit.message, new = message }
+    commit.message = utils.lines_head(message)
+
+    self.views.commits:update(self._git.commits)
+    self.views.commits:render()
+
+    self.views.commits:focus()
+    self.layout:update(self.boxes.main)
+  end
+
+  input_popup:map("n", { "<esc>", "q" }, exit_fn, opts)
+  input_popup:map("i", "<C-c>", function()
+    vim.cmd.stopinsert()
+    exit_fn()
+  end, opts)
+  input_popup:map("n", "<cr>", enter_fn, opts)
+  input_popup:map("i", "<C-cr>", function()
+    vim.cmd.stopinsert()
+    enter_fn()
+  end, opts)
+
+  return input_popup
+end
+
 ---Updates buffer contents based on status of libgit2 git_rebase
 function RebaseView:update()
   self._states.status_line = NuiLine {
@@ -237,6 +330,9 @@ function RebaseView:update()
   }
 
   self._git.signature, _ = self.repo:signature_default()
+  if not self._git.signature then
+    error "[Fugit2] Can't get repo default author!"
+  end
 
   ---@type Fugit2GitGraphCommitNode[]
   local commits = self._git.commits
@@ -253,15 +349,16 @@ function RebaseView:update()
     local op_id, op_type = op:id(), op:type()
 
     local git_commit, _ = self.repo:commit_lookup(op_id)
-    local message, author = "", ""
+    local message, author, time = "", "", {}
     if git_commit then
       author = git_commit:author()
-      message = git_commit:message()
+      message = git_commit:summary()
+      time = git_commit:time()
     end
 
     local rebase_text, symbol = rebase_action_text(op_type)
 
-    local node = LogView.CommitNode(op_id:tostring(16), message, author, {}, {}, symbol, rebase_text)
+    local node = LogView.CommitNode(op_id:tostring(16), message, author, time, {}, {}, symbol, rebase_text)
     commits[n_commits - i] = node
     actions[n_commits - i] = op_type
     oids[n_commits - i] = op_id:clone()
@@ -280,15 +377,17 @@ function RebaseView:render()
   self.views.commits:render()
 end
 
----Starts rebase process with given user actions
+-- Starts rebase process with user actions
 function RebaseView:rebase_start()
-  local actions = self._git.actions
-  local oids = self._git.oids
+  local git = self._git
+  local actions = git.actions
+  local oids = git.oids
+  local rebase = git.rebase
 
   -- change git2 rebase action and order
-  local n_commits = self._git.rebase:noperations()
+  local n_commits = rebase:noperations()
   for i = 0, n_commits - 1 do
-    local op = self._git.rebase:operation_byindex(i)
+    local op = rebase:operation_byindex(i)
     if not op then
       break
     end
@@ -307,68 +406,130 @@ function RebaseView:rebase_start()
     end
   end
 
-  -- call initial next
-  self:rebase_next()
+  -- call rebase
+  self:rebase_continue()
 end
 
----Makes the next rebase operation
-function RebaseView:rebase_next()
-  local rebase = self._git.rebase
-  local signature = self._git.signature
+-- Continues a paused rebase action
+function RebaseView:rebase_continue()
+  vim.print "Start rebase"
+  local git = self._git
 
-  local commit
-  local op, err = rebase:next()
-  if err == 0 then
-    _, err = rebase:commit(nil, signature, nil)
-    self:rebase_next()
-  elseif err == git2.GIT_ERROR.GIT_ECONFLICT then
-    -- conflict
-    print(err)
-  elseif err == git2.GIT_ERROR.GIT_ITEROVER then
-    -- end of iter
-    print "End"
-  else
-    print(err)
+  local rebase = git.rebase
+  local signature = git.signature
+  local err = 0
+  local op, message
+  while err == 0 do
+    op, err = rebase:next()
+    if op then
+      if op:type() == git2.GIT_REBASE_OPERATION.REWORD then
+        message = git.messages[op:id():tostring()].new
+      else
+        message = nil
+      end
+      _, err = rebase:commit(nil, signature, message)
+    end
   end
+
+  if err == git2.GIT_ERROR.GIT_ITEROVER then
+    self:rebase_finish()
+  elseif err == git2.GIT_ERROR.GIT_ECONFLICT and op then
+    self:rebase_has_conflicts(op:id():tostring())
+  elseif op then
+    notifier.error("Error when rebase " .. op:id():tostring(), err)
+    self:rebase_abort()
+  else
+    notifier.error("Error when rebase", err)
+    self:rebase_abort()
+  end
+end
+
+-- Finish rebase action.
+function RebaseView:rebase_finish()
+  notifier.info "Rebase successfully"
+  --TODO: write index back to disk
+
+  self:unmount()
+end
+
+-- Rebase action has some conflicts, need to resolve or abort.
+---@param oid string git oid at which rebase has conflicts
+function RebaseView:rebase_has_conflicts(oid)
+  local commits = self._git.commits
+  for _, commit in ipairs(commits) do
+    if commit.oid == oid then
+      commit.pre_message = NuiText(" CONFLICT", "Fugit2Error")
+      break
+    end
+  end
+
+  self.views.commits:update(commits)
+  self.views.commits:render()
+
+  -- Show confirm
+  local resolve_confirm = Menu.Confirm(
+    self.ns_id,
+    NuiLine {
+      NuiText "Having conflicts, do you want to resolve it?",
+    }
+  )
+  resolve_confirm:on_yes(function()
+    --TODO: show diff
+    print "Show diff tab!"
+  end)
+  resolve_confirm:mount()
+end
+
+-- Abort rebase action
+function RebaseView:rebase_abort()
+  local err = self._git.rebase:abort()
+  if err ~= 0 then
+    notifier.error("Failed to abort rebase action", err)
+  end
+
+  self:unmount()
 end
 
 ---Inits status view.
 ---@return Fugit2GitStatusTree
-function RebaseView:init_files_view()
-  local status_view = StatusTreeView(self.ns_id, " 󰙅 Files ", nil, nil)
-  self.views.files = status_view
+-- function RebaseView:_init_files_view()
+--   local status_view = StatusTreeView(self.ns_id, " 󰙅 Files ", nil, nil)
+--   self.views.files = status_view
+--
+--   return status_view
+-- end
 
-  return status_view
-end
-
----Shows git status when having conflicts.
-function RebaseView:show_files()
-  local files = self.views.files
-  if not files then
-    files = self:init_files_view()
-  end
-
-  local index
-  if self._git.inmemory then
-    index, _ = self._git.rebase:inmemory_index()
-  else
-    index, _ = self.repo:index()
-  end
-  if index then
-  end
-
-  self.layout:update(NuiLayout.Box({
-    NuiLayout.Box(self.views.status, { size = 4 }),
-    NuiLayout.Box(files.popup, { grow = 1 }),
-  }, { dir = "col" }))
-end
+-- Shows git status when having conflicts.
+-- function RebaseView:show_files()
+--   local files = self.views.files
+--   if not files then
+--     files = self:init_files_view()
+--   end
+--
+--   local index
+--   if self._git.inmemory then
+--     index, _ = self._git.rebase:inmemory_index()
+--   else
+--     index, _ = self.repo:index()
+--   end
+--   if index then
+--   end
+--
+--   self.layout:update(NuiLayout.Box({
+--     NuiLayout.Box(self.views.status, { size = 4 }),
+--     NuiLayout.Box(files.popup, { grow = 1 }),
+--   }, { dir = "col" }))
+-- end
 
 function RebaseView:setup_handlers()
   local opts = { noremap = true, nowait = true }
   local commit_view = self.views.commits
+  local input_view = self.views.input
   local commits = self._git.commits
   local actions = self._git.actions
   local oids = self._git.oids
+  local messages = self._git.messages
+  local git = self._git
 
   -- main function to handle rebase action
   local action_fn = function(action)
@@ -377,10 +538,25 @@ function RebaseView:setup_handlers()
       return
     end
 
-    actions[commit_idx] = action
-
     local commit = commits[commit_idx]
+
+    if action == RebaseAction.REWORD then
+      git.current_oid = commit.oid
+      input_view.border:set_text("top", NuiText(" Reword commit " .. commit.oid, "Fugit2MessageHeading"))
+      vim.api.nvim_buf_set_lines(self.views.input.bufnr, 0, -1, true, { commit.message })
+      self.layout:update(self.boxes.input)
+      vim.api.nvim_win_set_cursor(self.views.input.winid, { 1, commit.message:len() })
+      return
+    end
+
+    actions[commit_idx] = action
     commit.pre_message, commit.symbol = rebase_action_text(action)
+
+    local m = messages[commit.oid]
+    if m then
+      commit.message = m.old
+      messages[commit.oid] = nil
+    end
 
     commit_view:update(commits)
     commit_view:render()
@@ -487,12 +663,15 @@ function RebaseView:setup_handlers()
     reorder_fn(false)
   end, opts)
 
-  -- Movements
+  -- Move commits
   commit_view:map("n", "j", "2j", opts)
   commit_view:map("n", "k", "2k", opts)
 
   commit_view:map("n", "<cr>", function()
     self:rebase_start()
+  end, opts)
+  commit_view:map("n", { "<esc>", "q" }, function()
+    self:unmount()
   end, opts)
 end
 
