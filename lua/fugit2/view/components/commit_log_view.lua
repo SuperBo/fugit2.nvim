@@ -152,11 +152,17 @@ function CommitLogView:init(ns_id, title, enter)
 end
 
 ---@param mode string
----@param key string|string[]
+---@param key string | string[]
 ---@param fn fun()|string
 ---@param opts table
 function CommitLogView:map(mode, key, fn, opts)
   return self.popup:map(mode, key, fn, opts)
+end
+
+---@param mode string
+---@param key string | string[]
+function CommitLogView:unmap(mode, key)
+  return self.popup:unmap(mode, key)
 end
 
 ---@param event string | string[]
