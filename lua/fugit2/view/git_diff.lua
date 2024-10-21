@@ -44,7 +44,7 @@ function GitDiff:init(ns_id, repo, index, head_commit)
   if not head_commit then
     local _commit, err = self.repo:head_commit()
     if not _commit and err ~= git2.GIT_ERROR.GIT_EUNBORNBRANCH then
-      error("[Fugit2] Can't retrieve repo head " .. err)
+      notifier.error("Can't retrieve repo head ", err)
     end
     _head_commit = _commit
   end
