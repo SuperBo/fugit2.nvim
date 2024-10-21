@@ -221,6 +221,9 @@ local DiffHunk = {}
 
 ---@class GitRebase
 ---@field rebase ffi.cdata* libgit2 git_rebase* pointer
+---@field branch GitAnnotatedCommit?
+---@field upstream GitAnnotatedCommit?
+---@field onto GitAnnotatedCommit?
 local Rebase = {}
 Rebase.__index = Rebase
 
@@ -706,6 +709,13 @@ function AnnotatedCommit.new(git_commit)
 
   ffi.gc(commit.commit, libgit2.C.git_annotated_commit_free)
   return commit
+end
+
+-- Gets the commit ID that the given git_annotated_commit refers to
+---@return GitObjectId
+function AnnotatedCommit:id()
+  local git_oid = libgit2.C.git_annotated_commit_id(self.commit)
+  return ObjectId.borrow(git_oid)
 end
 
 -- =================
@@ -1893,6 +1903,7 @@ function Rebase:onto_name()
 end
 
 ---Gets the onto id for merge rebases.
+---@return GitObjectId
 function Rebase:onto_id()
   local oid_ptr = libgit2.C.git_rebase_onto_id(self.rebase)
   return ObjectId.borrow(oid_ptr)
