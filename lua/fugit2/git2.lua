@@ -1866,6 +1866,7 @@ function Rebase:next()
   return RebaseOperation.borrow(operation[0]), 0
 end
 
+
 ---Gets the count of rebase operations that are to be applied.
 ---@return integer
 function Rebase:noperations()
@@ -1932,20 +1933,30 @@ end
 
 ---Commits the current patch. You must have resolved any conflicts.
 ---@param author GitSignature? The author of the updated commit, or NULL to keep the author from the original commit
----@param commiter GitSignature The committer of the rebase
+---@param committer GitSignature The committer of the rebase
 ---@param message string? The message for this commit, or NULL to use the message from the original commit.
 ---@return GitObjectId?
 ---@return GIT_ERROR err Zero on success, GIT_EUNMERGED if there are unmerged changes in the index, GIT_EAPPLIED if the current commit has already been applied to the upstream and there is nothing to commit, -1 on failure.
-function Rebase:commit(author, commiter, message)
+function Rebase:commit(author, committer, message)
   local new_oid = libgit2.git_oid()
 
   local err =
-    libgit2.C.git_rebase_commit(new_oid, self.rebase, author and author.sign or nil, commiter.sign, "UTF-8", message)
+    libgit2.C.git_rebase_commit(new_oid, self.rebase, author and author.sign or nil, committer.sign, "UTF-8", message)
   if err ~= 0 then
     return nil, err
   end
 
   return ObjectId.new(new_oid), 0
+end
+
+---Fixup the current patch. You must have resolved any conflicts.
+---@param author GitSignature? The author of the updated commit, or NULL to keep the author from the original commit
+---@param committer GitSignature The committer of the rebase
+---@param message string? The message for this commit, or NULL to use the message from the original commit.
+---@return GitObjectId?
+---@return GIT_ERROR err Zero on success, GIT_EUNMERGED if there are unmerged changes in the index, GIT_EAPPLIED if the current commit has already been applied to the upstream and there is nothing to commit, -1 on failure.
+function Rebase:commit_amend_inmemory(author, committer, message)
+
 end
 
 ---Finishes a rebase that is currently in progress once all patches have been applied.
