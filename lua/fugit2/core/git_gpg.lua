@@ -7,6 +7,7 @@ local git2 = require "fugit2.git2"
 local gpgme = require "fugit2.core.gpgme"
 local utils = require "fugit2.utils"
 
+---@module "fugit2.core.git_gpg"
 local M = {}
 
 ---@class Fugit2GitGPGConfig
