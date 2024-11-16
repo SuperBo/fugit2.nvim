@@ -1,6 +1,7 @@
 -- Fugit2 main module file
 local config = require "fugit2.config"
 local ui = require "fugit2.view.ui"
+local utils = require "fugit2.utils"
 
 ---@class Fugit2Module
 local M = {}
@@ -28,9 +29,15 @@ end
 ---@type { [string]: GitRepository }
 local repos = {}
 
+---@param dir string?
 ---@return GitRepository?
-local function open_repository()
-  local cwd = vim.fn.fnamemodify(vim.api.nvim_buf_get_name(0), ":p:h")
+local function open_repository(dir)
+  local cwd = dir
+  if not cwd then
+    cwd = vim.fn.fnamemodify(vim.api.nvim_buf_get_name(0), ":p:h")
+  end
+
+  cwd = utils.get_path_from_cwd(cwd)
 
   ---@type GitRepository?
   local repo = repos[cwd]
@@ -57,16 +64,18 @@ local function open_repository()
   return repo
 end
 
-function M.git_status()
-  local repo = open_repository()
+---@param kwargs table
+function M.git_status(kwargs)
+  local repo = open_repository(kwargs.fargs[1])
   if repo then
     local cfg = config.config
     ui.new_fugit2_status_window(M.namespace, repo, cfg):mount()
   end
 end
 
-function M.git_graph()
-  local repo = open_repository()
+---@param kwargs table
+function M.git_graph(kwargs)
+  local repo = open_repository(kwargs.fargs[1])
   if repo then
     ui.new_fugit2_graph_window(M.namespace, repo):mount()
   end

@@ -131,6 +131,16 @@ function M.make_relative_path(base_path, path)
   return relpath
 end
 
+-- Handle oil / neo-tree buffer
+---@param path string
+---@return string
+function M.get_path_from_cwd(path)
+  if vim.startswith(path, "oil://") then
+    return path:sub(7)
+  end
+  return path
+end
+
 -- Returns git remote icon
 ---@param url string
 ---@return string
