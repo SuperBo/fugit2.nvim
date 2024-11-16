@@ -6,6 +6,7 @@
 ---@field min_width integer file view width when expand patch view
 ---@field content_width integer file view content width
 ---@field height integer|string main file popup height
+---@field show_patch boolean show patch for active file when open fugit2 main window
 ---@field libgit2_path string? path to libgit2 lib if not set via environments
 ---@field gpgme_path string? path to gpgme lib, default: "gpgme"
 ---@field external_diffview boolean whether to use external diffview.nvim or Fugit2 implementation
@@ -23,6 +24,7 @@ local DEFAULT_CONFIG = {
   blame_priority = 1,
   blame_info_height = 10,
   blame_info_width = 60,
+  show_patch = false,
 }
 
 local M = {}
@@ -55,6 +57,17 @@ end
 ---@return number?
 function M.get_number(setting)
   return tonumber(M.config[setting])
+end
+
+-- Returns Fugit2 config setting as boolean
+---@param setting "show_patch"
+---@return boolean
+function M.get_bool(setting)
+  if M.config[setting] then
+    return true
+  else
+    return false
+  end
 end
 
 return M
