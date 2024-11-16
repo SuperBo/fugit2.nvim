@@ -261,7 +261,8 @@ function GitStatus:init(ns_id, repo, last_window, current_file, opts)
       size = { width = self.opts.max_width, height = self.opts.height },
     },
   }
-  self._layout = NuiLayout(self._layout_opts.main, self._boxes.main)
+  local layout_opt = self.opts.show_patch and self._layout_opts.diff or self._layout_opts.main
+  self._layout = NuiLayout(layout_opt, self._boxes.main)
 
   -- state variables for UI
   ---@class Fugit2GitStatusInternal
@@ -297,6 +298,11 @@ function GitStatus:init(ns_id, repo, last_window, current_file, opts)
   self:update(function()
     self:render()
     self:scroll_to_active_file()
+    if opts.show_patch then
+      vim.schedule(function()
+        self:show_patch_for_active_file()
+      end)
+    end
   end)
 end
 
@@ -598,8 +604,8 @@ function GitStatus:_init_patch_views()
     return 0
   end
 
+  -- updates node status in file tree
   local diff_update_fn = function(node)
-    -- update node status in file tree
     local wstatus, istatus = node.wstatus, node.istatus
     tree:update_single_node(self.repo, node)
     if wstatus ~= node.wstatus or istatus ~= node.istatus then
@@ -1064,6 +1070,11 @@ end
 function GitStatus:update_then_render()
   self:update(function()
     self:render()
+
+    if self._states.side_panel == SidePanel.PATCH_VIEW then
+      self._states.last_patch_line = -1
+      self:show_patch_for_current_file()
+    end
   end)
 end
 
@@ -1087,7 +1098,7 @@ function GitStatus:render()
   -- self._views.commits:render()
 end
 
----Scrolls to active file
+-- Scrolls to active file
 function GitStatus:scroll_to_active_file()
   local current_file = self._states.current_file
   local _, linenr = self._views.files.tree:get_node("-" .. current_file)
@@ -1095,6 +1106,42 @@ function GitStatus:scroll_to_active_file()
     vim.schedule(function()
       vim.api.nvim_win_set_cursor(0, { linenr, 1 })
     end)
+  end
+end
+
+-- Shows patch view for current file
+function GitStatus:show_patch_for_current_file()
+  local file_tree = self._views.files
+  local states = self._states
+
+  local node, linenr = file_tree:get_child_node_linenr()
+  if node and linenr and linenr ~= states.last_patch_line then
+    states.patch_unstaged_shown, states.patch_staged_shown = self:update_patch(node)
+
+    if states.patch_unstaged_shown or states.patch_staged_shown then
+      self:show_patch_view(states.patch_unstaged_shown, states.patch_staged_shown)
+      states.last_patch_line = linenr
+    end
+  elseif linenr then
+    self:show_patch_view(states.patch_unstaged_shown, states.patch_staged_shown)
+  end
+end
+
+-- Shows patch for active file
+function GitStatus:show_patch_for_active_file()
+  local states = self._states
+  local active_file = self._states.current_file
+  local node, linenr = self._views.files.tree:get_node("-" .. active_file)
+  if not linenr then
+    node, linenr = self._views.files:get_child_node_linenr()
+  end
+
+  if node and linenr and linenr ~= states.last_patch_line then
+    states.patch_unstaged_shown, states.patch_staged_shown = self:update_patch(node)
+    if states.patch_unstaged_shown or states.patch_staged_shown then
+      self:show_patch_view(states.patch_unstaged_shown, states.patch_staged_shown)
+      states.last_patch_line = linenr
+    end
   end
 end
 
@@ -1327,7 +1374,7 @@ function GitStatus:_git_create_commit(message, args)
     async_utils.scheduler(function()
       if result.commit_id then
         notifier.info(string.format("New %scommit %s", gpg_sign and "signed " or "", result.commit_id:tostring(8)))
-        self:hide_input(true)
+        self:hide_input(false)
         self:update_then_render()
       else
         notifier.error(result.message or "Failed creating commit", result.err or 0)
@@ -1431,7 +1478,7 @@ function GitStatus:_git_amend_commit(message, args)
 
   if commit_id then
     notifier.info("Amend HEAD " .. commit_id:tostring(8))
-    self:hide_input(true)
+    self:hide_input(false)
     self:update_then_render()
   else
     err_msg = (err_msg and err_msg ~= "") and err_msg or "Failed to amend HEAD"
@@ -1578,7 +1625,7 @@ function GitStatus:update_patch(node)
       end
       patches, err = diff:patches(false)
       if #patches == 0 then
-        notifier.error("Failed to get unstage patch", err)
+        notifier.error("Failed to get unstaged patch", err)
         goto git_status_update_patch_index
       end
       self._git.unstaged_diff[node.id] = patches[1]
@@ -1595,12 +1642,12 @@ function GitStatus:update_patch(node)
     if node.istatus ~= "-" and node.istatus ~= "?" and not found then
       diff, err = self.repo:diff_head_to_index(self.index, paths)
       if not diff then
-        notifier.error("Failed to get unstaged diff", err)
+        notifier.error("Failed to get staged diff", err)
         goto git_status_update_patch_end
       end
       patches, err = diff:patches(false)
       if #patches == 0 then
-        notifier.error("Failed to get unstage patch", err)
+        notifier.error("Failed to get staged patch", err)
         goto git_status_update_patch_end
       end
       self._git.staged_diff[node.id] = patches[1]
@@ -2497,16 +2544,7 @@ function GitStatus:setup_handlers()
     if states.side_panel == SidePanel.PATCH_VIEW then
       self:hide_patch_view()
     elseif states.side_panel == SidePanel.NONE then
-      local node, linenr = file_tree:get_child_node_linenr()
-      if node and linenr and linenr ~= states.last_patch_line then
-        states.patch_unstaged_shown, states.patch_staged_shown = self:update_patch(node)
-        if states.patch_unstaged_shown or states.patch_staged_shown then
-          self:show_patch_view(states.patch_unstaged_shown, states.patch_staged_shown)
-          states.last_patch_line = linenr
-        end
-      elseif linenr then
-        self:show_patch_view(states.patch_unstaged_shown, states.patch_staged_shown)
-      end
+      self:show_patch_for_current_file()
     end
   end, map_options)
 
