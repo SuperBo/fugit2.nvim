@@ -1183,7 +1183,7 @@ function GitStatus:focus_command()
   self._layout:update(NuiLayout.Box({
     NuiLayout.Box(self.info_popup, { size = 6 }),
     NuiLayout.Box(self.command_popup, { size = 6 }),
-    NuiLayout.Box(self._boxes.main_row, { dir = "row", grow = 1 }),
+    NuiLayout.Box(self._views.commits.popup, { grow = 1 }),
   }, { dir = "col" }))
 end
 
