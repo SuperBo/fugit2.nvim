@@ -257,6 +257,7 @@ function GitStatus:init(ns_id, repo, last_window, current_file, opts)
       size = { width = self.opts.width, height = self.opts.height },
     },
     diff = {
+      relative = "editor",
       position = "50%",
       size = { width = self.opts.max_width, height = self.opts.height },
     },
