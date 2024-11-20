@@ -9,7 +9,6 @@ local NuiText = require "nui.text"
 local Path = require "plenary.path"
 local PlenaryJob = require "plenary.job"
 local async = require "plenary.async"
-local async_utils = require "plenary.async.util"
 local event = require("nui.utils.autocmd").event
 
 local GitStatusDiffBase = require "fugit2.view.git_base_view"
@@ -19,6 +18,7 @@ local TreeBase = require "fugit2.view.components.base_tree_view"
 local UI = require "fugit2.view.components.menus"
 local git2 = require "fugit2.git2"
 local git_gpg = require "fugit2.core.git_gpg"
+local git_hooks = require "fugit2.core.git_hooks"
 local notifier = require "fugit2.notifier"
 local utils = require "fugit2.utils"
 
@@ -133,6 +133,7 @@ function GitStatus:init(ns_id, repo, last_window, current_file, opts)
   ---@field signature GitSignature?
   ---@field walker GitRevisionWalker?
   ---@field config GitConfig?
+  ---@field hooks_path Path?
   self._git = vim.tbl_extend("force", self._git, {
     head = nil,
     ahead = 0,
@@ -797,7 +798,7 @@ function GitStatus:read_config()
   return config
 end
 
--- Read gpg config use_ssh and keyid
+-- Reads gpg config use_ssh and keyid
 ---@return Fugit2GitGPGConfig
 function GitStatus:read_gpg_config()
   local config = self:read_config()
@@ -818,6 +819,27 @@ function GitStatus:read_gpg_config()
     keyid = keyid,
     program = config:get_string "gpg.ssh.program" or nil,
   }
+end
+
+-- Reads git hook config
+---@return Path
+function GitStatus:read_hooks_path()
+  if self._git.hooks_path then
+    return self._git.hooks_path
+  end
+
+  local hooks_path = Path:new(self._git.path, ".git", "hooks")
+
+  local config = self:read_config()
+  if config then
+    local path_string = config:get_string "core.hooksPath"
+    if path_string then
+      hooks_path = Path:new(path_string)
+    end
+  end
+
+  self._git.hooks_path = hooks_path
+  return hooks_path
 end
 
 -- Updates git status.
@@ -1333,46 +1355,47 @@ end
 ---@param message string
 ---@param args string[]?
 function GitStatus:_git_create_commit(message, args)
+  local signature = self._git.signature
   local gpg_sign = args and vim.tbl_contains(args, "--gpg-sign")
-  local prettified = check_signature_message(self._git.signature, message)
 
-  if not self._git.signature then
+  if not signature then
     notifier.error "Can not find git signature!"
     return
   end
 
+  local prettified = check_signature_message(signature, message)
   if not prettified then
     notifier.error "Can not prettify commit message!"
     return
   end
 
   local result = {}
-
   async.run(
     -- async fun, create index
     function()
+      -- run pre-commit hook
+      local ret = self:run_hook(git_hooks.NAMES.PRE_COMMIT)
+      if ret ~= 0 then
+        result.err = ret
+        result.message = "Error when running pre-commit hook"
+        return
+      end
+
       -- save index before creating commit
       self:write_index()
 
-      local commit_id, err
       if not gpg_sign then
-        commit_id, err = self.repo:create_commit(self.index, self._git.signature, prettified)
-        result.commit_id = commit_id
-        result.err = err
+        result.commit_id, result.err = self.repo:create_commit(self.index, signature, prettified)
       else
         -- create commit with gpg sign
         local conf = self:read_gpg_config()
-        local err_msg
-        commit_id, err, err_msg =
-          git_gpg.create_commit_gpg(self.repo, self.index, self._git.signature, prettified, conf)
-        result.commit_id = commit_id
-        result.err = err
-        result.message = err_msg
+        result.commit_id, result.err, result.message =
+          git_gpg.create_commit_gpg(self.repo, self.index, signature, prettified, conf)
       end
     end,
 
     -- callback func, called when finished
-    async_utils.scheduler(function()
+    function()
       if result.commit_id then
         notifier.info(string.format("New %scommit %s", gpg_sign and "signed " or "", result.commit_id:tostring(8)))
         self:hide_input(false)
@@ -1380,7 +1403,7 @@ function GitStatus:_git_create_commit(message, args)
       else
         notifier.error(result.message or "Failed creating commit", result.err or 0)
       end
-    end)
+    end
   )
 end
 
@@ -1390,24 +1413,40 @@ end
 function GitStatus:_git_extend_commit(args)
   local gpg_sign = args and vim.tbl_contains(args, "--gpg-sign")
 
-  self:write_index()
+  local result = {}
+  async.run(
+    -- async fun, extend last commit
+    function()
+      -- run pre-commit hook
+      local ret = self:run_hook(git_hooks.NAMES.PRE_COMMIT)
+      if ret ~= 0 then
+        result.err = ret
+        result.message = "Error when running pre-commit hook"
+        return
+      end
 
-  local commit_id, err, err_msg
-  if not gpg_sign then
-    commit_id, err = self.repo:amend_extend(self.index)
-  else
-    -- extend commit with gpg sign
-    local conf = self:read_gpg_config()
-    commit_id, err, err_msg = git_gpg.extend_commit_gpg(self.repo, self.index, conf)
-  end
+      -- save index before creating commit
+      self:write_index()
 
-  if commit_id then
-    notifier.info("Extend HEAD " .. commit_id:tostring(8))
-    self:update_then_render()
-  else
-    err_msg = (err_msg and err_msg ~= "") and err_msg or "Failed to extend HEAD"
-    notifier.error(err_msg, err)
-  end
+      if not gpg_sign then
+        result.commit_id, result.err = self.repo:amend_extend(self.index)
+      else
+        -- extend commit with gpg sign
+        local conf = self:read_gpg_config()
+        result.commit_id, result.err, result.message = git_gpg.extend_commit_gpg(self.repo, self.index, conf)
+      end
+    end,
+    -- callback when finished
+    function()
+      if result.commit_id then
+        notifier.info("Extend HEAD " .. result.commit_id:tostring(8))
+        self:update_then_render()
+      else
+        local err_msg = (result.message and result.message ~= "") and result.message or "Failed to extend HEAD"
+        notifier.error(err_msg, result.err)
+      end
+    end
+  )
 end
 
 ---Reword HEAD commit
@@ -1467,24 +1506,40 @@ function GitStatus:_git_amend_commit(message, args)
     return
   end
 
-  self:write_index()
+  local result = {}
+  async.run(
+    -- async func, amend commit
+    function()
+      -- run pre-commit hook
+      local ret = self:run_hook(git_hooks.NAMES.PRE_COMMIT)
+      if ret ~= 0 then
+        result.err = ret
+        result.message = "Error when running pre-commit hook"
+        return
+      end
 
-  local commit_id, err, err_msg
-  if not gpg_sign then
-    commit_id, err = self.repo:amend(self.index, self._git.signature, prettified)
-  else
-    local conf = self:read_gpg_config()
-    commit_id, err, err_msg = git_gpg.amend_commit_gpg(self.repo, self.index, signature, prettified, conf)
-  end
+      self:write_index()
 
-  if commit_id then
-    notifier.info("Amend HEAD " .. commit_id:tostring(8))
-    self:hide_input(false)
-    self:update_then_render()
-  else
-    err_msg = (err_msg and err_msg ~= "") and err_msg or "Failed to amend HEAD"
-    notifier.error(err_msg, err)
-  end
+      if not gpg_sign then
+        result.commit_id, result.err = self.repo:amend(self.index, self._git.signature, prettified)
+      else
+        local conf = self:read_gpg_config()
+        result.commit_id, result.err, result.message =
+          git_gpg.amend_commit_gpg(self.repo, self.index, signature, prettified, conf)
+      end
+    end,
+    -- callback function
+    function()
+      if result.commit_id then
+        notifier.info("Amend HEAD " .. result.commit_id:tostring(8))
+        self:hide_input(false)
+        self:update_then_render()
+      else
+        local err_msg = (result.message and result.message ~= "") and result.message or "Failed to amend HEAD"
+        notifier.error(err_msg, result.err)
+      end
+    end
+  )
 end
 
 ---@param init_str string
@@ -2196,11 +2251,27 @@ function GitStatus:pull_from_upstream(args)
   self:run_command("git", git_args, true)
 end
 
----Runs command and update git status
+-- Runs hook command in async context
+---@param hook_name Fugit2GitHookNames
+---@return number exit_code
+function GitStatus:run_hook(hook_name)
+  local hooks_path = self:read_hooks_path()
+  if not hooks_path then
+    return 0
+  end
+  local command = git_hooks.get_hook_exec(hooks_path, hook_name)
+  if not command then
+    return 0
+  end
+  return self:run_command_async(command, {}, false)
+end
+
+-- Runs command and update git status
 ---@param cmd string
 ---@param args string[]
 ---@param refresh boolean whether to refresh after command succes
-function GitStatus:run_command(cmd, args, refresh)
+---@param callback fun(exit_code: number)? callback function to handle exit code
+function GitStatus:run_command(cmd, args, refresh, callback)
   local queue = self._states.command_queue
 
   if #queue > COMMAND_QUEUE_MAX then
@@ -2212,7 +2283,8 @@ function GitStatus:run_command(cmd, args, refresh)
   queue[#queue + 1] = command_id
 
   if queue[1] == command_id then
-    return self:_run_single_command(cmd, args, refresh)
+    self:_run_single_command(cmd, args, refresh, callback)
+    return
   end
 
   local timer = uv.new_timer()
@@ -2238,7 +2310,7 @@ function GitStatus:run_command(cmd, args, refresh)
       timer:stop()
       timer:close()
       vim.schedule(function()
-        self:_run_single_command(cmd, args, refresh)
+        self:_run_single_command(cmd, args, refresh, callback)
       end)
     end
 
@@ -2246,11 +2318,14 @@ function GitStatus:run_command(cmd, args, refresh)
   end)
 end
 
+GitStatus.run_command_async = async.wrap(GitStatus.run_command, 5)
+
 ---Runs single command and update git status
 ---@param cmd string
 ---@param args string[]
 ---@param refresh boolean whether to refresh after command succes
-function GitStatus:_run_single_command(cmd, args, refresh)
+---@param callback fun(exit_code: number)? callback function to handle exit code
+function GitStatus:_run_single_command(cmd, args, refresh, callback)
   local bufnr = self.command_popup.bufnr
   local queue = self._states.command_queue
 
@@ -2309,6 +2384,10 @@ function GitStatus:_run_single_command(cmd, args, refresh)
       else
         vim.api.nvim_buf_set_lines(bufnr, linenr, -1, true, { "FAILED " .. ret })
         notifier.error(string.format("Command %s %s FAILED!", cmd, args[1] or ""))
+      end
+
+      if callback then
+        callback(ret)
       end
     end),
     on_stdout = function(_, data)

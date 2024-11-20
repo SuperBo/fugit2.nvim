@@ -510,6 +510,8 @@ function BitArray:set_k_unset_indices(k)
   return unset
 end
 
+M.BitArray = BitArray
+
 -- ====================
 -- | Table/list utils |
 -- ====================
@@ -687,7 +689,5 @@ function M.get_hunk(offsets, cursor_row)
 
   return #offsets, offsets[#offsets]
 end
-
-M.BitArray = BitArray
 
 return M
