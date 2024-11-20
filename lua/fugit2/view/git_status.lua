@@ -384,7 +384,15 @@ function GitStatus:_init_menus(menu_type)
         arg = "--gpg-sign",
         type = UI.INPUT_TYPE.CHECKBOX,
         model = "args",
-        default = config and config:get_bool "commit.gpgsign",
+        default = config and config:get_bool "commit.gpgsign" or false,
+      },
+      {
+        text = NuiText "Bypass hooks",
+        key = "-n",
+        arg = "--no-verify",
+        type = UI.INPUT_TYPE.CHECKBOX,
+        model = "args",
+        default = false,
       },
     }
   elseif menu_type == Menu.DIFF then
@@ -1357,6 +1365,7 @@ end
 function GitStatus:_git_create_commit(message, args)
   local signature = self._git.signature
   local gpg_sign = args and vim.tbl_contains(args, "--gpg-sign")
+  local verify = not (args and vim.tbl_contains(args, "--no-verify"))
 
   if not signature then
     notifier.error "Can not find git signature!"
@@ -1373,12 +1382,14 @@ function GitStatus:_git_create_commit(message, args)
   async.run(
     -- async fun, create index
     function()
-      -- run pre-commit hook
-      local ret = self:run_hook(git_hooks.NAMES.PRE_COMMIT)
-      if ret ~= 0 then
-        result.err = ret
-        result.message = "Error when running pre-commit hook"
-        return
+      if verify then
+        -- run pre-commit hook
+        local ret = self:run_hook(git_hooks.NAMES.PRE_COMMIT)
+        if ret ~= 0 then
+          result.err = ret
+          result.message = "Error when running pre-commit hook"
+          return
+        end
       end
 
       -- save index before creating commit
@@ -1412,17 +1423,20 @@ end
 ---@param args string[]?
 function GitStatus:_git_extend_commit(args)
   local gpg_sign = args and vim.tbl_contains(args, "--gpg-sign")
+  local verify = not (args and vim.tbl_contains(args, "--no-verify"))
 
   local result = {}
   async.run(
     -- async fun, extend last commit
     function()
-      -- run pre-commit hook
-      local ret = self:run_hook(git_hooks.NAMES.PRE_COMMIT)
-      if ret ~= 0 then
-        result.err = ret
-        result.message = "Error when running pre-commit hook"
-        return
+      if verify then
+        -- run pre-commit hook
+        local ret = self:run_hook(git_hooks.NAMES.PRE_COMMIT)
+        if ret ~= 0 then
+          result.err = ret
+          result.message = "Error when running pre-commit hook"
+          return
+        end
       end
 
       -- save index before creating commit
@@ -1493,6 +1507,7 @@ end
 ---@param args string[]?
 function GitStatus:_git_amend_commit(message, args)
   local gpg_sign = args and vim.tbl_contains(args, "--gpg-sign")
+  local verify = not (args and vim.tbl_contains(args, "--no-verify"))
 
   local signature = self._git.signature
   if not signature then
@@ -1510,12 +1525,14 @@ function GitStatus:_git_amend_commit(message, args)
   async.run(
     -- async func, amend commit
     function()
-      -- run pre-commit hook
-      local ret = self:run_hook(git_hooks.NAMES.PRE_COMMIT)
-      if ret ~= 0 then
-        result.err = ret
-        result.message = "Error when running pre-commit hook"
-        return
+      if verify then
+        -- run pre-commit hook
+        local ret = self:run_hook(git_hooks.NAMES.PRE_COMMIT)
+        if ret ~= 0 then
+          result.err = ret
+          result.message = "Error when running pre-commit hook"
+          return
+        end
       end
 
       self:write_index()
