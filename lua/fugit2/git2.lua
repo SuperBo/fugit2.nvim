@@ -715,6 +715,13 @@ function AnnotatedCommit:id()
   return ObjectId.borrow(git_oid)
 end
 
+-- Get the refname that the given git_annotated_commit refers to.
+---@return string?
+function AnnotatedCommit:ref()
+  local c_char = libgit2.C.git_annotated_commit_ref(self.commit)
+  return c_char ~= nil and ffi.string(c_char) or nil
+end
+
 -- =================
 -- | Blame methods |
 -- =================
@@ -1866,6 +1873,25 @@ function Rebase:next()
   return RebaseOperation.borrow(operation[0]), 0
 end
 
+-- Skip the next rebase operation and returns the information about it.
+---@return GitRebaseOperation?
+---@return GIT_ERROR
+function Rebase:skip()
+  -- rebase_movenext
+  local c_rebase = self.rebase
+  local next = c_rebase["started"] and c_rebase["current"] + 1 or 0
+  if next == c_rebase["operations"]["size"] then
+    return nil, libgit2.GIT_ERROR.GIT_ITEROVER
+  end
+
+  c_rebase["started"] = 1
+  c_rebase["current"] = next
+
+  -- rebase_next_inmemory
+  local operation = libgit2.git_rebase_operation_pointer()
+  operation = c_rebase["operations"]["ptr"] + next
+  return RebaseOperation.borrow(operation), 0
+end
 
 ---Gets the count of rebase operations that are to be applied.
 ---@return integer
@@ -1955,15 +1981,13 @@ end
 ---@param message string? The message for this commit, or NULL to use the message from the original commit.
 ---@return GitObjectId?
 ---@return GIT_ERROR err Zero on success, GIT_EUNMERGED if there are unmerged changes in the index, GIT_EAPPLIED if the current commit has already been applied to the upstream and there is nothing to commit, -1 on failure.
-function Rebase:commit_amend_inmemory(author, committer, message)
-
-end
+function Rebase:commit_amend_inmemory(author, committer, message) end
 
 ---Finishes a rebase that is currently in progress once all patches have been applied.
----@param signature GitSignature
+---@param signature GitSignature?
 ---@return GIT_ERROR err Zero on success; -1 on error
 function Rebase:finish(signature)
-  return libgit2.C.git_rebase_finish(self.rebase, signature.sign)
+  return libgit2.C.git_rebase_finish(self.rebase, signature and signature.sign)
 end
 
 ---Gets the index produced by the last operation,
@@ -2295,6 +2319,45 @@ end
 function Repository:set_head_detached(oid)
   local err = libgit2.C.git_repository_set_head_detached(self.repo, oid.oid)
   return err
+end
+
+-- Set head to commit id. Useful for git commit created with gpg
+-- or git rebase inmemory
+---@param commit_id GitObjectId
+---@param commit_head_line string
+---@param log_prefix string? default: commit
+---@return GIT_ERROR
+function Repository:update_head_for_commit(commit_id, commit_head_line, log_prefix)
+  local head, err = self:reference_lookup "HEAD"
+  if not head then
+    return err
+  end
+
+  local head_direct
+  head_direct, err = head:resolve()
+  if head_direct then
+    -- normal branch
+    _, err = head_direct:set_target(commit_id, (log_prefix or "commit: ") .. commit_head_line)
+    if err ~= 0 then
+      return err
+    end
+  elseif err == libgit2.GIT_ERROR.GIT_ENOTFOUND then
+    -- initial branch
+    local head_ref_name = head:symbolic_target()
+    if not head_ref_name then
+      return err
+    end
+
+    head, err = self:create_reference(head_ref_name, commit_id, false, "commit (initial): " .. commit_head_line)
+    if err ~= 0 then
+      return err
+    end
+  else
+    -- error
+    return err
+  end
+
+  return 0
 end
 
 -- Gets GitCommit signature
@@ -3882,6 +3945,7 @@ M.IndexEntry = IndexEntry
 M.ObjectId = ObjectId
 M.Reference = Reference
 M.Repository = Repository
+M.Commit = Commit
 
 M.GIT_BRANCH = libgit2.GIT_BRANCH
 M.GIT_CHECKOUT = libgit2.GIT_CHECKOUT

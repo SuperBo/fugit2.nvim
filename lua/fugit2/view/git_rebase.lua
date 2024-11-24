@@ -11,6 +11,7 @@ local LogView = require "fugit2.view.components.commit_log_view"
 local Menu = require "fugit2.view.components.menus"
 
 local git2 = require "fugit2.git2"
+local git_rebase_helper = require "fugit2.core.git_rebase_helper"
 local notifier = require "fugit2.notifier"
 local utils = require "fugit2.utils"
 
@@ -31,18 +32,7 @@ local SYMBOLS = {
 ---@field rebase GitRebase
 local RebaseView = Object "Fugit2UIGitRebaseView"
 
----@enum Fugit2UIGitRebaseAction
-local RebaseAction = {
-  PICK = git2.GIT_REBASE_OPERATION.PICK,
-  REWORD = git2.GIT_REBASE_OPERATION.REWORD,
-  EDIT = git2.GIT_REBASE_OPERATION.EDIT,
-  SQUASH = git2.GIT_REBASE_OPERATION.SQUASH,
-  FIXUP = git2.GIT_REBASE_OPERATION.FIXUP,
-  EXEC = git2.GIT_REBASE_OPERATION.EXEC,
-  BASE = 7,
-  DROP = 8,
-  BREAK = 9,
-}
+local RebaseAction = git_rebase_helper.GIT_REBASE_OPERATION
 
 ---@alias Fugit2UIGitRebaseMessage {old: string, new: string}
 
@@ -50,6 +40,7 @@ local RebaseAction = {
 ---@field branch GitObjectId
 ---@field upstream GitObjectId
 ---@field onto GitObjectId
+---@field onto_name string
 
 -- =================
 -- | GitRebaseView |
@@ -62,18 +53,23 @@ local RebaseAction = {
 ---@return Fugit2UIGitRebaseInfo
 local function _init_rebase_info(repo, branch, upstream, onto)
   local upstream_id = upstream:id()
-  local onto_id = onto and onto:id() or upstream_id
+  local onto_name = git_rebase_helper.git_rebase_onto_name(upstream, onto)
 
   if not branch then
     -- get head as branch
     local err
-    branch, err = repo:annotated_commit_from_revspec("HEAD")
+    branch, err = repo:annotated_commit_from_revspec "HEAD"
     if not branch then
       error("[Fugit2] Failed to get HEAD commit, code " .. err)
     end
   end
 
-  return { upstream = upstream_id, branch = branch:id(), onto = onto_id }
+  return {
+    upstream = upstream_id,
+    branch = branch:id(),
+    onto = onto and onto:id() or upstream_id,
+    onto_name = onto_name,
+  }
 end
 
 ---@param repo GitRepository
@@ -165,7 +161,8 @@ function RebaseView:init(ns_id, repo, ref_config, revspec_config)
     rebase, rebase_info, err = _init_rebase_ref(repo, ref_config.branch, ref_config.upstream, ref_config.onto)
     self._git.inmemory = true
   elseif revspec_config then
-    rebase, rebase_info, err = _init_rebase_revspec(repo, revspec_config.branch, revspec_config.upstream, revspec_config.onto)
+    rebase, rebase_info, err =
+      _init_rebase_revspec(repo, revspec_config.branch, revspec_config.upstream, revspec_config.onto)
     self._git.inmemory = true
   else
     rebase, err = repo:rebase_open()
@@ -174,7 +171,12 @@ function RebaseView:init(ns_id, repo, ref_config, revspec_config)
     if rebase then
       local onto = rebase:onto_id()
       local branch = rebase:orig_head_id()
-      rebase_info = { branch = branch, onto = onto, upstream = onto }
+      rebase_info = {
+        branch = branch,
+        onto = onto,
+        upstream = onto,
+        onto_name = rebase:onto_name(),
+      }
     end
   end
 
@@ -184,9 +186,10 @@ function RebaseView:init(ns_id, repo, ref_config, revspec_config)
   end
   self._git.rebase = rebase
   self._git.rebase_info = rebase_info
+  self._git.rebase_finished = false
   ---@type Fugit2GitGraphCommitNode[]
   self._git.commits = {}
-  ---@type Fugit2UIGitRebaseAction[]
+  ---@type FUGIT2_GIT_REBASE_OPERATION[]
   self._git.actions = {}
   ---@type GitObjectId[]
   self._git.oids = {}
@@ -258,7 +261,7 @@ function RebaseView:init(ns_id, repo, ref_config, revspec_config)
   self:render()
 end
 
----@param action Fugit2UIGitRebaseAction
+---@param action FUGIT2_GIT_REBASE_OPERATION
 ---@return NuiText pre_msg text of pre message
 ---@return string? symbol commit symbol override
 local function rebase_action_text(action)
@@ -370,12 +373,14 @@ function RebaseView:update()
   local git = self._git
   if git.inmemory then
     self._states.status_line = NuiLine {
-      NuiText(string.format(
-        "INMEMORY Rebase %s..%s onto %s",
-        git.rebase_info.branch:tostring(8),
-        git.rebase_info.upstream:tostring(8),
-        git.rebase_info.onto:tostring(8)
-      )),
+      NuiText(
+        string.format(
+          "INMEMORY Rebase %s..%s onto %s",
+          git.rebase_info.branch:tostring(8),
+          git.rebase_info.upstream:tostring(8),
+          git.rebase_info.onto_name
+        )
+      ),
     }
   else
     self._states.status_line = NuiLine {
@@ -398,7 +403,9 @@ function RebaseView:update()
   if current_i >= n_commits then
     current_i = 0
   end
-  local n_remain_commits = n_commits - current_i
+  local n_remain_commits = git.rebase_finished and 0 or n_commits - current_i
+
+  utils.list_clear(actions)
 
   -- curent rebase node
   for i = n_commits - 1, current_i, -1 do
@@ -419,19 +426,18 @@ function RebaseView:update()
 
     local rebase_text, symbol = rebase_action_text(op_type)
 
-    local node = LogView.CommitNode(
-      op_id:tostring(GIT_OID_LENGTH), message, author, time, {}, {}, symbol, rebase_text
-    )
+    local node = LogView.CommitNode(op_id:tostring(GIT_OID_LENGTH), message, author, time, {}, {}, symbol, rebase_text)
     commits[n_remain_commits - i] = node
     actions[n_remain_commits - i] = op_type
     oids[n_remain_commits - i] = op_id:clone()
   end
 
-  local i = n_remain_commits
+  local i = n_remain_commits + 1
   -- finished rebase nodes
   if git.last_commit_id then
     -- walk through commits
     local err
+    ---@type GitRevisionWalker?
     local walker = git.walker
     if not walker then
       walker, err = self.repo:walker()
@@ -450,21 +456,41 @@ function RebaseView:update()
 
     for id, commit in walker:iter() do
       local node = LogView.CommitNode(
-        id:tostring(GIT_OID_LENGTH), commit:summary(), commit:author(), commit:time(), {}, {}, nil
+        id:tostring(GIT_OID_LENGTH),
+        commit:summary(),
+        commit:author(),
+        commit:time(),
+        {},
+        {},
+        nil
       )
       commits[i] = node
       i = i + 1
     end
   end
 
-  for j = #commits, i+1, -1 do
+  -- draw onto node
+  local onto_commit, _ = self.repo:commit_lookup(git.rebase_info.onto)
+  if onto_commit then
+    local node = LogView.CommitNode(
+      onto_commit:id():tostring(GIT_OID_LENGTH),
+      onto_commit:summary(),
+      onto_commit:author(),
+      onto_commit:time(),
+      {},
+      {},
+      nil
+    )
+    commits[i] = node
+    i = i + 1
+  end
+
+  for j = i + 1, #commits do
     commits[j] = nil
   end
 
-  -- TODO: onto node
-
-  for i = 1, #commits - 1 do
-    commits[i].parents[1] = commits[i + 1].oid
+  for j = 1, #commits - 1 do
+    commits[j].parents[1] = commits[j + 1].oid
   end
 
   self.views.commits:update(commits, {})
@@ -511,12 +537,24 @@ function RebaseView:rebase_start()
     end
   end
 
-  git.current_index = #git.commits
+  git.current_index = #git.commits - 1 -- ignore base commit
 
   -- remove mapping
   local commit_view = self.views.commits
   commit_view:unmap("n", {
-    "r", "w", "x", "d", "b", "e", "s", "f", "p", "gj", "<C-j>", "gk", "<C-k>"
+    "r",
+    "w",
+    "x",
+    "d",
+    "b",
+    "e",
+    "s",
+    "f",
+    "p",
+    "gj",
+    "<C-j>",
+    "gk",
+    "<C-k>",
   })
 
   -- call rebase
@@ -535,52 +573,39 @@ function RebaseView:rebase_continue()
   local commit_idx = git.current_index
   local op, message, commit_id
   while err == 0 do
-    op, err = rebase:next()
-    if op then
-      local op_type = op:type()
-      if op_type == git2.GIT_REBASE_OPERATION.EXEC
-        and actions[commit_idx] == RebaseAction.DROP
-        then
+    local action = actions[commit_idx]
+    if action == RebaseAction.DROP then
+      op, err = rebase:skip()
+      if op then
         table.remove(commits, commit_idx)
         table.remove(actions, commit_idx)
 
         if commit_idx > #commits then
           utils.list_clear(commits[#commits].parents)
         elseif commit_idx > 1 then
-          commits[commit_idx-1].parents[1] = commits[commit_idx].oid
+          commits[commit_idx - 1].parents[1] = commits[commit_idx].oid
         end
 
         commit_id = nil
-      else
+      end
+    else
+      op, err = rebase:next()
+      if op then
+        local op_type = op:type()
         if op_type == git2.GIT_REBASE_OPERATION.REWORD then
           message = git.messages[op:id():tostring(8)].new
         else
           message = nil
         end
+
         commit_id, err = rebase:commit(nil, signature, message)
+        if commit_id then
+          git.last_commit_id = commit_id
+        end
       end
-
-      if commit_id then
-        git.last_commit_id = commit_id
-
-        -- current rebase success
-        -- if op_type == git2.GIT_REBASE_OPERATION.FIXUP or
-        --   op_type == git2.GIT_REBASE_OPERATION.SQUASH
-        --   then
-        --   table.remove(actions, commit_idx)
-        -- end
-
-        -- local current_commit = commits[commit_idx]
-        -- current_commit.pre_message = nil
-
-        -- current_commit.oid = commit_id:tostring(GIT_OID_LENGTH)
-        -- if commit_idx > 1 then
-        --   commits[commit_idx-1].parents[1] = current_commit.oid
-        -- end
-      end
-
-      commit_idx = commit_idx - 1
     end
+
+    commit_idx = commit_idx - 1
   end
 
   git.current_index = commit_idx
@@ -600,9 +625,39 @@ end
 
 -- Finish rebase action.
 function RebaseView:rebase_finish()
+  local states = self._states
+
+  -- finish rebase
+  local err = self._git.rebase:finish(self._git.signature)
+  if err ~= 0 then
+    notifier.error("Failed to finish rebase", err)
+    states.help_line = NuiLine { NuiText("Git rebase error " .. err, "Fugit2Untracked") }
+    self:render()
+    return
+  end
+
+  self._git.rebase_finished = true
+
+  local last_commit_id = self._git.last_commit_id
+  if self._git.inmemory and last_commit_id then
+    -- update head to new commit
+    local last_commit
+    last_commit, err = self.repo:commit_lookup(last_commit_id)
+
+    if last_commit then
+      err = self.repo:update_head_for_commit(last_commit_id, utils.lines_head(last_commit:message()), "rebase: ")
+    end
+
+    if err ~= 0 then
+      notifier.error("Failed to update head", err)
+      states.help_line = NuiLine { NuiText("Git rebase error " .. err, "Fugit2Untracked") }
+      self:render()
+      return
+    end
+  end
+
   notifier.info "Rebase successfully"
-  --TODO: write index back to disk
-  --
+  states.help_line = NuiLine { NuiText("Rebase successfully", "Fugit2Staged") }
 
   self:update()
   self:render()
@@ -641,7 +696,7 @@ function RebaseView:rebase_has_conflicts(commit_idx, oid)
       local git_diff = GitDiff(self.ns_id, self.repo, index, head)
       git_diff:mount()
     else
-      notifier.error("Can't retrieve git index")
+      notifier.error "Can't retrieve git index"
     end
   end)
   resolve_confirm:mount()
@@ -701,7 +756,7 @@ function RebaseView:setup_handlers()
   -- main function to handle rebase action
   local action_fn = function(action)
     local _, commit_idx = commit_view:get_commit()
-    if not commit_idx then
+    if not commit_idx or commit_idx == #commits then
       return
     end
 
@@ -716,7 +771,7 @@ function RebaseView:setup_handlers()
       return
     elseif action == RebaseAction.BREAK then
       -- drop following commits
-      for i=1,commit_idx-1 do
+      for i = 1, commit_idx - 1 do
         actions[i] = RebaseAction.DROP
         local ci = commits[i]
         ci.pre_message, ci.symbol = rebase_action_text(RebaseAction.DROP)

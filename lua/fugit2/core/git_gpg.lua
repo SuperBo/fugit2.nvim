@@ -119,38 +119,15 @@ end
 ---@return integer err
 ---@return string err_msg
 local function create_commit_with_sign(repo, commit_content, gpg_sign, msg)
-  local commit_id, head, head_direct, err
+  local commit_id, err
   commit_id, err = repo:create_commit_with_signature(commit_content, gpg_sign, nil)
   if not commit_id then
     return nil, err, "Failed to create commit with sign"
   end
 
-  head, err = repo:reference_lookup "HEAD"
-  if not head then
-    return nil, err, "Failed to lookup HEAD"
-  end
-
-  head_direct, err = head:resolve()
-  if head_direct then
-    -- normal branch
-    _, err = head_direct:set_target(commit_id, "commit: " .. utils.lines_head(msg))
-    if err ~= 0 then
-      return nil, err, "Failed to set head to new commit"
-    end
-  elseif err == git2.GIT_ERROR.GIT_ENOTFOUND then
-    -- initial branch
-    local head_ref_name = head:symbolic_target()
-    if not head_ref_name then
-      return nil, err, "Failed to get HEAD sympolic target"
-    end
-
-    head, err = repo:create_reference(head_ref_name, commit_id, false, "commit (initial): " .. utils.lines_head(msg))
-    if err ~= 0 then
-      return nil, err, "Failed to create initial reference " .. head_ref_name
-    end
-  else
-    -- error
-    return nil, err, "Failed to get HEAD target"
+  err = repo:update_head_for_commit(commit_id, utils.lines_head(msg))
+  if err ~= 0 then
+    return nil, err, "Failed to update HEAD to new commit"
   end
 
   return commit_id, 0, ""
