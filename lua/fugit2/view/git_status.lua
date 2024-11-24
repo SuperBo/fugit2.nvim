@@ -1409,7 +1409,7 @@ function GitStatus:_git_create_commit(message, args)
         self:hide_input(false)
         self:update_then_render()
       else
-        notifier.error(result.message or "Failed creating commit", result.err or 0)
+        notifier.error(result.message or "Failed while creating commit", result.err or 0)
       end
     end
   )
