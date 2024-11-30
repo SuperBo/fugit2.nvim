@@ -26,12 +26,6 @@ test_dependencies = {
   'busted>=2.2.0',
 }
 
-external_dependencies = {
-	GIT2 = {
-		library = 'git2',
-	}
-}
-
 build	= {
 	type = 'builtin',
   copy_directories = {
