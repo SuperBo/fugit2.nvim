@@ -4,9 +4,6 @@ local stat = require "fugit2.core.stat"
 local table_new = require "table.new"
 local uv = vim.uv or vim.loop
 
----@type string?
-local libgit2_library_path
-
 -- ========================
 -- | Libgit2 Enum section |
 -- ========================
@@ -3725,7 +3722,7 @@ function Repository:blame_file_async(path, opts, callback)
 
   local work = uv.new_work(work_fn, after_work_fn)
   work:queue(
-    libgit2_library_path,
+    libgit2.library_path,
     tonumber(ffi.cast(libgit2.pointer_t, self.repo)),
     path,
     tonumber(ffi.cast(libgit2.pointer_t, blame_opts))
@@ -3775,7 +3772,7 @@ function Repository:status_async(callback)
   end
 
   local work = uv.new_work(new_git_status_list, handle_git_status_list)
-  work:queue(libgit2_library_path, tonumber(ffi.cast(libgit2.pointer_t, self.repo)), DEFAULT_STATUS_FLAGS)
+  work:queue(libgit2.library_path, tonumber(ffi.cast(libgit2.pointer_t, self.repo)), DEFAULT_STATUS_FLAGS)
 end
 
 -- ===================
