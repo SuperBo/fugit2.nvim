@@ -817,7 +817,7 @@ function GitStatus:read_gpg_config()
   local keyid = config:get_string "user.signingkey" or nil
   local use_ssh = (config:get_string "gpg.format" == "ssh")
 
-  if not use_ssh and self._git.signature then
+  if not keyid and not use_ssh and self._git.signature then
     -- get committer info as key id
     keyid = tostring(self._git.signature)
   end
