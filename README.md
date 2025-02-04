@@ -56,6 +56,7 @@ If you are using lazy, you can use this config
 ```lua
 {
   'SuperBo/fugit2.nvim',
+  build = false,
   opts = {
     width = 100,
   },
