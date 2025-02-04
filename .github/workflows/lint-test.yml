@@ -22,7 +22,7 @@ jobs:
           stylua --color always --check lua spec
 
   test-linux:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     strategy:
       matrix:
         nvim-versions: ['stable', 'nightly']
@@ -49,8 +49,8 @@ jobs:
 
       - name: run tests
         run: |
-          sudo apt-get install -y libgit2-1.1
-          sudo ln -s /usr/lib/x86_64-linux-gnu/libgit2.so.1.1 /usr/local/lib/libgit2.so
+          sudo apt-get install -y libgit2-1.7
+          sudo ln -s /usr/lib/x86_64-linux-gnu/libgit2.so.1.7 /usr/local/lib/libgit2.so
           sudo ldconfig
           nvim --version
           luarocks test --local -- --config-file=nlua.busted
