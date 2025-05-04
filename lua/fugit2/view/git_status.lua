@@ -16,6 +16,7 @@ local GitStatusTree = require "fugit2.view.components.file_tree_view"
 local LogView = require "fugit2.view.components.commit_log_view"
 local TreeBase = require "fugit2.view.components.base_tree_view"
 local UI = require "fugit2.view.components.menus"
+local fugit2_config = require "fugit2.config"
 local git2 = require "fugit2.git2"
 local git_gpg = require "fugit2.core.git_gpg"
 local git_hooks = require "fugit2.core.git_hooks"
@@ -28,7 +29,8 @@ local utils = require "fugit2.utils"
 
 local SERVER_CONNECT_TIMEOUT = 12000
 local SERVER_TIMEOUT = 15000
-local COMMAND_QUEUE_WAIT_TIME = SERVER_TIMEOUT * 4
+local COMMAND_TIMEOUT = 15000
+local COMMAND_QUEUE_WAIT_TIME = COMMAND_TIMEOUT * 4
 local COMMAND_QUEUE_MAX = 8
 
 git2.set_opts(git2.GIT_OPT.SET_SERVER_CONNECT_TIMEOUT, SERVER_CONNECT_TIMEOUT)
@@ -2437,7 +2439,7 @@ function GitStatus:_run_single_command(cmd, args, refresh, callback)
   self._states.job = job
   job:start()
 
-  local wait_time = SERVER_TIMEOUT -- 12 seconds
+  local wait_time = fugit2_config.get_number "command_timeout" or COMMAND_TIMEOUT
   local tick_rate = 100
 
   timer:start(0, tick_rate, function()

@@ -133,6 +133,7 @@ TODO: add later
 ---@field blame_priority integer priority of blame virtual text
 ---@field blame_info_width integer width of blame hunk detail popup
 ---@field blame_info_height integer height of blame hunk detail popup
+---@field command_timeout integer timeout in milisecond of command like git pull / git push
 ---@field colorscheme string? custom color scheme override
 local opts = {
   width = 100,
@@ -145,6 +146,7 @@ local opts = {
   blame_info_height = 10,
   blame_info_width = 60,
   show_patch = false,
+  command_timeout = 15000,
 }
 ```
 
