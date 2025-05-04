@@ -250,6 +250,14 @@ function GitStatusTree:get_child_node_linenr()
   return node, linenr
 end
 
+function GitStatusTree:set_loading()
+  vim.api.nvim_buf_set_option(self.popup.bufnr, "readonly", false)
+  vim.api.nvim_buf_set_option(self.popup.bufnr, "modifiable", true)
+  vim.api.nvim_buf_set_lines(self.popup.bufnr, 0, -1, true, { "  󰦖 Loading git status..." })
+  vim.api.nvim_buf_set_option(self.popup.bufnr, "modifiable", false)
+  vim.api.nvim_buf_set_option(self.popup.bufnr, "readonly", true)
+end
+
 ---@param status GitStatusItem[]
 ---@param git_path string git root path, used to detect modifed buffer
 ---@param diff_head_to_index GitDiff? diff head to index

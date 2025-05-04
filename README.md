@@ -162,6 +162,12 @@ local opts = {
 
 Please refer to [Usage Guide](https://github.com/SuperBo/fugit2.nvim/wiki/%E2%8C%A8%EF%B8%8F-Usage-and-Keymap).
 
+## Issues
+
+Upstream issues:
+
+- Performance with large repo https://github.com/libgit2/libgit2/issues/4230.
+
 ## Credits
 
 Very special thanks to these plugins and their authors.
