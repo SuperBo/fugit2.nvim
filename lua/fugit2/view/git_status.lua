@@ -445,6 +445,7 @@ function GitStatus:_init_menus(menu_type)
     menu_items = {
       { texts = { NuiText("  Push ", head_hl), states.current_text, NuiText(" to ", head_hl) } },
       { texts = { NuiText "@pushRemote" }, key = "p" },
+      { texts = { NuiText(" gerrit/review", "Fugit2Heading") }, key = "r" },
     }
     menu_items = prepare_pull_push_items(git, menu_items)
   elseif menu_type == Menu.FETCH then
@@ -2102,6 +2103,8 @@ function GitStatus:_init_push_menu()
       self:push_current_to_pushremote(args["force"])
     elseif item_id == "u" then
       self:push_current_to_upstream(args["force"])
+    elseif item_id == "r" then
+      self:push_current_to_review()
     end
   end)
   return m
@@ -2175,6 +2178,27 @@ function GitStatus:push_current_to_upstream(args)
   git_args[#git_args + 1] = upstream.remote
 
   git_args[#git_args + 1] = current.name .. ":" .. upstream_name
+
+  self:run_command("git", git_args, true)
+end
+
+---@param args string[]
+function GitStatus:push_current_to_review()
+  ---@type string[]
+  local git_args = { "push" }
+  local git = self._git
+  local current = git.head
+  local upstream_name = "refs/for/master"
+  local remote = git.remote
+
+  if remote then
+    git_args[#git_args + 1] = remote.name
+  end
+  if current then
+    git_args[#git_args + 1] = current.name .. ":" .. upstream_name
+  else
+    git_args[#git_args + 1] = "HEAD:" .. upstream_name
+  end
 
   self:run_command("git", git_args, true)
 end
