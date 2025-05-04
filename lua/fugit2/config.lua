@@ -13,6 +13,7 @@
 ---@field blame_priority integer priority of blame virtual text
 ---@field blame_info_width integer width of blame hunk detail popup
 ---@field blame_info_height integer height of blame hunk detail popup
+---@field command_timeout integer timeout in milisecond of command like git pull / git push
 ---@field colorscheme string? custom colorscheme specification
 local DEFAULT_CONFIG = {
   width = 100,
@@ -25,6 +26,7 @@ local DEFAULT_CONFIG = {
   blame_info_height = 10,
   blame_info_width = 60,
   show_patch = false,
+  command_timeout = 15000,
 }
 
 local M = {}
@@ -53,7 +55,7 @@ function M.get_string(setting)
 end
 
 -- Returns Fugit2 config setting as number
----@param setting "blame_info_height"|"blame_info_width"|"blame_priority"|"content_width"|"min_width" setting key
+---@param setting "blame_info_height"|"blame_info_width"|"blame_priority"|"content_width"|"min_width"|"command_timeout" setting key
 ---@return number?
 function M.get_number(setting)
   return tonumber(M.config[setting])
