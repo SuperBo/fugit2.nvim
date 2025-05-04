@@ -1086,6 +1086,8 @@ function GitStatus:update(callback)
     end
   end
 
+  self._views.files:set_loading()
+
   self.repo:status_async(function(status_items, e)
     if status_items then
       diff_head_to_index = self.repo:diff_head_to_index(self.index)
