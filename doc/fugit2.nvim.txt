@@ -8,6 +8,7 @@ Table of Contents                              *fugit2.nvim-table-of-contents*
   - Installation  |fugit2.nvim-neovim-git-gui-powered-by-libgit2-installation|
   - Tested colorschemes|fugit2.nvim-neovim-git-gui-powered-by-libgit2-tested-colorschemes|
   - Usage and Keymap|fugit2.nvim-neovim-git-gui-powered-by-libgit2-usage-and-keymap|
+  - Issues              |fugit2.nvim-neovim-git-gui-powered-by-libgit2-issues|
   - Credits            |fugit2.nvim-neovim-git-gui-powered-by-libgit2-credits|
 2. Links                                                   |fugit2.nvim-links|
 
@@ -180,6 +181,13 @@ USAGE AND KEYMAP*fugit2.nvim-neovim-git-gui-powered-by-libgit2-usage-and-keymap*
 
 Please refer to Usage Guide
 <https://github.com/SuperBo/fugit2.nvim/wiki/%E2%8C%A8%EF%B8%8F-Usage-and-Keymap>.
+
+
+ISSUES                  *fugit2.nvim-neovim-git-gui-powered-by-libgit2-issues*
+
+Upstream issues:
+
+- Performance with large repo https://github.com/libgit2/libgit2/issues/4230.
 
 
 CREDITS                *fugit2.nvim-neovim-git-gui-powered-by-libgit2-credits*
