@@ -56,18 +56,18 @@ local function create_gpgme_context(keyid)
 end
 
 ---@param buf string
----@param keyid string signing_key
+---@param keyid string ssh_key_id
 ---@param program string?
 ---@return string? signed
 ---@return integer err
 ---@return string err_msg
 local function sign_buffer_ssh(buf, keyid, program)
-  local key_file, err_msg, err_name
+  local key_file, err_name
 
   local is_literal, key = is_literal_ssh_key(keyid)
   if is_literal then
     -- make tmp file
-    local path, nbytes
+    local path, nbytes, err_msg
     key_file, path, err_name = uv.fs_mkstemp(tostring(utils.TMPDIR / ".git_signing_key_tmpXXXXXX"))
     if not key_file then
       return nil, 0, "Can't create temp file " .. err_name
@@ -77,7 +77,7 @@ local function sign_buffer_ssh(buf, keyid, program)
     if not nbytes then
       uv.fs_close(key_file)
       os.remove(path)
-      return nil, 0, "Can't write to temp file " .. err_name
+      return nil, 0, "Can't write to temp file " .. err_name .. err_msg
     end
 
     keyid = path
