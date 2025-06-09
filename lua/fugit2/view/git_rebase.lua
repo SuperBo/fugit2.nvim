@@ -344,7 +344,8 @@ function RebaseView:_init_input_popup()
     self._git.actions[commit_idx] = RebaseAction.REWORD
     local commit = self._git.commits[commit_idx]
     commit.pre_message, commit.symbol = rebase_action_text(RebaseAction.REWORD)
-    messages[oid] = { old = commit.message, new = message }
+    -- messages[oid] = { old = commit.message, new = message }
+    messages[oid].new = message
     commit.message = utils.lines_head(message)
 
     self.views.commits:update(self._git.commits)
@@ -396,6 +397,7 @@ function RebaseView:update()
   ---@type Fugit2GitGraphCommitNode[]
   local commits = git.commits
   local actions = git.actions
+  local messages = git.messages
   local oids = git.oids
   local n_commits = git.rebase:noperations()
   local rebase = git.rebase
@@ -417,16 +419,17 @@ function RebaseView:update()
     local op_id, op_type = op:id(), op:type()
 
     local git_commit, _ = self.repo:commit_lookup(op_id)
-    local message, author, time = "", "", {}
+    local summary, author, time = "", "", "", {}
     if git_commit then
       author = git_commit:author()
-      message = git_commit:summary()
+      summary = git_commit:summary()
+      messages[op_id:tostring(GIT_OID_LENGTH)] = { old = git_commit:message() }
       time = git_commit:time()
     end
 
     local rebase_text, symbol = rebase_action_text(op_type)
 
-    local node = LogView.CommitNode(op_id:tostring(GIT_OID_LENGTH), message, author, time, {}, {}, symbol, rebase_text)
+    local node = LogView.CommitNode(op_id:tostring(GIT_OID_LENGTH), summary, author, time, {}, {}, symbol, rebase_text)
     commits[n_remain_commits - i] = node
     actions[n_remain_commits - i] = op_type
     oids[n_remain_commits - i] = op_id:clone()
@@ -455,6 +458,8 @@ function RebaseView:update()
     walker:hide(git.rebase_info.upstream)
 
     for id, commit in walker:iter() do
+      messages[id:tostring(GIT_OID_LENGTH)] = { old = commit:message() }
+
       local node = LogView.CommitNode(
         id:tostring(GIT_OID_LENGTH),
         commit:summary(),
@@ -593,12 +598,26 @@ function RebaseView:rebase_continue()
       if op then
         local op_type = op:type()
         if op_type == git2.GIT_REBASE_OPERATION.REWORD then
-          message = git.messages[op:id():tostring(8)].new
+          message = git.messages[op:id():tostring(GIT_OID_LENGTH)].new
+        elseif op_type == git2.GIT_REBASE_OPERATION.SQUASH then
+          -- squash message
+          local parent_message = ""
+          local parent_commit = self.repo:commit_lookup(git.last_commit_id)
+          if parent_commit then
+            parent_message = parent_commit:message()
+          end
+
+          local current_message = git.messages[op:id():tostring(GIT_OID_LENGTH)].old
+          message = git2.message_prettify(current_message .. "\n\n" .. parent_message)
         else
           message = nil
         end
 
-        commit_id, err = rebase:commit(nil, signature, message)
+        if op_type == git2.GIT_REBASE_OPERATION.FIXUP or op_type == git2.GIT_REBASE_OPERATION.SQUASH then
+          commit_id, err = rebase:amend(nil, signature, message)
+        else
+          commit_id, err = rebase:commit(nil, signature, message)
+        end
         if commit_id then
           git.last_commit_id = commit_id
         end
@@ -645,7 +664,7 @@ function RebaseView:rebase_finish()
     last_commit, err = self.repo:commit_lookup(last_commit_id)
 
     if last_commit then
-      err = self.repo:update_head_for_commit(last_commit_id, utils.lines_head(last_commit:message()), "rebase: ")
+      err = self.repo:update_head_for_commit(last_commit_id, last_commit:summary(), "rebase: ")
     end
 
     if err ~= 0 then
@@ -764,10 +783,12 @@ function RebaseView:setup_handlers()
 
     if action == RebaseAction.REWORD then
       git.current_oid = commit.oid
+      local commit_message = messages[commit.oid].old
+
       input_view.border:set_text("top", NuiText(" Reword commit " .. commit.oid, "Fugit2MessageHeading"))
-      vim.api.nvim_buf_set_lines(self.views.input.bufnr, 0, -1, true, { commit.message })
+      vim.api.nvim_buf_set_lines(self.views.input.bufnr, 0, -1, true, vim.split(commit_message, "\n", { plain = true }))
       self.layout:update(self.boxes.input)
-      vim.api.nvim_win_set_cursor(self.views.input.winid, { 1, commit.message:len() })
+      vim.api.nvim_win_set_cursor(self.views.input.winid, { 1, commit_message:len() })
       return
     elseif action == RebaseAction.BREAK then
       -- drop following commits
@@ -777,8 +798,7 @@ function RebaseView:setup_handlers()
         ci.pre_message, ci.symbol = rebase_action_text(RebaseAction.DROP)
         local m = messages[ci.oid]
         if m then
-          ci.message = m.old
-          messages[ci.oid] = nil
+          ci.message = utils.lines_head(m.old)
         end
       end
 
@@ -790,8 +810,7 @@ function RebaseView:setup_handlers()
 
     local m = messages[commit.oid]
     if m then
-      commit.message = m.old
-      messages[commit.oid] = nil
+      commit.message = utils.lines_head(m.old)
     end
 
     commit_view:update(commits)
