@@ -1957,7 +1957,7 @@ function Rebase:abort()
   return libgit2.C.git_rebase_abort(self.rebase)
 end
 
----Commits the current patch. You must have resolved any conflicts.
+---Commits the current patch. You must resolve any conflicts.
 ---@param author GitSignature? The author of the updated commit, or NULL to keep the author from the original commit
 ---@param committer GitSignature The committer of the rebase
 ---@param message string? The message for this commit, or NULL to use the message from the original commit.
@@ -1975,13 +1975,143 @@ function Rebase:commit(author, committer, message)
   return ObjectId.new(new_oid), 0
 end
 
----Fixup the current patch. You must have resolved any conflicts.
+---Check whether rebase is inmemory
+---@return boolean whether this rebase is inmemory or not.
+function Rebase:is_inmemory()
+  return self.rebase["inmemory"] ~= 0
+end
+
+---Amends commit in rebase
+---@param index ffi.cdata* git_index* index pointer
+---@param parent_commit ffi.cdata* git_index* parent commit
+---@param author ffi.cdata*? git_signature * author
+---@param committer ffi.cdata* git_signature * committer
+---@param message_encoding string message encoding
+---@param message string? commit message
+---@return GitCommit? git_commit
+---@return GIT_ERROR err
+function Rebase:_rebase_commit__amend(index, parent_commit, author, committer, message_encoding, message)
+  local err
+  local c_repo = self.rebase["repo"]
+  local operation = self:operation_byindex(self:operation_current())
+
+  if not operation then
+    libgit2.C.git_error_set_str(err, "can't retrieve rebase operation")
+    return nil, libgit2.GIT_ERROR.GIT_ERROR
+  end
+
+  if libgit2.C.git_index_has_conflicts(index) ~= 0 then
+    err = libgit2.GIT_ERROR.GIT_EUNMERGED
+    libgit2.C.git_error_set_str(err, "conflicts have not been resolved")
+    return nil, err
+  end
+
+  local current_commit = libgit2.git_commit_double_pointer()
+  err = libgit2.C.git_commit_lookup(current_commit, c_repo, operation.operation["id"])
+  if err ~= 0 then
+    return nil, err
+  end
+
+  local tree_id = libgit2.git_oid()
+  local parent_tree = libgit2.git_tree_double_pointer()
+  local tree = libgit2.git_tree_double_pointer()
+  local commit_id = libgit2.git_oid()
+  local commit = libgit2.git_commit_double_pointer()
+
+  err = libgit2.C.git_commit_tree(parent_tree, parent_commit)
+  if err ~= 0 then
+    goto rebase_commit__amend_done
+  end
+
+  err = libgit2.C.git_index_write_tree_to(tree_id, index, c_repo)
+  if err ~= 0 then
+    goto rebase_commit__amend_done
+  end
+
+  err = libgit2.C.git_tree_lookup(tree, c_repo, tree_id)
+  if err ~= 0 then
+    goto rebase_commit__amend_done
+  end
+
+  if libgit2.C.git_oid_equal(tree_id, libgit2.C.git_tree_id(parent_tree[0])) ~= 0 then
+    err = libgit2.GIT_ERROR.GIT_EAPPLIED
+    libgit2.C.git_error_set_str(err, "this patch has already been applied")
+    goto rebase_commit__amend_done
+  end
+
+  if author == nil then
+    author = libgit2.C.git_commit_author(current_commit[0])
+  end
+
+  if not message then
+    message_encoding = libgit2.C.git_commit_message_encoding(current_commit[0])
+    message = libgit2.C.git_commit_message(current_commit[0])
+  end
+
+  libgit2.C.git_error_clear()
+
+  -- amend commit
+  err = libgit2.C.git_commit_amend(commit_id, parent_commit, nil, author, committer, message_encoding, message, tree[0])
+  if err ~= 0 then
+    goto rebase_commit__amend_done
+  end
+
+  err = libgit2.C.git_commit_lookup(commit, c_repo, commit_id)
+  if err ~= 0 then
+    goto rebase_commit__amend_done
+  end
+
+  ::rebase_commit__amend_done::
+  libgit2.C.git_commit_free(current_commit[0])
+  libgit2.C.git_tree_free(parent_tree[0])
+  libgit2.C.git_tree_free(tree[0])
+
+  if err ~= 0 then
+    return nil, err
+  else
+    return Commit.new(commit[0]), 0
+  end
+end
+
+---@param author GitSignature? The author of the updated commit, or NULL to keep the author from the original commit
+---@param committer GitSignature The committer of the rebase
+---@param message string? The message for this commit, or NULL to use the message from the original commit.
+---@return GitObjectId?
+---@return GIT_ERROR err Zero on success
+function Rebase:_rebase_amend_inmemory(author, committer, message)
+  local commit, err = self:_rebase_commit__amend(
+    self.rebase["index"],
+    self.rebase["last_commit"],
+    author and author.sign or nil,
+    committer.sign,
+    "UTF-8",
+    message
+  )
+  if not commit then
+    return nil, err
+  end
+
+  local c_rebase = self.rebase
+  libgit2.C.git_commit_free(c_rebase["last_commit"])
+  c_rebase["last_commit"] = commit.commit
+
+  return commit:id(), 0
+end
+
+---Amends the current patch to previous patch. You must resolve any conflicts.
 ---@param author GitSignature? The author of the updated commit, or NULL to keep the author from the original commit
 ---@param committer GitSignature The committer of the rebase
 ---@param message string? The message for this commit, or NULL to use the message from the original commit.
 ---@return GitObjectId?
 ---@return GIT_ERROR err Zero on success, GIT_EUNMERGED if there are unmerged changes in the index, GIT_EAPPLIED if the current commit has already been applied to the upstream and there is nothing to commit, -1 on failure.
-function Rebase:commit_amend_inmemory(author, committer, message) end
+function Rebase:amend(author, committer, message)
+  if self:is_inmemory() then
+    return self:_rebase_amend_inmemory(author, committer, message)
+  else
+    libgit2.C.git_error_set_str(-1, "rebase amend disk index has not been implemented")
+    return nil, -1
+  end
+end
 
 ---Finishes a rebase that is currently in progress once all patches have been applied.
 ---@param signature GitSignature?

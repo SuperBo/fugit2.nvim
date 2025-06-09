@@ -366,6 +366,10 @@ ffi.cdef [[
   int git_buf_grow(git_buf *buffer, size_t target_size);
   void git_buf_dispose(git_buf *buffer);
 
+  void git_error_clear();
+  void git_error_set(int error_class, const char *fmt);
+  int git_error_set_str(int error_class, const char *string);
+
   int git_blame_options_init(git_blame_options *opts, unsigned int version);
   void git_blame_free(git_blame *blame);
   int git_blame_buffer(git_blame **out, git_blame *reference, const char *buffer, size_t buffer_len);
@@ -575,6 +579,7 @@ ffi.cdef [[
   int git_index_read(git_index *index, int force);
   int git_index_write(git_index *index);
   int git_index_write_tree(git_oid *out, git_index *index);
+  int git_index_write_tree_to(git_oid *out, git_index *index, git_repository *repo);
   const char * git_index_path(const git_index *index);
   int git_index_add_from_buffer(git_index *index, const git_index_entry *entry, const void *buffer, size_t len);
   int git_index_add_bypath(git_index *index, const char *path);
