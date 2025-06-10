@@ -10,16 +10,12 @@ jobs:
       - name: checkout
         uses: actions/checkout@v4
 
-      - name: install stylua
-        uses: baptiste0928/cargo-install@v3
+      - name: stylua
+        uses: JohnnyMorganz/stylua-action@v4
         with:
-          crate: stylua
-          version: '0.20.0'
-          features: 'lua52'
-
-      - name: run lint
-        run: |
-          stylua --color always --check lua spec
+          token: ${{ secrets.GITHUB_TOKEN }}
+          version: 2.1.0
+          args: --color always --check lua spec
 
   test-linux:
     runs-on: ubuntu-24.04
