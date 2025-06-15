@@ -2006,12 +2006,6 @@ function Rebase:_rebase_commit__amend(index, parent_commit, author, committer, m
     return nil, err
   end
 
-  local current_commit = libgit2.git_commit_double_pointer()
-  err = libgit2.C.git_commit_lookup(current_commit, c_repo, operation.operation["id"])
-  if err ~= 0 then
-    return nil, err
-  end
-
   local tree_id = libgit2.git_oid()
   local parent_tree = libgit2.git_tree_double_pointer()
   local tree = libgit2.git_tree_double_pointer()
@@ -2039,15 +2033,6 @@ function Rebase:_rebase_commit__amend(index, parent_commit, author, committer, m
     goto rebase_commit__amend_done
   end
 
-  if author == nil then
-    author = libgit2.C.git_commit_author(current_commit[0])
-  end
-
-  if not message then
-    message_encoding = libgit2.C.git_commit_message_encoding(current_commit[0])
-    message = libgit2.C.git_commit_message(current_commit[0])
-  end
-
   libgit2.C.git_error_clear()
 
   -- amend commit
@@ -2062,7 +2047,6 @@ function Rebase:_rebase_commit__amend(index, parent_commit, author, committer, m
   end
 
   ::rebase_commit__amend_done::
-  libgit2.C.git_commit_free(current_commit[0])
   libgit2.C.git_tree_free(parent_tree[0])
   libgit2.C.git_tree_free(tree[0])
 

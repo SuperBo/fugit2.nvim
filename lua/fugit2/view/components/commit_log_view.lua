@@ -684,17 +684,21 @@ function CommitLogView:focus()
   end
 end
 
--- Gets current focus commit
+-- Gets commit with linenr, if linenr is not provided, get current focus commit.
+---@param linenr integer?
 ---@return Fugit2GitGraphCommitNode?
 ---@return integer? commit_index commit index 1-based
-function CommitLogView:get_commit()
-  local winid = self:winid()
-  if not vim.api.nvim_win_is_valid(winid) then
-    return nil, nil
+function CommitLogView:get_commit(linenr)
+  if not linenr then
+    local winid = self:winid()
+    if not vim.api.nvim_win_is_valid(winid) then
+      return nil, nil
+    end
+
+    linenr = vim.api.nvim_win_get_cursor(winid)[1]
   end
 
-  local row = vim.api.nvim_win_get_cursor(winid)[1]
-  local index = math.floor((row + 1) / 2)
+  local index = math.floor((linenr + 1) / 2)
   local commit = self._commits[index]
   return commit, index
 end
