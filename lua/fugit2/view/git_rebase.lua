@@ -321,12 +321,7 @@ function RebaseView:_init_input_popup()
   -- update new message
   local enter_fn = function()
     local lines = vim.api.nvim_buf_get_lines(input_popup.bufnr, 0, -1, true)
-    local new_message = vim.trim(table.concat(lines, "\n"))
-    local message, err = git2.message_prettify(new_message)
-    if not message then
-      notifier.error("Can't prettify commit message", err)
-      return
-    end
+    local message = vim.trim(table.concat(lines, "\n"))
 
     local messages = self._git.messages
     local oid = self._git.current_oid
@@ -344,8 +339,7 @@ function RebaseView:_init_input_popup()
     self._git.actions[commit_idx] = RebaseAction.REWORD
     local commit = self._git.commits[commit_idx]
     commit.pre_message, commit.symbol = rebase_action_text(RebaseAction.REWORD)
-    -- messages[oid] = { old = commit.message, new = message }
-    messages[oid].new = message
+    messages[commit_idx].new = message
     commit.message = utils.lines_head(message)
 
     self.views.commits:update(self._git.commits)
@@ -423,8 +417,8 @@ function RebaseView:update()
     if git_commit then
       author = git_commit:author()
       summary = git_commit:summary()
-      messages[op_id:tostring(GIT_OID_LENGTH)] = { old = git_commit:message() }
       time = git_commit:time()
+      messages[n_remain_commits - i] = { old = git_commit:message() }
     end
 
     local rebase_text, symbol = rebase_action_text(op_type)
@@ -458,8 +452,6 @@ function RebaseView:update()
     walker:hide(git.rebase_info.upstream)
 
     for id, commit in walker:iter() do
-      messages[id:tostring(GIT_OID_LENGTH)] = { old = commit:message() }
-
       local node = LogView.CommitNode(
         id:tostring(GIT_OID_LENGTH),
         commit:summary(),
@@ -470,6 +462,7 @@ function RebaseView:update()
         nil
       )
       commits[i] = node
+      messages[i] = { old = commit:message() }
       i = i + 1
     end
   end
@@ -598,17 +591,10 @@ function RebaseView:rebase_continue()
       if op then
         local op_type = op:type()
         if op_type == git2.GIT_REBASE_OPERATION.REWORD then
-          message = git.messages[op:id():tostring(GIT_OID_LENGTH)].new
-        elseif op_type == git2.GIT_REBASE_OPERATION.SQUASH then
-          -- squash message
-          local parent_message = ""
-          local parent_commit = self.repo:commit_lookup(git.last_commit_id)
-          if parent_commit then
-            parent_message = parent_commit:message()
+          message, err = git2.message_prettify(git.messages[commit_idx].new)
+          if not message then
+            notifier.error("Can't prettify commit message", err)
           end
-
-          local current_message = git.messages[op:id():tostring(GIT_OID_LENGTH)].old
-          message = git2.message_prettify(current_message .. "\n\n" .. parent_message)
         else
           message = nil
         end
@@ -762,6 +748,16 @@ end
 --   }, { dir = "col" }))
 -- end
 
+---Handle fixup or squash behavior, supposed to be called in visual mode
+---@param is_squash boolean whether is fixup or squash
+function RebaseView:_fixup_squash_handler(is_squash)
+  local cursor_start = vim.fn.getpos("v")[2]
+  local cursor_end = vim.fn.getpos(".")[2]
+  if cursor_end < cursor_start then
+    cursor_start, cursor_end = cursor_end, cursor_start
+  end
+end
+
 function RebaseView:setup_handlers()
   local opts = { noremap = true, nowait = true }
   local commit_view = self.views.commits
@@ -780,10 +776,15 @@ function RebaseView:setup_handlers()
     end
 
     local commit = commits[commit_idx]
+    local msg = messages[commit_idx]
 
     if action == RebaseAction.REWORD then
       git.current_oid = commit.oid
-      local commit_message = messages[commit.oid].old
+
+      local commit_message = msg.old
+      if msg.new and msg.new ~= "" then
+        commit_message = msg.new
+      end
 
       input_view.border:set_text("top", NuiText(" Reword commit " .. commit.oid, "Fugit2MessageHeading"))
       vim.api.nvim_buf_set_lines(self.views.input.bufnr, 0, -1, true, vim.split(commit_message, "\n", { plain = true }))
@@ -796,13 +797,59 @@ function RebaseView:setup_handlers()
         actions[i] = RebaseAction.DROP
         local ci = commits[i]
         ci.pre_message, ci.symbol = rebase_action_text(RebaseAction.DROP)
-        local m = messages[ci.oid]
-        if m then
-          ci.message = utils.lines_head(m.old)
+        if msg then
+          ci.message = utils.lines_head(msg.old)
         end
       end
 
       action = RebaseAction.PICK
+    elseif action == RebaseAction.FIXUP then
+      if commit_idx == #commits - 1 then
+        notifier.info "Can't squash, fixup first commit"
+        return
+      end
+      if actions[commit_idx] == RebaseAction.FIXUP then
+        return
+      end
+    elseif action == RebaseAction.SQUASH then
+      if commit_idx == #commits - 1 then
+        notifier.info "Can't squash, fixup first commit"
+        return
+      end
+      if actions[commit_idx] == RebaseAction.FIXUP then
+        return
+      end
+
+      local commit_msg = ""
+      if msg then
+        if msg.new and actions[commit_idx] == RebaseAction.REWORD then
+          commit_msg = msg.new
+        else
+          commit_msg = msg.old
+        end
+      end
+
+      -- find parent commit to squash message
+      for i = commit_idx + 1, #commits - 1, 1 do
+        local current_commit = commits[i]
+        local action_i = actions[i]
+        local m = messages[i]
+
+        if action_i == RebaseAction.PICK or action_i == RebaseAction.REWORD then
+          if action_i == RebaseAction.PICK then
+            m.new = m.old .. "\n\n" .. commit_msg
+          elseif m.new then
+            m.new = m.new .. "\n\n" .. commit_msg
+          end
+
+          actions[i] = RebaseAction.REWORD
+          current_commit.pre_message, current_commit.symbol = rebase_action_text(RebaseAction.REWORD)
+          break
+        end
+      end
+
+      -- change trigger action to fixup
+      action = RebaseAction.FIXUP
     end
 
     actions[commit_idx] = action
@@ -811,6 +858,87 @@ function RebaseView:setup_handlers()
     local m = messages[commit.oid]
     if m then
       commit.message = utils.lines_head(m.old)
+    end
+
+    commit_view:update(commits)
+    commit_view:render()
+  end
+
+  -- function to handle visual fixup/squash
+  local fixup_fn = function(is_squash)
+    local cursor_start = vim.fn.getpos("v")[2]
+    local cursor_end = vim.fn.getpos(".")[2]
+    vim.api.nvim_feedkeys(utils.KEY_ESC, "n", false)
+
+    if cursor_start == cursor_end then
+      return
+    elseif cursor_end < cursor_start then
+      cursor_start, cursor_end = cursor_end, cursor_start
+    end
+
+    if cursor_start + 1 == cursor_end and cursor_start % 2 == 1 then
+      return
+    end
+
+    local linenr_end = cursor_end
+    local _, first_commit_idx = commit_view:get_commit(linenr_end)
+    if first_commit_idx == #commits then
+      -- move first commit one step if it is the onto commit
+      linenr_end = linenr_end - 2
+      first_commit_idx = commit_view:get_commit(linenr_end)
+    end
+    local first_commit = commits[first_commit_idx]
+    local first_action = actions[first_commit_idx]
+
+    if not is_squash then
+      -- simple fixup
+      for i = first_commit_idx - 1, 1, -1 do
+        local commit_i = commits[i]
+        if actions[i] == RebaseAction.REWORD then
+          commit_i.message = utils.lines_head(messages[i].old)
+        end
+
+        actions[i] = RebaseAction.FIXUP
+        commit_i.pre_message, commit_i.symbol = rebase_action_text(RebaseAction.FIXUP)
+      end
+
+      if first_action ~= RebaseAction.PICK and first_action ~= RebaseAction.REWORD then
+        actions[first_commit_idx] = RebaseAction.PICK
+        first_commit.pre_message, first_commit.symbol = rebase_action_text(RebaseAction.PICK)
+      end
+    else
+      -- squash
+      local msgs = {}
+      local m = messages[first_commit_idx]
+      if m.new and first_action == RebaseAction.REWORD then
+        msgs[1] = m.new
+      else
+        msgs[1] = m.old
+      end
+
+      -- change other commit to fixup
+      for i = first_commit_idx - 1, 1, -1 do
+        local commit_i = commits[i]
+        local m_i = messages[i]
+
+        if actions[i] == RebaseAction.REWORD and m_i.new then
+          msgs[#msgs + 1] = m_i.new
+          commit_i.message = utils.lines_head(messages[i].old)
+        else
+          msgs[#msgs + 1] = m_i.old
+        end
+
+        actions[i] = RebaseAction.FIXUP
+        commit_i.pre_message, commit_i.symbol = rebase_action_text(RebaseAction.FIXUP)
+      end
+
+      if first_action == RebaseAction.REWORD then
+        messages[first_commit_idx].new = table.concat(msgs, "\n\n")
+      else
+        actions[first_commit_idx] = RebaseAction.REWORD
+        first_commit.pre_message, first_commit.symbol = rebase_action_text(RebaseAction.REWORD)
+        messages[first_commit_idx].new = table.concat(msgs, "\n\n")
+      end
     end
 
     commit_view:update(commits)
@@ -842,10 +970,16 @@ function RebaseView:setup_handlers()
   commit_view:map("n", "s", function()
     action_fn(RebaseAction.SQUASH)
   end, opts)
+  commit_view:map("v", "s", function()
+    fixup_fn(true)
+  end, opts)
 
   --fixup
   commit_view:map("n", "f", function()
     action_fn(RebaseAction.FIXUP)
+  end, opts)
+  commit_view:map("v", "f", function()
+    fixup_fn(false)
   end, opts)
 
   -- reword
@@ -915,6 +1049,8 @@ function RebaseView:setup_handlers()
   -- Move cursor
   commit_view:map("n", "j", "2j", opts)
   commit_view:map("n", "k", "2k", opts)
+  commit_view:map("v", "j", "2j", opts)
+  commit_view:map("v", "k", "2k", opts)
 
   commit_view:map("n", "<cr>", function()
     self:rebase_start()
