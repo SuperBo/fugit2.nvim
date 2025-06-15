@@ -218,6 +218,9 @@ local DiffHunk = {}
 
 ---@class GitRebase
 ---@field rebase ffi.cdata* libgit2 git_rebase* pointer
+---@field branch GitAnnotatedCommit?
+---@field upstream GitAnnotatedCommit?
+---@field onto GitAnnotatedCommit?
 local Rebase = {}
 Rebase.__index = Rebase
 
@@ -703,6 +706,20 @@ function AnnotatedCommit.new(git_commit)
 
   ffi.gc(commit.commit, libgit2.C.git_annotated_commit_free)
   return commit
+end
+
+-- Gets the commit ID that the given git_annotated_commit refers to
+---@return GitObjectId
+function AnnotatedCommit:id()
+  local git_oid = libgit2.C.git_annotated_commit_id(self.commit)
+  return ObjectId.borrow(git_oid)
+end
+
+-- Get the refname that the given git_annotated_commit refers to.
+---@return string?
+function AnnotatedCommit:ref()
+  local c_char = libgit2.C.git_annotated_commit_ref(self.commit)
+  return c_char ~= nil and ffi.string(c_char) or nil
 end
 
 -- =================
@@ -1856,6 +1873,26 @@ function Rebase:next()
   return RebaseOperation.borrow(operation[0]), 0
 end
 
+-- Skip the next rebase operation and returns the information about it.
+---@return GitRebaseOperation?
+---@return GIT_ERROR
+function Rebase:skip()
+  -- rebase_movenext
+  local c_rebase = self.rebase
+  local next = c_rebase["started"] and c_rebase["current"] + 1 or 0
+  if next == c_rebase["operations"]["size"] then
+    return nil, libgit2.GIT_ERROR.GIT_ITEROVER
+  end
+
+  c_rebase["started"] = 1
+  c_rebase["current"] = next
+
+  -- rebase_next_inmemory
+  local operation = libgit2.git_rebase_operation_pointer()
+  operation = c_rebase["operations"]["ptr"] + next
+  return RebaseOperation.borrow(operation), 0
+end
+
 ---Gets the count of rebase operations that are to be applied.
 ---@return integer
 function Rebase:noperations()
@@ -1890,6 +1927,7 @@ function Rebase:onto_name()
 end
 
 ---Gets the onto id for merge rebases.
+---@return GitObjectId
 function Rebase:onto_id()
   local oid_ptr = libgit2.C.git_rebase_onto_id(self.rebase)
   return ObjectId.borrow(oid_ptr)
@@ -1919,17 +1957,17 @@ function Rebase:abort()
   return libgit2.C.git_rebase_abort(self.rebase)
 end
 
----Commits the current patch. You must have resolved any conflicts.
+---Commits the current patch. You must resolve any conflicts.
 ---@param author GitSignature? The author of the updated commit, or NULL to keep the author from the original commit
----@param commiter GitSignature The committer of the rebase
+---@param committer GitSignature The committer of the rebase
 ---@param message string? The message for this commit, or NULL to use the message from the original commit.
 ---@return GitObjectId?
 ---@return GIT_ERROR err Zero on success, GIT_EUNMERGED if there are unmerged changes in the index, GIT_EAPPLIED if the current commit has already been applied to the upstream and there is nothing to commit, -1 on failure.
-function Rebase:commit(author, commiter, message)
+function Rebase:commit(author, committer, message)
   local new_oid = libgit2.git_oid()
 
   local err =
-    libgit2.C.git_rebase_commit(new_oid, self.rebase, author and author.sign or nil, commiter.sign, "UTF-8", message)
+    libgit2.C.git_rebase_commit(new_oid, self.rebase, author and author.sign or nil, committer.sign, "UTF-8", message)
   if err ~= 0 then
     return nil, err
   end
@@ -1937,11 +1975,133 @@ function Rebase:commit(author, commiter, message)
   return ObjectId.new(new_oid), 0
 end
 
+---Check whether rebase is inmemory
+---@return boolean whether this rebase is inmemory or not.
+function Rebase:is_inmemory()
+  return self.rebase["inmemory"] ~= 0
+end
+
+---Amends commit in rebase
+---@param index ffi.cdata* git_index* index pointer
+---@param parent_commit ffi.cdata* git_index* parent commit
+---@param author ffi.cdata*? git_signature * author
+---@param committer ffi.cdata* git_signature * committer
+---@param message_encoding string message encoding
+---@param message string? commit message
+---@return GitCommit? git_commit
+---@return GIT_ERROR err
+function Rebase:_rebase_commit__amend(index, parent_commit, author, committer, message_encoding, message)
+  local err
+  local c_repo = self.rebase["repo"]
+  local operation = self:operation_byindex(self:operation_current())
+
+  if not operation then
+    libgit2.C.git_error_set_str(err, "can't retrieve rebase operation")
+    return nil, libgit2.GIT_ERROR.GIT_ERROR
+  end
+
+  if libgit2.C.git_index_has_conflicts(index) ~= 0 then
+    err = libgit2.GIT_ERROR.GIT_EUNMERGED
+    libgit2.C.git_error_set_str(err, "conflicts have not been resolved")
+    return nil, err
+  end
+
+  local tree_id = libgit2.git_oid()
+  local parent_tree = libgit2.git_tree_double_pointer()
+  local tree = libgit2.git_tree_double_pointer()
+  local commit_id = libgit2.git_oid()
+  local commit = libgit2.git_commit_double_pointer()
+
+  err = libgit2.C.git_commit_tree(parent_tree, parent_commit)
+  if err ~= 0 then
+    goto rebase_commit__amend_done
+  end
+
+  err = libgit2.C.git_index_write_tree_to(tree_id, index, c_repo)
+  if err ~= 0 then
+    goto rebase_commit__amend_done
+  end
+
+  err = libgit2.C.git_tree_lookup(tree, c_repo, tree_id)
+  if err ~= 0 then
+    goto rebase_commit__amend_done
+  end
+
+  if libgit2.C.git_oid_equal(tree_id, libgit2.C.git_tree_id(parent_tree[0])) ~= 0 then
+    err = libgit2.GIT_ERROR.GIT_EAPPLIED
+    libgit2.C.git_error_set_str(err, "this patch has already been applied")
+    goto rebase_commit__amend_done
+  end
+
+  libgit2.C.git_error_clear()
+
+  -- amend commit
+  err = libgit2.C.git_commit_amend(commit_id, parent_commit, nil, author, committer, message_encoding, message, tree[0])
+  if err ~= 0 then
+    goto rebase_commit__amend_done
+  end
+
+  err = libgit2.C.git_commit_lookup(commit, c_repo, commit_id)
+  if err ~= 0 then
+    goto rebase_commit__amend_done
+  end
+
+  ::rebase_commit__amend_done::
+  libgit2.C.git_tree_free(parent_tree[0])
+  libgit2.C.git_tree_free(tree[0])
+
+  if err ~= 0 then
+    return nil, err
+  else
+    return Commit.new(commit[0]), 0
+  end
+end
+
+---@param author GitSignature? The author of the updated commit, or NULL to keep the author from the original commit
+---@param committer GitSignature The committer of the rebase
+---@param message string? The message for this commit, or NULL to use the message from the original commit.
+---@return GitObjectId?
+---@return GIT_ERROR err Zero on success
+function Rebase:_rebase_amend_inmemory(author, committer, message)
+  local commit, err = self:_rebase_commit__amend(
+    self.rebase["index"],
+    self.rebase["last_commit"],
+    author and author.sign or nil,
+    committer.sign,
+    "UTF-8",
+    message
+  )
+  if not commit then
+    return nil, err
+  end
+
+  local c_rebase = self.rebase
+  libgit2.C.git_commit_free(c_rebase["last_commit"])
+  c_rebase["last_commit"] = commit.commit
+
+  return commit:id(), 0
+end
+
+---Amends the current patch to previous patch. You must resolve any conflicts.
+---@param author GitSignature? The author of the updated commit, or NULL to keep the author from the original commit
+---@param committer GitSignature The committer of the rebase
+---@param message string? The message for this commit, or NULL to use the message from the original commit.
+---@return GitObjectId?
+---@return GIT_ERROR err Zero on success, GIT_EUNMERGED if there are unmerged changes in the index, GIT_EAPPLIED if the current commit has already been applied to the upstream and there is nothing to commit, -1 on failure.
+function Rebase:amend(author, committer, message)
+  if self:is_inmemory() then
+    return self:_rebase_amend_inmemory(author, committer, message)
+  else
+    libgit2.C.git_error_set_str(-1, "rebase amend disk index has not been implemented")
+    return nil, -1
+  end
+end
+
 ---Finishes a rebase that is currently in progress once all patches have been applied.
----@param signature GitSignature
+---@param signature GitSignature?
 ---@return GIT_ERROR err Zero on success; -1 on error
 function Rebase:finish(signature)
-  return libgit2.C.git_rebase_finish(self.rebase, signature.sign)
+  return libgit2.C.git_rebase_finish(self.rebase, signature and signature.sign)
 end
 
 ---Gets the index produced by the last operation,
@@ -2263,6 +2423,45 @@ end
 function Repository:set_head_detached(oid)
   local err = libgit2.C.git_repository_set_head_detached(self.repo, oid.oid)
   return err
+end
+
+-- Set head to commit id. Useful for git commit created with gpg
+-- or git rebase inmemory
+---@param commit_id GitObjectId
+---@param commit_head_line string
+---@param log_prefix string? default: commit
+---@return GIT_ERROR
+function Repository:update_head_for_commit(commit_id, commit_head_line, log_prefix)
+  local head, err = self:reference_lookup "HEAD"
+  if not head then
+    return err
+  end
+
+  local head_direct
+  head_direct, err = head:resolve()
+  if head_direct then
+    -- normal branch
+    _, err = head_direct:set_target(commit_id, (log_prefix or "commit: ") .. commit_head_line)
+    if err ~= 0 then
+      return err
+    end
+  elseif err == libgit2.GIT_ERROR.GIT_ENOTFOUND then
+    -- initial branch
+    local head_ref_name = head:symbolic_target()
+    if not head_ref_name then
+      return err
+    end
+
+    head, err = self:create_reference(head_ref_name, commit_id, false, "commit (initial): " .. commit_head_line)
+    if err ~= 0 then
+      return err
+    end
+  else
+    -- error
+    return err
+  end
+
+  return 0
 end
 
 -- Gets GitCommit signature
@@ -3850,6 +4049,7 @@ M.IndexEntry = IndexEntry
 M.ObjectId = ObjectId
 M.Reference = Reference
 M.Repository = Repository
+M.Commit = Commit
 
 M.GIT_BRANCH = libgit2.GIT_BRANCH
 M.GIT_CHECKOUT = libgit2.GIT_CHECKOUT

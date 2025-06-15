@@ -24,7 +24,6 @@ ffi.cdef [[
   typedef struct git_index_iterator git_index_iterator;
   typedef struct git_object git_object;
   typedef struct git_patch git_patch;
-  typedef struct git_rebase git_rebase;
   typedef struct git_reference git_reference;
   typedef struct git_remote git_remote;
   typedef struct git_repository git_repository;
@@ -33,6 +32,12 @@ ffi.cdef [[
   typedef struct git_tag git_tag;
   typedef struct git_tree git_tree;
   typedef struct git_tree_entry git_tree_entry;
+
+  typedef struct git_str {
+	  char *ptr;
+	  size_t asize;
+	  size_t size;
+  } git_str;
 
   typedef struct git_strarray {
     char **strings;
@@ -291,6 +296,27 @@ ffi.cdef [[
     const char *exec;
   } git_rebase_operation;
 
+  typedef struct {
+    git_rebase_operation *ptr; size_t size; size_t asize;
+  } git_rebase_operation_array_t;
+
+  typedef struct {
+    git_repository *repo;
+    git_rebase_options options;
+	  unsigned int type;
+	  char *state_path;
+	  git_str state_filename;
+	  unsigned int head_detached:1, inmemory:1, quiet:1, started:1;
+	  git_rebase_operation_array_t operations;
+	  size_t current;
+	  git_index *index;
+	  git_commit *last_commit;
+	  git_oid orig_head_id;
+	  char *orig_head_name;
+    git_oid onto_id;
+    char *onto_name;
+  } git_rebase;
+
   typedef struct git_status_entry {
     unsigned int status;
     struct git_diff_delta *head_to_index;
@@ -339,6 +365,10 @@ ffi.cdef [[
 
   int git_buf_grow(git_buf *buffer, size_t target_size);
   void git_buf_dispose(git_buf *buffer);
+
+  void git_error_clear();
+  void git_error_set(int error_class, const char *fmt);
+  int git_error_set_str(int error_class, const char *string);
 
   int git_blame_options_init(git_blame_options *opts, unsigned int version);
   void git_blame_free(git_blame *blame);
@@ -548,6 +578,7 @@ ffi.cdef [[
   int git_index_read(git_index *index, int force);
   int git_index_write(git_index *index);
   int git_index_write_tree(git_oid *out, git_index *index);
+  int git_index_write_tree_to(git_oid *out, git_index *index, git_repository *repo);
   const char * git_index_path(const git_index *index);
   int git_index_add_from_buffer(git_index *index, const git_index_entry *entry, const void *buffer, size_t len);
   int git_index_add_bypath(git_index *index, const char *path);
@@ -557,6 +588,7 @@ ffi.cdef [[
   int git_index_has_conflicts(const git_index *index);
   int git_index_conflict_get(const git_index_entry **ancestor_out, const git_index_entry **our_out, const git_index_entry **their_out, git_index *index, const char *path);
   const git_index_entry * git_index_get_bypath(git_index *index, const char *path, int stage);
+  int git_index_read_index(git_index *index, const git_index *new_index);
 
   int git_status_list_new(git_status_list **out, git_repository *repo, const git_status_options *opts);
   void git_status_list_free(git_status_list *statuslist);
@@ -767,6 +799,8 @@ M.git_rebase_pointer = ffi.typeof "git_rebase*"
 M.git_rebase_operation_double_pointer = ffi.typeof "git_rebase_operation*[1]"
 ---@type ffi.ctype* git_rebase_operation struct pointer
 M.git_rebase_operation_pointer = ffi.typeof "git_rebase_operation*"
+---@type ffi.ctype* git_rebase_operation_array
+M.git_rebase_operation_array = ffi.typeof "git_rebase_operation[?]"
 
 ---@type ffi.ctype* struct git_repository**
 M.git_repository_double_pointer = ffi.typeof "git_repository*[1]"
