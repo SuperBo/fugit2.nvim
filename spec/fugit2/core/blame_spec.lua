@@ -245,7 +245,7 @@ describe("find_intersect_hunk", function()
 @@ -62,8 +67,21 @@ function GitDiff:init(ns_id, repo, index, head_commit)__
    -- git info__
    self._git = {__
-     path = vim.fn.fnamemodify(repo:repo_path(), ":p:h:h"),__
+     path = repo:workdir(),__
 +    head_name = "head::",__
 +    head_tree = nil,__
    }__

@@ -48,12 +48,29 @@ local function open_repository(dir)
     local err
     repo, err = git2.Repository.open(cwd, true)
     if repo then
-      -- repos[cwd] = repo
-      local repo_path = vim.fn.fnamemodify(repo:repo_path(), ":p:h:h")
-
-      while repo_path:len() <= cwd:len() do
-        repos[cwd] = repo
-        cwd = vim.fn.fnamemodify(cwd, ":h")
+      -- Use working directory for caching instead of git directory
+      -- This fixes worktree support where git dir and workdir aren't parent/child
+      local workdir = repo:workdir()
+      if workdir then
+        -- For normal repos and worktrees, use the working directory as cache key
+        workdir = vim.fn.fnamemodify(workdir, ":p:h")
+        
+        -- Cache for all paths that are within this working directory
+        local cache_path = cwd
+        while cache_path:len() >= workdir:len() and vim.startswith(cache_path, workdir) do
+          repos[cache_path] = repo
+          if cache_path == workdir then
+            break
+          end
+          cache_path = vim.fn.fnamemodify(cache_path, ":h")
+        end
+      else
+        -- Bare repository fallback - use the old logic
+        local repo_path = vim.fn.fnamemodify(repo:repo_path(), ":p:h:h")
+        while repo_path:len() <= cwd:len() do
+          repos[cwd] = repo
+          cwd = vim.fn.fnamemodify(cwd, ":h")
+        end
       end
     else
       vim.notify(string.format("Can't open git directory at %s, error code: %d", cwd, err), vim.log.levels.WARN)

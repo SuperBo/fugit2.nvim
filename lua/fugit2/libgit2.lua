@@ -535,6 +535,7 @@ ffi.cdef [[
   int git_repository_open_ext(git_repository **out, const char *path, unsigned int flags, const char *ceiling_dirs);
   void git_repository_free(git_repository *repo);
   const char* git_repository_path(const git_repository *repo);
+  const char* git_repository_workdir(const git_repository *repo);
   int git_repository_is_empty(git_repository *repo);
   int git_repository_is_bare(const git_repository *repo);
   int git_repository_head_detached(git_repository *repo);
