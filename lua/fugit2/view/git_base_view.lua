@@ -27,7 +27,7 @@ function GitStatusDiffBase:init(ns_id, repo, index)
   end
 
   self._git = {
-    path = vim.fn.fnamemodify(repo:repo_path(), ":p:h:h"),
+    path = repo:workdir(),
     index_updated = false,
   }
 end

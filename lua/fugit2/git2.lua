@@ -2096,6 +2096,16 @@ function Repository:repo_path()
   return ffi.string(libgit2.C.git_repository_path(self.repo))
 end
 
+---Get the working directory path of this repository
+---@return string?
+function Repository:workdir()
+  local workdir = libgit2.C.git_repository_workdir(self.repo)
+  if workdir ~= nil then
+    return ffi.string(workdir)
+  end
+  return nil
+end
+
 ---Get the configuration file for this repository
 ---@return GitConfig?
 ---@return GIT_ERROR

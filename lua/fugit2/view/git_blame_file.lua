@@ -33,7 +33,7 @@ function GitBlameFile:init(ns_id, repo, file_bufnr)
   self.file_bufnr = file_bufnr
 
   local file_path = Path:new(vim.fn.fnameescape(vim.api.nvim_buf_get_name(file_bufnr)))
-  local git_path = vim.fn.fnamemodify(repo:repo_path(), ":p:h:h")
+  local git_path = repo:workdir()
 
   self._git = {
     repo = repo,
