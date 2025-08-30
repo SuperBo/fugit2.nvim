@@ -234,8 +234,16 @@ function GitDiff:update()
   -- Clears status
 
   -- Updates git source tree status
-  local status_files, err = self.repo:status()
-  local diff_head_to_index, _ = self.repo:diff_head_to_index(self.index)
+  local status_files, diff_head_to_index, err
+
+  if self.index:in_memory() then
+    diff_head_to_index, err = self.repo:diff_tree_to_index(self._git.head_tree, self.index)
+    err = diff_head_to_index:find_similar()
+    status_files, err = diff_head_to_index:status(true)
+  else
+    status_files, err = self.repo:status()
+    diff_head_to_index, err = self.repo:diff_tree_to_index(self._git.head_tree, self.index)
+  end
 
   if status_files then
     self._views.files:update(status_files, diff_head_to_index)

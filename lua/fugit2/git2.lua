@@ -1664,6 +1664,56 @@ function Diff:patches(sort_case_sensitive)
   return patches, err
 end
 
+-- Transform a diff marking file renames, copies, etc.
+---@param rename_threshold number?
+---@return GIT_ERROR
+function Diff:find_similar(rename_threshold)
+  local find_opts = libgit2.git_diff_find_options(libgit2.GIT_DIFF_FIND_OPTIONS_INIT)
+  if rename_threshold then
+    find_opts[0].rename_threshold = rename_threshold
+  end
+
+  local err = libgit2.C.git_diff_find_similar(self.diff, find_opts)
+  return err
+end
+
+-- Gets git status from a diff, used by inmemory diff view.
+---@param head_to_index boolean whether this diff is head_to_index or index_to_workdir
+---@return GitStatusItem[]?
+---@return GIT_ERROR
+function Diff:status(head_to_index)
+  local num_deltas = tonumber(libgit2.C.git_diff_num_deltas(self.diff)) or 0
+  local status = table_new(num_deltas, 0)
+  local err = 0
+
+  for i = 0, num_deltas - 1 do
+    local delta = libgit2.C.git_diff_get_delta(self.diff, i)
+    ---@type GitStatusItem
+    local status_item = {
+      path = ffi.string(delta[0].old_file.path),
+      worktree_status = libgit2.GIT_DELTA.UNMODIFIED,
+      index_status = libgit2.GIT_DELTA.UNMODIFIED,
+      renamed = false,
+    }
+
+    if head_to_index then
+      status_item.index_status = delta[0].status
+    else
+      status_item.worktree_status = delta[0].status
+    end
+
+    if bit.band(delta[0].status, libgit2.GIT_DELTA.RENAMED) ~= 0
+      or bit.band(delta[0].status, libgit2.GIT_DELTA.COPIED) ~= 0 then
+      status_item.renamed = true
+      status_item.new_path = ffi.string(delta[0].new_file.path)
+    end
+
+    table.insert(status, status_item)
+  end
+
+  return status, err
+end
+
 -- ===================
 -- | Patch functions |
 -- ===================
@@ -3095,7 +3145,7 @@ local function git_status_list_to_items(git_status_list)
   return status_list
 end
 
--- Reads the status of the repository and returns a dictionary.
+-- Reads the status of the repository and returns a dictionary
 -- with file paths as keys and status flags as values.
 ---@return GitStatusItem[]? status_result git status result.
 ---@return integer return_code Return code.

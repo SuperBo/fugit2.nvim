@@ -1094,6 +1094,15 @@ M.GIT_SORT = {
   REVERSE = 4, -- 1 << 2, Iterate through the repository contents in reverse order.
 }
 
+---@enum GIT_DIFF_FLAG
+M.GIT_DIFF_FLAG = {
+  BINARY = 1, -- file(s) treated as binary data
+	NOT_BINARY = 2, -- file(s) treated as text data
+	VALID_ID = 4, -- `id` value is known correct
+	EXISTS = 8, -- file exists at this side of the delta
+	VALID_SIZE = 16, -- file size value is known correct
+}
+
 ---@enum GIT_STATUS
 M.GIT_STATUS = {
   CURRENT = 0,
@@ -1355,10 +1364,10 @@ M.GIT_CHECKOUT = {
 ---@enum GIT_MERGE
 M.GIT_MERGE = {
   FIND_RENAMES = 1, --(1 << 0): Detect renames that occur between the common ancestor and the "ours"
-  FAIL_ON_CONFLICT = POW[1], --(1 << 1): If a conflict occurs, exit immediately
-  SKIP_REUC = POW[2], --(1 << 2): Do not write the REUC extension on the generated index
-  NO_RECURSIVE = POW[3], --(1 << 3): This flag provides a similar merge base to `git-merge-resolve`.
-  VIRTUAL_BASE = POW[4], --(1 << 4): Treat this merge as if it is to produce the virtual base of recursive.
+  FAIL_ON_CONFLICT = 2, --(1 << 1): If a conflict occurs, exit immediately
+  SKIP_REUC = 4, --(1 << 2): Do not write the REUC extension on the generated index
+  NO_RECURSIVE = 8, --(1 << 3): This flag provides a similar merge base to `git-merge-resolve`.
+  VIRTUAL_BASE = 16, --(1 << 4): Treat this merge as if it is to produce the virtual base of recursive.
 }
 
 -- Inits helper
