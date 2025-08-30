@@ -3571,7 +3571,7 @@ end
 ---@return GitDiff?
 ---@return GIT_ERROR
 function Repository:diff_index_to_workdir(index, paths, reverse, context_lines)
-  return self:diff_helper(true, true, index, paths, reverse, context_lines)
+  return self:diff_helper(true, true, nil, index, paths, reverse, context_lines)
 end
 
 -- Gets diff from head to index
@@ -3582,29 +3582,64 @@ end
 ---@return GitDiff?
 ---@return GIT_ERROR
 function Repository:diff_head_to_index(index, paths, reverse, context_lines)
-  return self:diff_helper(false, true, index, paths, reverse, context_lines)
+  local head_tree, err = self:head_tree()
+  -- if there is no HEAD, that's okay - we'll make an empty iterator
+  if err ~= 0 and err ~= libgit2.GIT_ERROR.GIT_ENOTFOUND and err ~= libgit2.GIT_ERROR.GIT_EUNBORNBRANCH then
+    return nil, err
+  end
+
+  return self:diff_helper(false, true, head_tree, index, paths, reverse, context_lines)
 end
 
 -- Gets diff from head to workdir
+---@param paths string[]? Git paths, can be null
+---@param reverse? boolean whether to reverse the diff
+---@param context_lines integer? number of context lines
+---@return GitDiff?
+---@return GIT_ERROR
+function Repository:diff_head_to_workdir(paths, reverse, context_lines)
+  local head_tree, err = self:head_tree()
+  -- if there is no HEAD, that's okay - we'll make an empty iterator
+  if err ~= 0 and err ~= libgit2.GIT_ERROR.GIT_ENOTFOUND and err ~= libgit2.GIT_ERROR.GIT_EUNBORNBRANCH then
+    return nil, err
+  end
+
+  return self:diff_helper(true, false, head_tree, nil, paths, reverse, context_lines)
+end
+
+-- Gets diff between a tree and repository index.
+---@param tree GitTree? A git_tree object to diff from, or NULL for empty tree.
 ---@param index GitIndex? Repository index, can be null
 ---@param paths string[]? Git paths, can be null
 ---@param reverse? boolean whether to reverse the diff
 ---@param context_lines integer? number of context lines
 ---@return GitDiff?
 ---@return GIT_ERROR
-function Repository:diff_head_to_workdir(index, paths, reverse, context_lines)
-  return self:diff_helper(true, false, index, paths, reverse, context_lines)
+function Repository:diff_tree_to_index(tree, index, paths, reverse, context_lines)
+  return self:diff_helper(false, true, tree, index, paths, reverse, context_lines)
+end
+
+-- Gets diff between a tree and workdir.
+---@param tree GitTree? A git_tree object to diff from, or NULL for empty tree.
+---@param paths string[]? Git paths, can be null
+---@param reverse? boolean whether to reverse the diff
+---@param context_lines integer? number of context lines
+---@return GitDiff?
+---@return GIT_ERROR
+function Repository:diff_tree_to_workdir(tree, paths, reverse, context_lines)
+  return self:diff_helper(true, false, tree, nil, paths, reverse, context_lines)
 end
 
 ---@param include_workdir boolean Whether to do include workd_dir in diff target
 ---@param include_index boolean Wheter to include index in diff target
+---@param tree GitTree? A git_tree object to diff from, or NULL for empty tree
 ---@param index GitIndex? Repository index, can be null
 ---@param paths string[]? Git paths, can be null
 ---@param reverse boolean? Reverse diff
 ---@param context_lines integer? number of context lines
 ---@return GitDiff?
 ---@return GIT_ERROR
-function Repository:diff_helper(include_workdir, include_index, index, paths, reverse, context_lines)
+function Repository:diff_helper(include_workdir, include_index, tree, index, paths, reverse, context_lines)
   local c_paths, err
   local opts = libgit2.git_diff_options(libgit2.GIT_DIFF_OPTIONS_INIT)
   local find_opts = libgit2.git_diff_find_options(libgit2.GIT_DIFF_FIND_OPTIONS_INIT)
@@ -3631,27 +3666,14 @@ function Repository:diff_helper(include_workdir, include_index, index, paths, re
     -- diff workdir to index
     err = libgit2.C.git_diff_index_to_workdir(diff, self.repo, index and index.index or nil, opts)
   elseif include_workdir or include_index then
-    -- diff workd_dir to head or index to head
-
-    local head, head_tree
-    head, err = self:head()
-    -- if there is no HEAD, that's okay - we'll make an empty iterator
-    if err ~= 0 and err ~= libgit2.GIT_ERROR.GIT_ENOTFOUND and err ~= libgit2.GIT_ERROR.GIT_EUNBORNBRANCH then
-      return nil, err
-    end
-    if head then
-      head_tree, err = head:peel(libgit2.GIT_OBJECT.TREE)
-      if err ~= 0 then
-        return nil, err
-      end
-    end
+    -- diff workd_dir to tree (head) or index to tree (head)
 
     if include_index then
       -- diff index to head
       err = libgit2.C.git_diff_tree_to_index(
         diff,
         self.repo,
-        head_tree and ffi.cast(libgit2.git_tree_pointer, head_tree.obj) or nil,
+        tree and tree.tree or nil,
         index and index.index or nil,
         opts
       )
@@ -3660,7 +3682,7 @@ function Repository:diff_helper(include_workdir, include_index, index, paths, re
       err = libgit2.C.git_diff_tree_to_workdir(
         diff,
         self.repo,
-        head_tree and ffi.cast(libgit2.git_tree_pointer, head_tree.obj) or nil,
+        tree and tree.tree or nil,
         opts
       )
     end
