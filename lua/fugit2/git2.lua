@@ -71,6 +71,12 @@ end
 -- | Class definitions |
 -- =====================
 
+---@class GitError
+---@field message string The error message for the last error.
+---@field class integer The category of the last error.
+local Error = {}
+Error.__index = Error
+
 ---@class GitConfig
 ---@field config ffi.cdata* libgit2 struct git_config*
 local Config = {}
@@ -228,6 +234,29 @@ Rebase.__index = Rebase
 ---@field operation ffi.cdata* libgit2 git_rebase_operation pointer
 local RebaseOperation = {}
 RebaseOperation.__index = RebaseOperation
+
+-- =======================
+-- | Git error functions |
+-- =======================
+
+-- Returns the last git_error object that was generated for the current thread.
+---@return GitError? err git error object
+function Error.last()
+  local last_err = libgit2.C.git_error_last()
+  if last_err ~= nil then
+    return {
+      message = ffi.string(last_err[0].message),
+      class = tonumber(last_err[0].klass)
+    }
+  else
+    return nil
+  end
+end
+
+-- Clears the last library error that occurred for this thread.
+function Error.clear()
+  libgit2.C.git_error_clear()
+end
 
 -- ========================
 -- | Git config functions |
@@ -1071,7 +1100,7 @@ end
 ---Recursively peel reference until object of the specified type is found.
 ---@param type GIT_OBJECT
 ---@return GitObject?
----@return integer Git Error code
+---@return integer err Git Error code
 function Reference:peel(type)
   local c_object = libgit2.git_object_double_pointer()
 
@@ -4125,6 +4154,7 @@ end
 ---@class Git2Module
 local M = {}
 
+M.Error = Error
 M.Config = Config
 M.Diff = Diff
 M.IndexEntry = IndexEntry
@@ -4145,6 +4175,8 @@ M.GIT_REBASE_OPERATION = libgit2.GIT_REBASE_OPERATION
 M.GIT_REFERENCE = libgit2.GIT_REFERENCE
 M.GIT_REFERENCE_NAMESPACE = GIT_REFERENCE_NAMESPACE
 
+M.error_last = Error.last
+M.error_clear = Error.clear
 M.head = Repository.head
 M.init_blame_options = init_blame_options
 M.message_prettify = message_prettify

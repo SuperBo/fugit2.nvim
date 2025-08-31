@@ -690,6 +690,17 @@ function M.get_hunk(offsets, cursor_row)
   return #offsets, offsets[#offsets]
 end
 
+-- ===================
+-- | Event functions |
+-- ===================
+
+-- Detach to avoid conflict with vim-ufo
+function M.ufo_detach()
+  if vim.fn.exists ":UfoDetach" > 0 then
+    vim.cmd "UfoDetach"
+  end
+end
+
 -- =================
 -- | NUI constants |
 -- =================

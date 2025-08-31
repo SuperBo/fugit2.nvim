@@ -33,6 +33,11 @@ ffi.cdef [[
   typedef struct git_tree git_tree;
   typedef struct git_tree_entry git_tree_entry;
 
+  typedef struct git_error {
+    char *message;
+    int klass;
+  } git_error;
+
   typedef struct git_str {
 	  char *ptr;
 	  size_t asize;
@@ -369,6 +374,7 @@ ffi.cdef [[
   void git_error_clear();
   void git_error_set(int error_class, const char *fmt);
   int git_error_set_str(int error_class, const char *string);
+  const git_error *git_error_last();
 
   int git_blame_options_init(git_blame_options *opts, unsigned int version);
   void git_blame_free(git_blame *blame);
@@ -586,6 +592,7 @@ ffi.cdef [[
   int git_index_remove_bypath(git_index *index, const char *path);
   int git_index_remove_directory(git_index *index, const char *dir, int stage);
   size_t git_index_entrycount(const git_index *index);
+  int git_index_entry_stage(const git_index_entry *entry);
   int git_index_has_conflicts(const git_index *index);
   int git_index_conflict_get(const git_index_entry **ancestor_out, const git_index_entry **our_out, const git_index_entry **their_out, git_index *index, const char *path);
   const git_index_entry * git_index_get_bypath(git_index *index, const char *path, int stage);
