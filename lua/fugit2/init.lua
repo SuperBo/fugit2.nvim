@@ -20,7 +20,7 @@ M.setup = function(args)
   local cfg = config.merge(args)
 
   -- setup C Library
-  require("fugit2.libgit2").setup_lib(cfg.libgit2_path)
+  require("fugit2.core.libgit2").setup_lib(cfg.libgit2_path)
   require("fugit2.core.gpgme").setup_lib(cfg.gpgme_path)
 
   require("fugit2.view.colors").set_hl(0, cfg.colorscheme)
@@ -43,7 +43,7 @@ local function open_repository(dir)
   local repo = repos[cwd]
 
   if not repo then
-    local git2 = require "fugit2.git2"
+    local git2 = require "fugit2.core.git2"
 
     local err
     repo, err = git2.Repository.open(cwd, true)

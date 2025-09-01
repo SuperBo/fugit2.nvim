@@ -8,14 +8,14 @@ local Path = require "plenary.path"
 local async = require "plenary.async"
 local event = require("nui.utils.autocmd").event
 local plenary_filetype = require "plenary.filetype"
-local utils = require "lua.fugit2.utils"
+local utils = require "fugit2.utils"
 
 local GitStatus = require "fugit2.view.git_status"
 local GitStatusDiffBase = require "fugit2.view.git_base_view"
 local SourceTree = require "fugit2.view.components.source_tree_view"
 local TreeBase = require "fugit2.view.components.base_tree_view"
 local UI = require "fugit2.view.components.menus"
-local git2 = require "fugit2.git2"
+local git2 = require "fugit2.core.git2"
 local notifier = require "fugit2.notifier"
 
 local GIT_OID_LENGTH = 8

@@ -3,8 +3,8 @@
 ---SQUASH AND FIXUP
 
 local DynamicArray = require "fugit2.util.dynamic_array"
-local git2 = require "fugit2.git2"
-local libgit2 = require "fugit2.libgit2"
+local git2 = require "fugit2.core.git2"
+local libgit2 = require "fugit2.core.libgit2"
 
 ---@module "fugit2.core.git_rebase"
 local M = {}

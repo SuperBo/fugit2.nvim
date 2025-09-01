@@ -1,5 +1,5 @@
 local ffi = require "ffi"
-local libgit2 = require "fugit2.libgit2"
+local libgit2 = require "fugit2.core.libgit2"
 local stat = require "fugit2.core.stat"
 local table_new = require "table.new"
 local uv = vim.uv or vim.loop
@@ -4151,7 +4151,7 @@ function Repository:blame_file_async(path, opts, callback)
   end
 
   local work_fn = function(lib, repo_ptr, p, opts_ptr)
-    local lg2 = require "fugit2.libgit2"
+    local lg2 = require "fugit2.core.libgit2"
     lg2.setup_lib(lib)
     local ffi_ = require "ffi"
 
@@ -4194,7 +4194,7 @@ function Repository:status_async(callback)
   ---@return integer?
   ---@return GIT_ERROR
   local function new_git_status_list(lib, repo_ptr, flags)
-    local lg2 = require "fugit2.libgit2"
+    local lg2 = require "fugit2.core.libgit2"
     lg2.setup_lib(lib)
     local ffi_ = require "ffi"
 

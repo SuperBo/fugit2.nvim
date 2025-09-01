@@ -3,7 +3,6 @@
 local uv = vim.uv or vim.loop
 local PlenaryJob = require "plenary.job"
 
-local git2 = require "fugit2.git2"
 local gpgme = require "fugit2.core.gpgme"
 local utils = require "fugit2.utils"
 

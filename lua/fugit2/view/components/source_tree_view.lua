@@ -10,7 +10,7 @@ local plenary_filetype = require "plenary.filetype"
 local strings = require "plenary.strings"
 
 local TreeBase = require "fugit2.view.components.base_tree_view"
-local git2 = require "fugit2.git2"
+local git2 = require "fugit2.core.git2"
 local notifier = require "fugit2.notifier"
 local utils = require "fugit2.utils"
 
