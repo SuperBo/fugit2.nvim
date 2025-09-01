@@ -108,7 +108,6 @@ ffi.cdef [[
     void (*free)(struct git_config_entry *entry);
   } git_config_entry;
 
-
   typedef struct git_diff_hunk {
     int    old_start;
     int    old_lines;
@@ -343,6 +342,12 @@ ffi.cdef [[
     uint32_t nanoseconds;
   } git_index_time;
 
+  typedef struct git_index_reuc_entry {
+    uint32_t mode[3];
+	  git_oid oid[3];
+	  char *path;
+  } git_index_reuc_entry;
+
   typedef struct git_index_entry {
     git_index_time ctime;
     git_index_time mtime;
@@ -385,10 +390,11 @@ ffi.cdef [[
   uint32_t git_blame_get_hunk_count(git_blame *blame);
 
   int git_blob_lookup(git_blob **blob, git_repository *repo, const git_oid *id);
-  const void * git_blob_rawcontent(const git_blob *blob);
   int git_blob_is_binary(const git_blob *blob);
   git_object_size_t git_blob_rawsize(const git_blob *blob);
   const void * git_blob_rawcontent(const git_blob *blob);
+  const git_oid *git_blob_id(const git_blob *blob);
+  int git_blob_create_from_buffer(git_oid *id, git_repository *repo, const void *buffer, size_t len);
   void git_blob_free(git_blob *blob);
 
   int git_checkout_head(git_repository *repo, const git_checkout_options *opts);
@@ -587,16 +593,23 @@ ffi.cdef [[
   int git_index_write_tree(git_oid *out, git_index *index);
   int git_index_write_tree_to(git_oid *out, git_index *index, git_repository *repo);
   const char * git_index_path(const git_index *index);
+  int git_index_add(git_index *index, const git_index_entry *source_entry);
   int git_index_add_from_buffer(git_index *index, const git_index_entry *entry, const void *buffer, size_t len);
   int git_index_add_bypath(git_index *index, const char *path);
   int git_index_remove_bypath(git_index *index, const char *path);
   int git_index_remove_directory(git_index *index, const char *dir, int stage);
   size_t git_index_entrycount(const git_index *index);
-  int git_index_entry_stage(const git_index_entry *entry);
   int git_index_has_conflicts(const git_index *index);
   int git_index_conflict_get(const git_index_entry **ancestor_out, const git_index_entry **our_out, const git_index_entry **their_out, git_index *index, const char *path);
   const git_index_entry * git_index_get_bypath(git_index *index, const char *path, int stage);
   int git_index_read_index(git_index *index, const git_index *new_index);
+
+  int git_index_entry_stage(const git_index_entry *entry);
+
+  int git_index_conflict_remove(git_index *index, const char *path);
+
+  const git_index_reuc_entry *git_index_reuc_get_bypath(git_index *index, const char *path);
+  int git_index_reuc_add(git_index *index, const char *path, int ancestor_mode, const git_oid *ancestor_id, int our_mode, const git_oid *our_id, int their_mode, const git_oid *their_id);
 
   int git_status_list_new(git_status_list **out, git_repository *repo, const git_status_options *opts);
   void git_status_list_free(git_status_list *statuslist);
@@ -857,14 +870,15 @@ M.git_index_pointer = ffi.typeof "git_index*"
 
 ---@type ffi.ctype* git_index_iterator**
 M.git_index_iterator_double_pointer = ffi.typeof "git_index_iterator*[1]"
----@type ffi.ctype* git_index_entry**
-M.git_index_entry_double_pointer = ffi.typeof "git_index_entry*[1]"
----@type ffi.ctype* git_index_entry pointer array
-M.git_index_entry_pointer_array = ffi.typeof "const git_index_entry*[?]"
----@type ffi.ctype* git_index_entry pointer
-M.git_index_entry_pointer = ffi.typeof "const git_index_entry*"
+
 ---@type ffi.ctype* git_index_entry[1]
 M.git_index_entry = ffi.typeof "git_index_entry[1]"
+---@type ffi.ctype* git_index_entry**
+M.git_index_entry_double_pointer = ffi.typeof "git_index_entry*[1]"
+---@type ffi.ctype* const git_index_entry pointer array
+M.const_git_index_entry_pointer_array = ffi.typeof "const git_index_entry*[?]"
+---@type ffi.ctype* const git_index_entry pointer
+M.const_git_index_entry_pointer = ffi.typeof "const git_index_entry*"
 
 ---@type ffi.ctype* struct git_branch_iterator *[1]
 M.git_branch_iterator_double_pointer = ffi.typeof "git_branch_iterator *[1]"
@@ -1104,10 +1118,10 @@ M.GIT_SORT = {
 ---@enum GIT_DIFF_FLAG
 M.GIT_DIFF_FLAG = {
   BINARY = 1, -- file(s) treated as binary data
-	NOT_BINARY = 2, -- file(s) treated as text data
-	VALID_ID = 4, -- `id` value is known correct
-	EXISTS = 8, -- file exists at this side of the delta
-	VALID_SIZE = 16, -- file size value is known correct
+  NOT_BINARY = 2, -- file(s) treated as text data
+  VALID_ID = 4, -- `id` value is known correct
+  EXISTS = 8, -- file exists at this side of the delta
+  VALID_SIZE = 16, -- file size value is known correct
 }
 
 ---@enum GIT_STATUS

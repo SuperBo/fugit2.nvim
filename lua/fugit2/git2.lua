@@ -169,6 +169,7 @@ Reference.__index = Reference
 
 ---@class GitIndexEntry
 ---@field entry ffi.cdata* libgit2 git_index_entry *
+---@field path string? companion path
 local IndexEntry = {}
 IndexEntry.__index = IndexEntry
 
@@ -246,7 +247,7 @@ function Error.last()
   if last_err ~= nil then
     return {
       message = ffi.string(last_err[0].message),
-      class = tonumber(last_err[0].klass)
+      class = tonumber(last_err[0].klass),
     }
   else
     return nil
@@ -276,7 +277,7 @@ end
 ---@return GitConfig?
 ---@return GIT_ERROR
 function Config.open_default()
-  local git_config = libgit2.git_config_double_pointer()
+  local git_config = libgit2.git_config_pointer()
 
   local err = libgit2.C.git_config_open_default(git_config)
   if err ~= 0 then
@@ -579,6 +580,20 @@ function Blob:content()
   local content = libgit2.C.git_blob_rawcontent(self.blob)
   local len = libgit2.C.git_blob_rawsize(self.blob)
   return ffi.string(content, len)
+end
+
+---Writes an in-memory buffer to the object database as a blob.
+---@param repo GitRepository
+---@param buffer string String buffer
+---@return GitObjectId? id id of the written blob
+---@return GIT_ERROR err git errorr code
+function Blob.from_buffer(repo, buffer)
+  local oid = libgit2.git_oid()
+  local err = libgit2.C.git_blob_create_from_buffer(oid, repo.repo, buffer, buffer:len())
+  if err ~= 0 then
+    return nil, err
+  end
+  return ObjectId.new(oid), 0
 end
 
 -- ============================
@@ -1356,9 +1371,29 @@ end
 ---@param git_index_entry ffi.cdata* libgit2.git_index_entry_pointer, don't own data
 ---@return GitIndexEntry
 function IndexEntry.borrow(git_index_entry)
-  local entry = { entry = libgit2.git_index_entry_pointer(git_index_entry) }
+  local entry = { entry = libgit2.const_git_index_entry_pointer(git_index_entry) }
   setmetatable(entry, IndexEntry)
   return entry
+end
+
+---@param git_index_entry ffi.cdata* libgit2.git_index_entry_pointer, don't own data
+---@param path string companion path
+---@return GitIndexEntry
+function IndexEntry.new(git_index_entry, path)
+  local entry = {
+    entry = git_index_entry,
+    path = path,
+  }
+  setmetatable(entry, IndexEntry)
+  return entry
+end
+
+---@param path string
+---@return GitIndexEntry
+function IndexEntry.from_path(path)
+  local git_index_entry = libgit2.git_index_entry()
+  git_index_entry[0].path = path
+  return IndexEntry.new(git_index_entry, path)
 end
 
 ---@return integer
@@ -1400,7 +1435,18 @@ function IndexEntry.from_stat(fs_stat, path, distrust)
   entry.file_size = fs_stat.size
   entry.path = path
 
-  return IndexEntry.borrow(git_index_entry)
+  return IndexEntry.new(git_index_entry, path)
+end
+
+---Copy git_index_entry to new git_index_entry
+---index_entry_dup
+---@return GitIndexEntry
+function IndexEntry:clone()
+  local path = ffi.string(self.entry[0].path)
+  local out = IndexEntry.from_path(path)
+  ffi.copy(out.entry, self.entry, ffi.sizeof "git_index_entry")
+  out.entry[0].path = path
+  return out
 end
 
 -- Whether the given index entry is a conflict.
@@ -1432,6 +1478,22 @@ end
 ---@return integer
 function IndexEntry:flags()
   return self.entry["flags"]
+end
+
+-- Stage number from a git index entry
+---@return GIT_INDEX_STAGE stage index entry stage number
+function IndexEntry:stage()
+  local stage = tonumber(libgit2.C.git_index_entry_stage(self.entry))
+  return stage
+end
+
+---Sets stage number, only work with owned IndexEntry
+---@param stage GIT_INDEX_STAGE
+function IndexEntry:set_stage(stage)
+  -- (E)->flags = ((E)->flags & ~GIT_INDEX_ENTRY_STAGEMASK) | (((S) & 0x03) << GIT_INDEX_ENTRY_STAGESHIFT)
+  local GIT_INDEX_ENTRY_STAGEMASK_REVERSE = bit.bnot(0x3000)
+  self.entry[0].flags =
+    bit.bor(bit.band(self.entry[0].flags, GIT_INDEX_ENTRY_STAGEMASK_REVERSE), bit.lshift(bit.band(stage, 0x03), 12))
 end
 
 -- ===================
@@ -1514,6 +1576,90 @@ function Index:add_from_buffer(entry, buffer)
   return libgit2.C.git_index_add_from_buffer(self.index, entry.entry, buffer, buffer:len())
 end
 
+---@param index ffi.cdata* git_index pointer
+---@param path string file path
+---@return GIT_ERROR err
+function index_conflict_to_reuc(index, path)
+  local conflict_entries = libgit2.const_git_index_entry_pointer_array(3)
+  local err =
+    libgit2.C.git_index_conflict_get(conflict_entries, conflict_entries + 1, conflict_entries + 2, index, path)
+  if err ~= 0 then
+    return err
+  end
+
+  local ancestor_oid, our_oid, their_oid
+  local id_offset = ffi.offsetof("git_index_entry", "id")
+
+  if conflict_entries[0] ~= nil then
+    ancestor_oid = ffi.cast(libgit2.char_pointer, conflict_entries) + id_offset
+    ancestor_oid = ffi.cast(libgit2.git_oid_pointer, ancestor_oid)
+  end
+
+  if conflict_entries[1] ~= nil then
+    our_oid = ffi.cast(libgit2.char_pointer, conflict_entries + 1) + id_offset
+    our_oid = ffi.cast(libgit2.git_oid_pointer, our_oid)
+  end
+
+  if conflict_entries[2] ~= nil then
+    their_oid = ffi.cast(libgit2.char_pointer, conflict_entries + 2) + id_offset
+    their_oid = ffi.cast(libgit2.git_oid_pointer, their_oid)
+  end
+
+  err = libgit2.C.git_index_reuc_add(
+    index,
+    path,
+    conflict_entries[0] ~= nil and conflict_entries[0].mode or 0,
+    ancestor_oid,
+    conflict_entries[1] ~= nil and conflict_entries[1].mode or 0,
+    our_oid,
+    conflict_entries[2] ~= nil and conflict_entries[2].mode or 0,
+    their_oid
+  )
+  if err ~= 0 then
+    return err
+  end
+
+  return libgit2.C.git_index_conflict_remove(index, path)
+end
+
+-- Add or update Adds or update an index entry from a buffer in memory,
+-- Custom for git_index in_memory
+---@param repo GitRepository git repo
+---@param source_entry GitIndexEntry git index entry
+---@param buffer string String buffer
+---@return GIT_ERROR err
+function Index:add_from_buffer_inmemory(repo, source_entry, buffer)
+  local buflen = buffer:len()
+
+  local blob, err = Blob.from_buffer(repo, buffer)
+  if err ~= 0 or blob == nil then
+    return err
+  end
+
+  local entry = source_entry:clone()
+  entry:set_stage(libgit2.GIT_INDEX_STAGE.NORMAL)
+  entry.entry[0].file_size = buflen
+  local entry_ptr = ffi.cast(libgit2.char_pointer, entry.entry)
+  local oid_ptr = ffi.cast(libgit2.git_oid_pointer, entry_ptr + ffi.offsetof("git_index_entry", "id"))
+  err = libgit2.C.git_oid_cpy(oid_ptr, blob.oid)
+  if err ~= 0 then
+    return err
+  end
+
+  err = libgit2.C.git_index_add(self.index, entry.entry)
+  if err ~= 0 then
+    return err
+  end
+
+  -- adding implies conflict was resolved, move conflict entries to REUC
+  err = index_conflict_to_reuc(self.index, entry.path)
+  if err ~= 0 and err ~= libgit2.GIT_ERROR.ENOTFOUND then
+    return err
+  end
+
+  return 0
+end
+
 -- Removes path from index.
 ---@param path string File path to be removed.
 ---@return GIT_ERROR
@@ -1568,14 +1714,14 @@ end
 ---@return GitIndexEntry? their side
 ---@return GIT_ERROR
 function Index:get_conflict(path)
-  local entries = libgit2.git_index_entry_pointer_array(3)
+  local entries = libgit2.const_git_index_entry_pointer_array(3)
 
   local err = libgit2.C.git_index_conflict_get(entries, entries + 1, entries + 2, self.index, path)
   if err ~= 0 then
     return nil, nil, nil, err
   end
 
-  local ancestor_entry = IndexEntry.borrow(entries[0])
+  local ancestor_entry = entries[0] ~= nil and IndexEntry.borrow(entries[0]) or nil
   local our_entry = IndexEntry.borrow(entries[1])
   local their_entry = IndexEntry.borrow(entries[2])
 
@@ -1731,8 +1877,10 @@ function Diff:status(head_to_index)
       status_item.worktree_status = delta[0].status
     end
 
-    if bit.band(delta[0].status, libgit2.GIT_DELTA.RENAMED) ~= 0
-      or bit.band(delta[0].status, libgit2.GIT_DELTA.COPIED) ~= 0 then
+    if
+      bit.band(delta[0].status, libgit2.GIT_DELTA.RENAMED) ~= 0
+      or bit.band(delta[0].status, libgit2.GIT_DELTA.COPIED) ~= 0
+    then
       status_item.renamed = true
       status_item.new_path = ffi.string(delta[0].new_file.path)
     end
@@ -3749,21 +3897,11 @@ function Repository:diff_helper(include_workdir, include_index, tree, index, pat
 
     if include_index then
       -- diff index to head
-      err = libgit2.C.git_diff_tree_to_index(
-        diff,
-        self.repo,
-        tree and tree.tree or nil,
-        index and index.index or nil,
-        opts
-      )
+      err =
+        libgit2.C.git_diff_tree_to_index(diff, self.repo, tree and tree.tree or nil, index and index.index or nil, opts)
     else
       -- diff workd_dir to head
-      err = libgit2.C.git_diff_tree_to_workdir(
-        diff,
-        self.repo,
-        tree and tree.tree or nil,
-        opts
-      )
+      err = libgit2.C.git_diff_tree_to_workdir(diff, self.repo, tree and tree.tree or nil, opts)
     end
   else
     return nil, 0
