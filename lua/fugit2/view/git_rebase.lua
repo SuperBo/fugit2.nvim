@@ -11,7 +11,7 @@ local event = require("nui.utils.autocmd").event
 local LogView = require "fugit2.view.components.commit_log_view"
 local Menu = require "fugit2.view.components.menus"
 
-local git2 = require "fugit2.git2"
+local git2 = require "fugit2.core.git2"
 local git_rebase_helper = require "fugit2.core.git_rebase_helper"
 local notifier = require "fugit2.notifier"
 local utils = require "fugit2.utils"

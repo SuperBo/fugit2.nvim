@@ -2,7 +2,7 @@
 
 local context = require "plenary.context_manager"
 local diff = require "fugit2.diff"
-local git2 = require "fugit2.git2"
+local git2 = require "fugit2.core.git2"
 
 ---@param path string
 ---@return string
@@ -364,7 +364,7 @@ describe("partial_patch_from_hunk", function()
 
   setup(function()
     local path = require("os").getenv "GIT2_DIR"
-    require("fugit2.libgit2").setup_lib(path and path .. "/lib/libgit2.so" or nil)
+    require("fugit2.core.libgit2").setup_lib(path and path .. "/lib/libgit2.so" or nil)
   end)
 
   it("creates partial patch", function()

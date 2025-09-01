@@ -1,7 +1,7 @@
 -- Helper module to parse git blame porcelain information
 
 local diff_utils = require "fugit2.diff"
-local git2 = require "fugit2.git2"
+local git2 = require "fugit2.core.git2"
 local pendulum = require "fugit2.core.pendulum"
 local utils = require "fugit2.utils"
 

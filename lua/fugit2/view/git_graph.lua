@@ -8,7 +8,7 @@ local iter = require "plenary.iterators"
 
 local BranchView = require "fugit2.view.components.branch_tree_view"
 local LogView = require "fugit2.view.components.commit_log_view"
-local git2 = require "fugit2.git2"
+local git2 = require "fugit2.core.git2"
 local notifier = require "fugit2.notifier"
 local utils = require "fugit2.utils"
 

@@ -1,7 +1,7 @@
 -- Test dynamic array module
 
 local DynamicArray = require "fugit2.util.dynamic_array"
-local libgit2 = require "fugit2.libgit2"
+local libgit2 = require "fugit2.core.libgit2"
 
 describe("DynamicArray", function()
   it("init array", function()

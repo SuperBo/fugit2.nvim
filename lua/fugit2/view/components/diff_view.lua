@@ -3,7 +3,7 @@
 local NuiPopup = require "nui.popup"
 local Object = require "nui.object"
 local event = require("nui.utils.autocmd").event
-local utils = require "lua.fugit2.utils"
+local utils = require "fugit2.utils"
 
 ---@class Fugit2DiffView Diff view panel, used in git status
 ---@field ns_id integer namespace id

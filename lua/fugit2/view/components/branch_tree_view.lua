@@ -6,7 +6,7 @@ local NuiText = require "nui.text"
 local NuiTree = require "nui.tree"
 local Object = require "nui.object"
 
-local git2 = require "fugit2.git2"
+local git2 = require "fugit2.core.git2"
 local utils = require "fugit2.utils"
 
 -- ===============
