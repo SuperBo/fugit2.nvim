@@ -2087,6 +2087,14 @@ function Rebase:__tostring()
   return str
 end
 
+---Gets the current rebase operation that is currently being applied.
+---@return GitRebaseOperation?
+function Rebase:current()
+  local idx = libgit2.C.git_rebase_operation_current(self.rebase)
+  local operation = libgit2.C.git_rebase_operation_byindex(self.rebase, idx)
+  return operation ~= nil and RebaseOperation.borrow(operation) or nil
+end
+
 ---Performs the next rebase operation and returns the information about it.
 ---@return GitRebaseOperation?
 ---@return GIT_ERROR

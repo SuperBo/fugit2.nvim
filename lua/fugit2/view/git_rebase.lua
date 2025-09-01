@@ -1,4 +1,4 @@
----Main UI for Git Rebasing]
+---Main UI for Git Rebasing
 ---Designated for in-memory rebasing with libgit2
 
 local NuiLayout = require "nui.layout"
@@ -6,6 +6,7 @@ local NuiLine = require "nui.line"
 local NuiPopup = require "nui.popup"
 local NuiText = require "nui.text"
 local Object = require "nui.object"
+local event = require("nui.utils.autocmd").event
 
 local LogView = require "fugit2.view.components.commit_log_view"
 local Menu = require "fugit2.view.components.menus"
@@ -187,6 +188,8 @@ function RebaseView:init(ns_id, repo, ref_config, revspec_config)
   self._git.rebase = rebase
   self._git.rebase_info = rebase_info
   self._git.rebase_finished = false
+  ---@type GIT_ERROR
+  self._git.rebase_error = 0
   ---@type Fugit2GitGraphCommitNode[]
   self._git.commits = {}
   ---@type FUGIT2_GIT_REBASE_OPERATION[]
@@ -536,6 +539,7 @@ function RebaseView:rebase_start()
   end
 
   git.current_index = #git.commits - 1 -- ignore base commit
+  git.last_commit_id = git.rebase_info.upstream
 
   -- remove mapping
   local commit_view = self.views.commits
@@ -554,6 +558,9 @@ function RebaseView:rebase_start()
     "gk",
     "<C-k>",
   })
+  commit_view:map("n", "<cr>", function()
+    self:rebase_continue()
+  end, { noremap = true, nowait = true })
 
   -- call rebase
   self:rebase_continue()
@@ -585,9 +592,31 @@ function RebaseView:rebase_continue()
         end
 
         commit_id = nil
+        commit_idx = commit_idx - 1
       end
     else
-      op, err = rebase:next()
+      if git.rebase_error == git2.GIT_ERROR.GIT_EUNMERGED then
+        -- previous iteration interupted by conflicts
+        -- check conflicts status
+        --@type GitIndex
+        local index
+        if git.inmemory then
+          index, _ = rebase:inmemory_index()
+        else
+          index, _ = self.repo:index()
+        end
+        if index and index:has_conflicts() then
+          op = nil
+          err = git.rebase_error
+        else
+          -- conflicts resolved
+          op = rebase:current()
+          git.rebase_error = 0
+        end
+      else
+        op, err = rebase:next()
+      end
+
       if op then
         local op_type = op:type()
         if op_type == git2.GIT_REBASE_OPERATION.REWORD then
@@ -606,19 +635,19 @@ function RebaseView:rebase_continue()
         end
         if commit_id then
           git.last_commit_id = commit_id
+          commit_idx = commit_idx - 1
         end
       end
     end
-
-    commit_idx = commit_idx - 1
   end
 
+  git.rebase_error = err
   git.current_index = commit_idx
 
   if err == git2.GIT_ERROR.GIT_ITEROVER then
     self:rebase_finish()
-  elseif err == git2.GIT_ERROR.GIT_ECONFLICT and commit_id then
-    self:rebase_has_conflicts(commit_idx, commit_id)
+  elseif err == git2.GIT_ERROR.GIT_EUNMERGED then
+    self:rebase_has_conflicts(commit_idx, git.last_commit_id)
   elseif op then
     notifier.error("Error when rebase " .. op:id():tostring(), err)
     self:rebase_abort()
@@ -675,11 +704,15 @@ end
 ---@param commit_idx integer git commit index at which rebase has conflicts
 ---@param oid GitObjectId current git rebase commit oid
 function RebaseView:rebase_has_conflicts(commit_idx, oid)
+  local is_inmemory = self._git.inmemory
+  local repo = self.repo
+  local rebase = self._git.rebase
+  local commits_view = self.views.commits
   local commits = self._git.commits
-  commits[commit_idx].pre_message = NuiText(" CONFLICT", "Fugit2Error")
 
-  self.views.commits:update(commits)
-  self.views.commits:render()
+  commits[commit_idx].pre_message = NuiText(" CONFLICT ", "Fugit2RebaseConflict")
+  commits_view:update(commits)
+  commits_view:render()
 
   -- Show confirm
   local resolve_confirm = Menu.Confirm(
@@ -688,18 +721,37 @@ function RebaseView:rebase_has_conflicts(commit_idx, oid)
       NuiText "Having conflicts, do you want to resolve it?",
     }
   )
+
+  local re_enter_after_git_diff = function()
+    ---@type GitIndex
+    local index
+    if is_inmemory then
+      index, _ = rebase:inmemory_index()
+    else
+      index, _ = repo:index()
+    end
+    if not index:has_conflicts() then
+      commits[commit_idx].pre_message = NuiText("󰦕 RESOLVED ", "Fugit2RebaseResolved")
+      commits_view:update(commits)
+      commits_view:render()
+    end
+  end
+
   resolve_confirm:on_yes(function()
     local GitDiff = require "fugit2.view.git_diff"
     local index, head
-    if self._git.inmemory then
-      index, _ = self._git.rebase:inmemory_index()
-      head, _ = self.repo:commit_lookup(oid)
+    if is_inmemory then
+      index, _ = rebase:inmemory_index()
+      head, _ = repo:commit_lookup(oid)
     else
-      index, _ = self.repo:index()
+      index, _ = repo:index()
     end
     if index then
       local git_diff = GitDiff(self.ns_id, self.repo, index, head)
       git_diff:mount()
+
+      -- attach re enter event
+      commits_view:on(event.BufEnter, re_enter_after_git_diff, { once = true })
     else
       notifier.error "Can't retrieve git index"
     end
