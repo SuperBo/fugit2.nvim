@@ -29,6 +29,7 @@ function GitStatusDiffBase:init(ns_id, repo, index)
   self._git = {
     path = repo:workdir(),
     index_updated = false,
+    index_inmemory = self.index:in_memory(),
   }
 end
 

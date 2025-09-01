@@ -9,9 +9,13 @@ end
 
 -- Notify error message
 ---@param msg string
----@parm err integer?
-function M.error(msg, err)
+---@parm err integer? error code
+---@param last_err GitError? last error
+function M.error(msg, err, last_err)
   local content = "[Fugit2] " .. msg
+  if last_err and last_err.message ~= "" then
+    content = content .. ": " .. last_err.message
+  end
   if err ~= nil and err ~= 0 then
     content = content .. string.format(".\nError code %d", err)
   end

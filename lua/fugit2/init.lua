@@ -54,7 +54,7 @@ local function open_repository(dir)
       if workdir then
         -- For normal repos and worktrees, use the working directory as cache key
         workdir = vim.fn.fnamemodify(workdir, ":p:h")
-        
+
         -- Cache for all paths that are within this working directory
         local cache_path = cwd
         while cache_path:len() >= workdir:len() and vim.startswith(cache_path, workdir) do

@@ -64,9 +64,7 @@ function PatchView:init(ns_id, title, title_color)
 
   self.popup:on(event.BufEnter, function()
     -- to avoid conflict with vim-ufo
-    if vim.fn.exists ":UfoDetach" > 0 then
-      vim.cmd "UfoDetach"
-    end
+    utils.ufo_detach()
     vim.api.nvim_win_set_option(self.popup.winid, "foldmethod", "expr")
     vim.api.nvim_win_set_option(self.popup.winid, "foldexpr", "Fugit2DiffFold(v:lnum)")
   end, { once = true })

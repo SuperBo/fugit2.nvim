@@ -1,4 +1,4 @@
----Main UI for Git Rebasing]
+---Main UI for Git Rebasing
 ---Designated for in-memory rebasing with libgit2
 
 local NuiLayout = require "nui.layout"
@@ -6,16 +6,21 @@ local NuiLine = require "nui.line"
 local NuiPopup = require "nui.popup"
 local NuiText = require "nui.text"
 local Object = require "nui.object"
+local event = require("nui.utils.autocmd").event
 
 local LogView = require "fugit2.view.components.commit_log_view"
-local StatusTreeView = require "fugit2.view.components.file_tree_view"
+local Menu = require "fugit2.view.components.menus"
 
 local git2 = require "fugit2.git2"
+local git_rebase_helper = require "fugit2.core.git_rebase_helper"
 local notifier = require "fugit2.notifier"
+local utils = require "fugit2.utils"
 
 -- ===========
 -- | Classes |
 -- ===========
+
+local GIT_OID_LENGTH = 8
 
 local SYMBOLS = {
   SQUASH_COMMIT = "󰛀",
@@ -28,92 +33,119 @@ local SYMBOLS = {
 ---@field rebase GitRebase
 local RebaseView = Object "Fugit2UIGitRebaseView"
 
----@enum Fugit2UIGitRebaseAction
-local RebaseAction = {
-  PICK = git2.GIT_REBASE_OPERATION.PICK,
-  REWORD = git2.GIT_REBASE_OPERATION.REWORD,
-  EDIT = git2.GIT_REBASE_OPERATION.EDIT,
-  SQUASH = git2.GIT_REBASE_OPERATION.SQUASH,
-  FIXUP = git2.GIT_REBASE_OPERATION.FIXUP,
-  EXEC = git2.GIT_REBASE_OPERATION.EXEC,
-  BASE = 7,
-  DROP = 8,
-  BREAK = 9,
-}
+local RebaseAction = git_rebase_helper.GIT_REBASE_OPERATION
+
+---@alias Fugit2UIGitRebaseMessage {old: string, new: string}
+
+---@class Fugit2UIGitRebaseInfo
+---@field branch GitObjectId
+---@field upstream GitObjectId
+---@field onto GitObjectId
+---@field onto_name string
 
 -- =================
 -- | GitRebaseView |
 -- =================
 
 ---@param repo GitRepository
+---@param branch GitAnnotatedCommit?
+---@param upstream GitAnnotatedCommit
+---@param onto GitAnnotatedCommit?
+---@return Fugit2UIGitRebaseInfo
+local function _init_rebase_info(repo, branch, upstream, onto)
+  local upstream_id = upstream:id()
+  local onto_name = git_rebase_helper.git_rebase_onto_name(upstream, onto)
+
+  if not branch then
+    -- get head as branch
+    local err
+    branch, err = repo:annotated_commit_from_revspec "HEAD"
+    if not branch then
+      error("[Fugit2] Failed to get HEAD commit, code " .. err)
+    end
+  end
+
+  return {
+    upstream = upstream_id,
+    branch = branch:id(),
+    onto = onto and onto:id() or upstream_id,
+    onto_name = onto_name,
+  }
+end
+
+---@param repo GitRepository
 ---@param branch GitReference rebase branch ref
 ---@param upstream GitReference rebase upstream ref
 ---@param onto GitReference rebase onto ref
 ---@return GitRebase?
+---@return Fugit2UIGitRebaseInfo?
 ---@return GIT_ERROR
 local function _init_rebase_ref(repo, branch, upstream, onto)
-  local branch_commit, upstream_commit, onto_commit, err
+  local rebase, info, branch_commit, upstream_commit, onto_commit, err
   branch_commit, err = repo:annotated_commit_from_ref(branch)
   if not branch_commit then
-    return nil, err
+    return nil, nil, err
   end
   upstream_commit, err = repo:annotated_commit_from_ref(upstream)
   if not upstream_commit then
-    return nil, err
+    return nil, nil, err
   end
   onto_commit, err = repo:annotated_commit_from_ref(onto)
   if not onto_commit then
-    return nil, err
+    return nil, nil, err
   end
 
-  local rebase
   rebase, err = repo:rebase_init(branch_commit, upstream_commit, onto_commit, {
     inmemory = true,
   })
   if err ~= 0 then
-    return nil, err
+    return nil, nil, err
   end
 
-  return rebase, 0
+  info = _init_rebase_info(repo, branch_commit, upstream_commit, onto_commit)
+
+  return rebase, info, 0
 end
 
 ---@param repo GitRepository
 ---@param branch string? rebase branch revspec
----@param upstream string? rebase upstream revspec
+---@param upstream string rebase upstream revspec
 ---@param onto string? rebase onto revspec
 ---@return GitRebase?
+---@return Fugit2UIGitRebaseInfo?
 ---@return GIT_ERROR
 local function _init_rebase_revspec(repo, branch, upstream, onto)
-  local branch_commit, upstream_commit, onto_commit, err
+  local rebase, info, branch_commit, upstream_commit, onto_commit, err
 
   if branch then
     branch_commit, err = repo:annotated_commit_from_revspec(branch)
     if not branch_commit then
-      return nil, err
+      return nil, nil, err
     end
   end
   if upstream then
     upstream_commit, err = repo:annotated_commit_from_revspec(upstream)
     if not upstream_commit then
-      return nil, err
+      return nil, nil, err
     end
   end
   if onto then
     onto_commit, err = repo:annotated_commit_from_revspec(onto)
     if not onto_commit then
-      return nil, err
+      return nil, nil, err
     end
   end
 
-  local rebase
   rebase, err = repo:rebase_init(branch_commit, upstream_commit, onto_commit, {
     inmemory = true,
   })
   if err ~= 0 then
-    return nil, err
+    return nil, nil, err
   end
 
-  return rebase, 0
+  info = _init_rebase_info(repo, branch_commit, upstream_commit, onto_commit)
+
+  return rebase, info, 0
 end
 
 ---@param ns_id integer
@@ -125,29 +157,53 @@ function RebaseView:init(ns_id, repo, ref_config, revspec_config)
   self.repo = repo
   self._git = {}
 
-  local rebase, err
+  local rebase, rebase_info, err
   if ref_config then
-    rebase, err = _init_rebase_ref(repo, ref_config.branch, ref_config.upstream, ref_config.onto)
+    rebase, rebase_info, err = _init_rebase_ref(repo, ref_config.branch, ref_config.upstream, ref_config.onto)
     self._git.inmemory = true
   elseif revspec_config then
-    rebase, err = _init_rebase_revspec(repo, revspec_config.branch, revspec_config.upstream, revspec_config.onto)
+    rebase, rebase_info, err =
+      _init_rebase_revspec(repo, revspec_config.branch, revspec_config.upstream, revspec_config.onto)
     self._git.inmemory = true
   else
     rebase, err = repo:rebase_open()
     self._git.inmemory = false
+
+    if rebase then
+      local onto = rebase:onto_id()
+      local branch = rebase:orig_head_id()
+      rebase_info = {
+        branch = branch,
+        onto = onto,
+        upstream = onto,
+        onto_name = rebase:onto_name(),
+      }
+    end
   end
 
   if not rebase then
-    error("[Fugit2] Failed to create init!" .. err)
+    error("[Fugit2] Failed to create libgit2 rebase, code: " .. err)
     return
   end
   self._git.rebase = rebase
+  self._git.rebase_info = rebase_info
+  self._git.rebase_finished = false
+  ---@type GIT_ERROR
+  self._git.rebase_error = 0
   ---@type Fugit2GitGraphCommitNode[]
   self._git.commits = {}
-  ---@type Fugit2UIGitRebaseAction[]
+  ---@type FUGIT2_GIT_REBASE_OPERATION[]
   self._git.actions = {}
   ---@type GitObjectId[]
   self._git.oids = {}
+  ---@type {[string]: Fugit2UIGitRebaseMessage}
+  self._git.messages = {}
+  ---@type string?
+  self._git.current_oid = nil
+  ---@type number
+  self._git.current_index = 1
+  ---@type GitObjectId?
+  self._git.last_commit_id = nil
 
   -- popup views
   self.views = {}
@@ -158,19 +214,14 @@ function RebaseView:init(ns_id, repo, ref_config, revspec_config)
     focusable = false,
     border = {
       style = "rounded",
-      padding = {
-        top = 0,
-        bottom = 0,
-        left = 2,
-        right = 2,
-      },
+      padding = utils.PX_2,
       text = {
         top = NuiText(" 󱖫 Rebase status ", "Fugit2FloatTitle"),
         top_align = "left",
       },
     },
     win_options = {
-      winhighlight = "Normal:Normal,FloatBorder:FloatBorder",
+      winhighlight = utils.WIN_HIGHLIGHT,
     },
     buf_options = {
       modifiable = false,
@@ -179,17 +230,24 @@ function RebaseView:init(ns_id, repo, ref_config, revspec_config)
       buftype = "nofile",
     },
   }
-  self.layout = NuiLayout(
-    {
-      relative = "editor",
-      position = "50%",
-      size = { width = 100, height = "60%" },
-    },
-    NuiLayout.Box({
+  self.views.input = self:_init_input_popup()
+
+  self.boxes = {
+    main = NuiLayout.Box({
       NuiLayout.Box(self.views.status, { size = 4 }),
       NuiLayout.Box(self.views.commits.popup, { grow = 1 }),
-    }, { dir = "col" })
-  )
+    }, { dir = "col" }),
+    input = NuiLayout.Box({
+      NuiLayout.Box(self.views.status, { size = 4 }),
+      NuiLayout.Box(self.views.input, { size = 5 }),
+      NuiLayout.Box(self.views.commits.popup, { grow = 1 }),
+    }, { dir = "col" }),
+  }
+  self.layout = NuiLayout({
+    relative = "editor",
+    position = "50%",
+    size = { width = 100, height = "60%" },
+  }, self.boxes.main)
 
   self._states = {
     help_line = NuiLine {
@@ -206,7 +264,7 @@ function RebaseView:init(ns_id, repo, ref_config, revspec_config)
   self:render()
 end
 
----@param action Fugit2UIGitRebaseAction
+---@param action FUGIT2_GIT_REBASE_OPERATION
 ---@return NuiText pre_msg text of pre message
 ---@return string? symbol commit symbol override
 local function rebase_action_text(action)
@@ -230,22 +288,127 @@ local function rebase_action_text(action)
   return NuiText "󰜉 NONE  "
 end
 
----Updates buffer contents based on status of libgit2 git_rebase
-function RebaseView:update()
-  self._states.status_line = NuiLine {
-    NuiText(tostring(self._git.rebase)),
+---@return NuiPopup
+function RebaseView:_init_input_popup()
+  local input_popup = NuiPopup {
+    ns_id = self.ns_id,
+    enter = true,
+    focusable = true,
+    border = {
+      style = "rounded",
+      padding = utils.PX_1,
+      text = {
+        top = NuiText(" Reword commit ", "Fugit2MessageHeading"),
+        top_align = "left",
+        bottom = NuiText("[Ctrl-c][󱊷 ][q]uit, [Ctrl 󰌑 ][󰌑 ]", "FloatFooter"),
+        bottom_align = "right",
+      },
+    },
+    win_options = {
+      winhighlight = utils.WIN_HIGHLIGHT,
+    },
+    buf_options = {
+      modifiable = true,
+      filetype = "gitcommit",
+    },
   }
 
+  local opts = { noremap = true, nowait = true }
+
+  -- keep current reword
+  local exit_fn = function()
+    self.views.commits:focus()
+    self.layout:update(self.boxes.main)
+  end
+
+  -- update new message
+  local enter_fn = function()
+    local lines = vim.api.nvim_buf_get_lines(input_popup.bufnr, 0, -1, true)
+    local message = vim.trim(table.concat(lines, "\n"))
+
+    local messages = self._git.messages
+    local oid = self._git.current_oid
+    if not oid then
+      notifier.error "Current commit is not set"
+      return
+    end
+
+    local _, commit_idx = self.views.commits:get_commit()
+    if not commit_idx then
+      notifier.error "Can't retrieve current commit!"
+      return
+    end
+
+    self._git.actions[commit_idx] = RebaseAction.REWORD
+    local commit = self._git.commits[commit_idx]
+    commit.pre_message, commit.symbol = rebase_action_text(RebaseAction.REWORD)
+    messages[commit_idx].new = message
+    commit.message = utils.lines_head(message)
+
+    self.views.commits:update(self._git.commits)
+    self.views.commits:render()
+
+    self.views.commits:focus()
+    self.layout:update(self.boxes.main)
+  end
+
+  input_popup:map("n", { "<esc>", "q" }, exit_fn, opts)
+  input_popup:map("i", "<C-c>", function()
+    vim.cmd.stopinsert()
+    exit_fn()
+  end, opts)
+  input_popup:map("n", "<cr>", enter_fn, opts)
+  input_popup:map("i", "<C-cr>", function()
+    vim.cmd.stopinsert()
+    enter_fn()
+  end, opts)
+
+  return input_popup
+end
+
+---Updates buffer contents based on status of libgit2 git_rebase
+function RebaseView:update()
+  local git = self._git
+  if git.inmemory then
+    self._states.status_line = NuiLine {
+      NuiText(
+        string.format(
+          "INMEMORY Rebase %s..%s onto %s",
+          git.rebase_info.branch:tostring(8),
+          git.rebase_info.upstream:tostring(8),
+          git.rebase_info.onto_name
+        )
+      ),
+    }
+  else
+    self._states.status_line = NuiLine {
+      NuiText(tostring(self._git.rebase)),
+    }
+  end
+
   self._git.signature, _ = self.repo:signature_default()
+  if not self._git.signature then
+    error "[Fugit2] Can't get repo default author!"
+  end
 
   ---@type Fugit2GitGraphCommitNode[]
-  local commits = self._git.commits
-  local actions = self._git.actions
-  local oids = self._git.oids
-  local n_commits = self._git.rebase:noperations()
+  local commits = git.commits
+  local actions = git.actions
+  local messages = git.messages
+  local oids = git.oids
+  local n_commits = git.rebase:noperations()
+  local rebase = git.rebase
+  local current_i = tonumber(git.rebase:operation_current())
+  if current_i >= n_commits then
+    current_i = 0
+  end
+  local n_remain_commits = git.rebase_finished and 0 or n_commits - current_i
 
-  for i = n_commits - 1, 0, -1 do
-    local op = self._git.rebase:operation_byindex(i)
+  utils.list_clear(actions)
+
+  -- curent rebase node
+  for i = n_commits - 1, current_i, -1 do
+    local op = rebase:operation_byindex(i)
     if not op then
       break
     end
@@ -253,42 +416,110 @@ function RebaseView:update()
     local op_id, op_type = op:id(), op:type()
 
     local git_commit, _ = self.repo:commit_lookup(op_id)
-    local message, author = "", ""
+    local summary, author, time = "", "", "", {}
     if git_commit then
       author = git_commit:author()
-      message = git_commit:message()
+      summary = git_commit:summary()
+      time = git_commit:time()
+      messages[n_remain_commits - i] = { old = git_commit:message() }
     end
 
     local rebase_text, symbol = rebase_action_text(op_type)
 
-    local node = LogView.CommitNode(op_id:tostring(16), message, author, {}, {}, symbol, rebase_text)
-    commits[n_commits - i] = node
-    actions[n_commits - i] = op_type
-    oids[n_commits - i] = op_id:clone()
+    local node = LogView.CommitNode(op_id:tostring(GIT_OID_LENGTH), summary, author, time, {}, {}, symbol, rebase_text)
+    commits[n_remain_commits - i] = node
+    actions[n_remain_commits - i] = op_type
+    oids[n_remain_commits - i] = op_id:clone()
   end
-  for i = 1, #commits - 1 do
-    commits[i].parents[1] = commits[i + 1].oid
+
+  local i = n_remain_commits + 1
+  -- finished rebase nodes
+  if git.last_commit_id then
+    -- walk through commits
+    local err
+    ---@type GitRevisionWalker?
+    local walker = git.walker
+    if not walker then
+      walker, err = self.repo:walker()
+      if walker then
+        git.walker = walker
+      end
+    end
+
+    if not walker then
+      error("[Fugit2] Failed to create walker! " .. err)
+    end
+
+    walker:reset()
+    walker:push(git.last_commit_id)
+    walker:hide(git.rebase_info.upstream)
+
+    for id, commit in walker:iter() do
+      local node = LogView.CommitNode(
+        id:tostring(GIT_OID_LENGTH),
+        commit:summary(),
+        commit:author(),
+        commit:time(),
+        {},
+        {},
+        nil
+      )
+      commits[i] = node
+      messages[i] = { old = commit:message() }
+      i = i + 1
+    end
+  end
+
+  -- draw onto node
+  local onto_commit, _ = self.repo:commit_lookup(git.rebase_info.onto)
+  if onto_commit then
+    local node = LogView.CommitNode(
+      onto_commit:id():tostring(GIT_OID_LENGTH),
+      onto_commit:summary(),
+      onto_commit:author(),
+      onto_commit:time(),
+      {},
+      {},
+      nil
+    )
+    commits[i] = node
+    i = i + 1
+  end
+
+  for j = i + 1, #commits do
+    commits[j] = nil
+  end
+
+  for j = 1, #commits - 1 do
+    commits[j].parents[1] = commits[j + 1].oid
   end
 
   self.views.commits:update(commits, {})
 end
 
 function RebaseView:render()
-  self._states.status_line:render(self.views.status.bufnr, self.ns_id, 1)
-  self._states.help_line:render(self.views.status.bufnr, self.ns_id, 2)
+  local status_bufnr = self.views.status.bufnr
+  vim.api.nvim_buf_set_option(status_bufnr, "readonly", false)
+  vim.api.nvim_buf_set_option(status_bufnr, "modifiable", true)
+  self._states.status_line:render(status_bufnr, self.ns_id, 1)
+  self._states.help_line:render(status_bufnr, self.ns_id, 2)
+  vim.api.nvim_buf_set_option(status_bufnr, "readonly", true)
+  vim.api.nvim_buf_set_option(status_bufnr, "modifiable", false)
 
   self.views.commits:render()
 end
 
----Starts rebase process with given user actions
+-- Starts rebase process with user actions
 function RebaseView:rebase_start()
-  local actions = self._git.actions
-  local oids = self._git.oids
+  local git = self._git
+  local actions = git.actions
+  local oids = git.oids
+  local rebase = git.rebase
 
   -- change git2 rebase action and order
-  local n_commits = self._git.rebase:noperations()
+  local n_commits = rebase:noperations()
   for i = 0, n_commits - 1 do
-    local op = self._git.rebase:operation_byindex(i)
+    local op = rebase:operation_byindex(i)
     if not op then
       break
     end
@@ -307,80 +538,460 @@ function RebaseView:rebase_start()
     end
   end
 
-  -- call initial next
-  self:rebase_next()
+  git.current_index = #git.commits - 1 -- ignore base commit
+  git.last_commit_id = git.rebase_info.upstream
+
+  -- remove mapping
+  local commit_view = self.views.commits
+  commit_view:unmap("n", {
+    "r",
+    "w",
+    "x",
+    "d",
+    "b",
+    "e",
+    "s",
+    "f",
+    "p",
+    "gj",
+    "<C-j>",
+    "gk",
+    "<C-k>",
+  })
+  commit_view:map("n", "<cr>", function()
+    self:rebase_continue()
+  end, { noremap = true, nowait = true })
+
+  -- call rebase
+  self:rebase_continue()
 end
 
----Makes the next rebase operation
-function RebaseView:rebase_next()
-  local rebase = self._git.rebase
-  local signature = self._git.signature
+-- Continues a paused rebase action
+function RebaseView:rebase_continue()
+  local git = self._git
+  local actions = git.actions
+  local commits = git.commits
+  local rebase = git.rebase
+  local signature = git.signature
 
-  local commit
-  local op, err = rebase:next()
-  if err == 0 then
-    _, err = rebase:commit(nil, signature, nil)
-    self:rebase_next()
-  elseif err == git2.GIT_ERROR.GIT_ECONFLICT then
-    -- conflict
-    print(err)
-  elseif err == git2.GIT_ERROR.GIT_ITEROVER then
-    -- end of iter
-    print "End"
-  else
-    print(err)
+  local err = 0
+  local commit_idx = git.current_index
+  local op, message, commit_id
+  while err == 0 do
+    local action = actions[commit_idx]
+    if action == RebaseAction.DROP then
+      op, err = rebase:skip()
+      if op then
+        table.remove(commits, commit_idx)
+        table.remove(actions, commit_idx)
+
+        if commit_idx > #commits then
+          utils.list_clear(commits[#commits].parents)
+        elseif commit_idx > 1 then
+          commits[commit_idx - 1].parents[1] = commits[commit_idx].oid
+        end
+
+        commit_id = nil
+        commit_idx = commit_idx - 1
+      end
+    else
+      if git.rebase_error == git2.GIT_ERROR.GIT_EUNMERGED then
+        -- previous iteration interupted by conflicts
+        -- check conflicts status
+        --@type GitIndex
+        local index
+        if git.inmemory then
+          index, _ = rebase:inmemory_index()
+        else
+          index, _ = self.repo:index()
+        end
+        if index and index:has_conflicts() then
+          op = nil
+          err = git.rebase_error
+        else
+          -- conflicts resolved
+          op = rebase:current()
+          git.rebase_error = 0
+        end
+      else
+        op, err = rebase:next()
+      end
+
+      if op then
+        local op_type = op:type()
+        if op_type == git2.GIT_REBASE_OPERATION.REWORD then
+          message, err = git2.message_prettify(git.messages[commit_idx].new)
+          if not message then
+            notifier.error("Can't prettify commit message", err)
+          end
+        else
+          message = nil
+        end
+
+        if op_type == git2.GIT_REBASE_OPERATION.FIXUP or op_type == git2.GIT_REBASE_OPERATION.SQUASH then
+          commit_id, err = rebase:amend(nil, signature, message)
+        else
+          commit_id, err = rebase:commit(nil, signature, message)
+        end
+        if commit_id then
+          git.last_commit_id = commit_id
+          commit_idx = commit_idx - 1
+        end
+      end
+    end
   end
+
+  git.rebase_error = err
+  git.current_index = commit_idx
+
+  if err == git2.GIT_ERROR.GIT_ITEROVER then
+    self:rebase_finish()
+  elseif err == git2.GIT_ERROR.GIT_EUNMERGED then
+    self:rebase_has_conflicts(commit_idx, git.last_commit_id)
+  elseif op then
+    notifier.error("Error when rebase " .. op:id():tostring(), err)
+    self:rebase_abort()
+  else
+    notifier.error("Error when rebase", err)
+    self:rebase_abort()
+  end
+end
+
+-- Finish rebase action.
+function RebaseView:rebase_finish()
+  local states = self._states
+
+  -- finish rebase
+  local err = self._git.rebase:finish(self._git.signature)
+  if err ~= 0 then
+    notifier.error("Failed to finish rebase", err)
+    states.help_line = NuiLine { NuiText("Git rebase error " .. err, "Fugit2Untracked") }
+    self:render()
+    return
+  end
+
+  self._git.rebase_finished = true
+
+  local last_commit_id = self._git.last_commit_id
+  if self._git.inmemory and last_commit_id then
+    -- update head to new commit
+    local last_commit
+    last_commit, err = self.repo:commit_lookup(last_commit_id)
+
+    if last_commit then
+      err = self.repo:update_head_for_commit(last_commit_id, last_commit:summary(), "rebase: ")
+    end
+
+    if err ~= 0 then
+      notifier.error("Failed to update head", err)
+      states.help_line = NuiLine { NuiText("Git rebase error " .. err, "Fugit2Untracked") }
+      self:render()
+      return
+    end
+  end
+
+  notifier.info "Rebase successfully"
+  states.help_line = NuiLine { NuiText("Rebase successfully", "Fugit2Staged") }
+
+  self:update()
+  self:render()
+
+  -- TODO: remap to Finish flow
+  -- self:unmount()
+end
+
+-- Rebase action has some conflicts, need to resolve or abort.
+---@param commit_idx integer git commit index at which rebase has conflicts
+---@param oid GitObjectId current git rebase commit oid
+function RebaseView:rebase_has_conflicts(commit_idx, oid)
+  local is_inmemory = self._git.inmemory
+  local repo = self.repo
+  local rebase = self._git.rebase
+  local commits_view = self.views.commits
+  local commits = self._git.commits
+
+  commits[commit_idx].pre_message = NuiText(" CONFLICT ", "Fugit2RebaseConflict")
+  commits_view:update(commits)
+  commits_view:render()
+
+  -- Show confirm
+  local resolve_confirm = Menu.Confirm(
+    self.ns_id,
+    NuiLine {
+      NuiText "Having conflicts, do you want to resolve it?",
+    }
+  )
+
+  local re_enter_after_git_diff = function()
+    ---@type GitIndex
+    local index
+    if is_inmemory then
+      index, _ = rebase:inmemory_index()
+    else
+      index, _ = repo:index()
+    end
+    if not index:has_conflicts() then
+      commits[commit_idx].pre_message = NuiText("󰦕 RESOLVED ", "Fugit2RebaseResolved")
+      commits_view:update(commits)
+      commits_view:render()
+    end
+  end
+
+  resolve_confirm:on_yes(function()
+    local GitDiff = require "fugit2.view.git_diff"
+    local index, head
+    if is_inmemory then
+      index, _ = rebase:inmemory_index()
+      head, _ = repo:commit_lookup(oid)
+    else
+      index, _ = repo:index()
+    end
+    if index then
+      local git_diff = GitDiff(self.ns_id, self.repo, index, head)
+      git_diff:mount()
+
+      -- attach re enter event
+      commits_view:on(event.BufEnter, re_enter_after_git_diff, { once = true })
+    else
+      notifier.error "Can't retrieve git index"
+    end
+  end)
+  resolve_confirm:mount()
+end
+
+-- Abort rebase action
+function RebaseView:rebase_abort()
+  local err = self._git.rebase:abort()
+  if err ~= 0 then
+    notifier.error("Failed to abort rebase action", err)
+  end
+
+  self:unmount()
 end
 
 ---Inits status view.
 ---@return Fugit2GitStatusTree
-function RebaseView:init_files_view()
-  local status_view = StatusTreeView(self.ns_id, " 󰙅 Files ", nil, nil)
-  self.views.files = status_view
+-- function RebaseView:_init_files_view()
+--   local status_view = StatusTreeView(self.ns_id, " 󰙅 Files ", nil, nil)
+--   self.views.files = status_view
+--
+--   return status_view
+-- end
 
-  return status_view
-end
+-- Shows git status when having conflicts.
+-- function RebaseView:show_files()
+--   local files = self.views.files
+--   if not files then
+--     files = self:init_files_view()
+--   end
+--
+--   local index
+--   if self._git.inmemory then
+--     index, _ = self._git.rebase:inmemory_index()
+--   else
+--     index, _ = self.repo:index()
+--   end
+--   if index then
+--   end
+--
+--   self.layout:update(NuiLayout.Box({
+--     NuiLayout.Box(self.views.status, { size = 4 }),
+--     NuiLayout.Box(files.popup, { grow = 1 }),
+--   }, { dir = "col" }))
+-- end
 
----Shows git status when having conflicts.
-function RebaseView:show_files()
-  local files = self.views.files
-  if not files then
-    files = self:init_files_view()
+---Handle fixup or squash behavior, supposed to be called in visual mode
+---@param is_squash boolean whether is fixup or squash
+function RebaseView:_fixup_squash_handler(is_squash)
+  local cursor_start = vim.fn.getpos("v")[2]
+  local cursor_end = vim.fn.getpos(".")[2]
+  if cursor_end < cursor_start then
+    cursor_start, cursor_end = cursor_end, cursor_start
   end
-
-  local index
-  if self._git.inmemory then
-    index, _ = self._git.rebase:inmemory_index()
-  else
-    index, _ = self.repo:index()
-  end
-  if index then
-  end
-
-  self.layout:update(NuiLayout.Box({
-    NuiLayout.Box(self.views.status, { size = 4 }),
-    NuiLayout.Box(files.popup, { grow = 1 }),
-  }, { dir = "col" }))
 end
 
 function RebaseView:setup_handlers()
   local opts = { noremap = true, nowait = true }
   local commit_view = self.views.commits
+  local input_view = self.views.input
   local commits = self._git.commits
   local actions = self._git.actions
   local oids = self._git.oids
+  local messages = self._git.messages
+  local git = self._git
 
   -- main function to handle rebase action
   local action_fn = function(action)
     local _, commit_idx = commit_view:get_commit()
-    if not commit_idx then
+    if not commit_idx or commit_idx == #commits then
       return
     end
 
-    actions[commit_idx] = action
-
     local commit = commits[commit_idx]
+    local msg = messages[commit_idx]
+
+    if action == RebaseAction.REWORD then
+      git.current_oid = commit.oid
+
+      local commit_message = msg.old
+      if msg.new and msg.new ~= "" then
+        commit_message = msg.new
+      end
+
+      input_view.border:set_text("top", NuiText(" Reword commit " .. commit.oid, "Fugit2MessageHeading"))
+      vim.api.nvim_buf_set_lines(self.views.input.bufnr, 0, -1, true, vim.split(commit_message, "\n", { plain = true }))
+      self.layout:update(self.boxes.input)
+      vim.api.nvim_win_set_cursor(self.views.input.winid, { 1, commit_message:len() })
+      return
+    elseif action == RebaseAction.BREAK then
+      -- drop following commits
+      for i = 1, commit_idx - 1 do
+        actions[i] = RebaseAction.DROP
+        local ci = commits[i]
+        ci.pre_message, ci.symbol = rebase_action_text(RebaseAction.DROP)
+        if msg then
+          ci.message = utils.lines_head(msg.old)
+        end
+      end
+
+      action = RebaseAction.PICK
+    elseif action == RebaseAction.FIXUP then
+      if commit_idx == #commits - 1 then
+        notifier.info "Can't squash, fixup first commit"
+        return
+      end
+      if actions[commit_idx] == RebaseAction.FIXUP then
+        return
+      end
+    elseif action == RebaseAction.SQUASH then
+      if commit_idx == #commits - 1 then
+        notifier.info "Can't squash, fixup first commit"
+        return
+      end
+      if actions[commit_idx] == RebaseAction.FIXUP then
+        return
+      end
+
+      local commit_msg = ""
+      if msg then
+        if msg.new and actions[commit_idx] == RebaseAction.REWORD then
+          commit_msg = msg.new
+        else
+          commit_msg = msg.old
+        end
+      end
+
+      -- find parent commit to squash message
+      for i = commit_idx + 1, #commits - 1, 1 do
+        local current_commit = commits[i]
+        local action_i = actions[i]
+        local m = messages[i]
+
+        if action_i == RebaseAction.PICK or action_i == RebaseAction.REWORD then
+          if action_i == RebaseAction.PICK then
+            m.new = m.old .. "\n\n" .. commit_msg
+          elseif m.new then
+            m.new = m.new .. "\n\n" .. commit_msg
+          end
+
+          actions[i] = RebaseAction.REWORD
+          current_commit.pre_message, current_commit.symbol = rebase_action_text(RebaseAction.REWORD)
+          break
+        end
+      end
+
+      -- change trigger action to fixup
+      action = RebaseAction.FIXUP
+    end
+
+    actions[commit_idx] = action
     commit.pre_message, commit.symbol = rebase_action_text(action)
+
+    local m = messages[commit.oid]
+    if m then
+      commit.message = utils.lines_head(m.old)
+    end
+
+    commit_view:update(commits)
+    commit_view:render()
+  end
+
+  -- function to handle visual fixup/squash
+  local fixup_fn = function(is_squash)
+    local cursor_start = vim.fn.getpos("v")[2]
+    local cursor_end = vim.fn.getpos(".")[2]
+    vim.api.nvim_feedkeys(utils.KEY_ESC, "n", false)
+
+    if cursor_start == cursor_end then
+      return
+    elseif cursor_end < cursor_start then
+      cursor_start, cursor_end = cursor_end, cursor_start
+    end
+
+    if cursor_start + 1 == cursor_end and cursor_start % 2 == 1 then
+      return
+    end
+
+    local linenr_end = cursor_end
+    local _, first_commit_idx = commit_view:get_commit(linenr_end)
+    if first_commit_idx == #commits then
+      -- move first commit one step if it is the onto commit
+      linenr_end = linenr_end - 2
+      first_commit_idx = commit_view:get_commit(linenr_end)
+    end
+    local first_commit = commits[first_commit_idx]
+    local first_action = actions[first_commit_idx]
+
+    if not is_squash then
+      -- simple fixup
+      for i = first_commit_idx - 1, 1, -1 do
+        local commit_i = commits[i]
+        if actions[i] == RebaseAction.REWORD then
+          commit_i.message = utils.lines_head(messages[i].old)
+        end
+
+        actions[i] = RebaseAction.FIXUP
+        commit_i.pre_message, commit_i.symbol = rebase_action_text(RebaseAction.FIXUP)
+      end
+
+      if first_action ~= RebaseAction.PICK and first_action ~= RebaseAction.REWORD then
+        actions[first_commit_idx] = RebaseAction.PICK
+        first_commit.pre_message, first_commit.symbol = rebase_action_text(RebaseAction.PICK)
+      end
+    else
+      -- squash
+      local msgs = {}
+      local m = messages[first_commit_idx]
+      if m.new and first_action == RebaseAction.REWORD then
+        msgs[1] = m.new
+      else
+        msgs[1] = m.old
+      end
+
+      -- change other commit to fixup
+      for i = first_commit_idx - 1, 1, -1 do
+        local commit_i = commits[i]
+        local m_i = messages[i]
+
+        if actions[i] == RebaseAction.REWORD and m_i.new then
+          msgs[#msgs + 1] = m_i.new
+          commit_i.message = utils.lines_head(messages[i].old)
+        else
+          msgs[#msgs + 1] = m_i.old
+        end
+
+        actions[i] = RebaseAction.FIXUP
+        commit_i.pre_message, commit_i.symbol = rebase_action_text(RebaseAction.FIXUP)
+      end
+
+      if first_action == RebaseAction.REWORD then
+        messages[first_commit_idx].new = table.concat(msgs, "\n\n")
+      else
+        actions[first_commit_idx] = RebaseAction.REWORD
+        first_commit.pre_message, first_commit.symbol = rebase_action_text(RebaseAction.REWORD)
+        messages[first_commit_idx].new = table.concat(msgs, "\n\n")
+      end
+    end
 
     commit_view:update(commits)
     commit_view:render()
@@ -392,15 +1003,9 @@ function RebaseView:setup_handlers()
   end, opts)
 
   -- break commit
-  if not self._git.inmemory then
-    commit_view:map("n", "b", function()
-      action_fn(RebaseAction.BREAK)
-    end, opts)
-  else
-    commit_view:map("n", "b", function()
-      notifier.warn "Inmemory rebase doens't not support BREAK!"
-    end, opts)
-  end
+  commit_view:map("n", "b", function()
+    action_fn(RebaseAction.BREAK)
+  end, opts)
 
   -- edit commit
   if not self._git.inmemory then
@@ -417,10 +1022,16 @@ function RebaseView:setup_handlers()
   commit_view:map("n", "s", function()
     action_fn(RebaseAction.SQUASH)
   end, opts)
+  commit_view:map("v", "s", function()
+    fixup_fn(true)
+  end, opts)
 
   --fixup
   commit_view:map("n", "f", function()
     action_fn(RebaseAction.FIXUP)
+  end, opts)
+  commit_view:map("v", "f", function()
+    fixup_fn(false)
   end, opts)
 
   -- reword
@@ -487,12 +1098,17 @@ function RebaseView:setup_handlers()
     reorder_fn(false)
   end, opts)
 
-  -- Movements
+  -- Move cursor
   commit_view:map("n", "j", "2j", opts)
   commit_view:map("n", "k", "2k", opts)
+  commit_view:map("v", "j", "2j", opts)
+  commit_view:map("v", "k", "2k", opts)
 
   commit_view:map("n", "<cr>", function()
     self:rebase_start()
+  end, opts)
+  commit_view:map("n", { "<esc>", "q" }, function()
+    self:unmount()
   end, opts)
 end
 
@@ -501,7 +1117,12 @@ function RebaseView:mount()
 end
 
 function RebaseView:unmount()
+  self._git.last_commit_id = nil
+  self._git.walker = nil
+  self._git.rebase = nil
+  self._git.rebase_info = nil
   self._git = nil
+  self.repo = nil
   self.layout:unmount()
 end
 

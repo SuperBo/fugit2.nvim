@@ -8,6 +8,7 @@ local Path = require "plenary.path"
 local async = require "plenary.async"
 local event = require("nui.utils.autocmd").event
 local plenary_filetype = require "plenary.filetype"
+local utils = require "lua.fugit2.utils"
 
 local GitStatus = require "fugit2.view.git_status"
 local GitStatusDiffBase = require "fugit2.view.git_base_view"
@@ -44,7 +45,7 @@ function GitDiff:init(ns_id, repo, index, head_commit)
   if not head_commit then
     local _commit, err = self.repo:head_commit()
     if not _commit and err ~= git2.GIT_ERROR.GIT_EUNBORNBRANCH then
-      error("[Fugit2] Can't retrieve repo head " .. err)
+      notifier.error("Can't retrieve repo head ", err)
     end
     _head_commit = _commit
   end
@@ -234,8 +235,16 @@ function GitDiff:update()
   -- Clears status
 
   -- Updates git source tree status
-  local status_files, err = self.repo:status()
-  local diff_head_to_index, _ = self.repo:diff_head_to_index(self.index)
+  local status_files, diff_head_to_index, err
+
+  if self.index:in_memory() then
+    diff_head_to_index, err = self.repo:diff_tree_to_index(self._git.head_tree, self.index)
+    err = diff_head_to_index:find_similar()
+    status_files, err = diff_head_to_index:status(true)
+  else
+    status_files, err = self.repo:status()
+    diff_head_to_index, err = self.repo:diff_tree_to_index(self._git.head_tree, self.index)
+  end
 
   if status_files then
     self._views.files:update(status_files, diff_head_to_index)
@@ -274,9 +283,15 @@ function GitDiff:_write_index(filepath, bufnr)
   end
   filepath = filepath:sub(8)
 
-  -- add to index
   local entry = self.index:get_bypath(filepath, git2.GIT_INDEX_STAGE.NORMAL)
   if not entry then
+    entry = self.index:get_bypath(filepath, git2.GIT_INDEX_STAGE.OURS)
+  end
+  if not entry then
+    entry = self.index:get_bypath(filepath, git2.GIT_INDEX_STAGE.THEIRS)
+  end
+  if not entry then
+    -- add new entry to index
     local stat = uv.fs_stat(filepath)
     if stat then
       entry = git2.IndexEntry.from_stat(stat, filepath, true)
@@ -286,13 +301,17 @@ function GitDiff:_write_index(filepath, bufnr)
     end
   end
 
-  local content_buffer = table.concat(vim.api.nvim_buf_get_lines(bufnr, 0, -1, true), "\n")
   -- add newline at the end
-  content_buffer = content_buffer .. "\n"
+  local buffer_content = table.concat(vim.api.nvim_buf_get_lines(bufnr, 0, -1, true), "\n") .. "\n"
 
-  local err = self.index:add_from_buffer(entry, content_buffer)
+  local err
+  if self._git.index_inmemory then
+    err = self.index:add_from_buffer_inmemory(self.repo, entry, buffer_content)
+  else
+    err = self.index:add_from_buffer(entry, buffer_content)
+  end
   if err ~= 0 then
-    notifier.error("Failed to write to buffer", err)
+    notifier.error("Failed to write to buffer", err, git2.Error.last())
     return false
   end
 
@@ -398,6 +417,11 @@ function GitDiff:_get_or_create_index_buffer(path, filetype)
   vim.api.nvim_buf_set_option(bufnr, "modified", false)
 
   -- setup buffer event
+  vim.api.nvim_create_autocmd({ event.BufEnter }, {
+    buffer = bufnr,
+    callback = utils.ufo_detach,
+    once = true,
+  })
   vim.api.nvim_create_autocmd({ event.BufModifiedSet }, {
     buffer = bufnr,
     callback = function(_)
@@ -443,6 +467,11 @@ function GitDiff:_get_or_create_head_buffer(path, filetype)
     end
   end
 
+  vim.api.nvim_create_autocmd({ event.BufEnter }, {
+    buffer = bufnr,
+    callback = utils.ufo_detach,
+    once = true,
+  })
   vim.api.nvim_buf_set_option(bufnr, "buftype", "nofile")
   vim.api.nvim_buf_set_option(bufnr, "modifiable", false)
   if filetype then
@@ -487,6 +516,11 @@ function GitDiff:_get_or_create_our_their_buffers(path, filetype)
         notifier.error("Failed to get our blob", err)
       else
         set_buffer_from_blob(bufnr1, blob)
+        vim.api.nvim_create_autocmd({ event.BufEnter }, {
+          buffer = bufnr1,
+          callback = utils.ufo_detach,
+          once = true,
+        })
       end
     end
   end
@@ -506,6 +540,11 @@ function GitDiff:_get_or_create_our_their_buffers(path, filetype)
         notifier.error("Failed get their blob", err)
       else
         set_buffer_from_blob(bufnr2, blob)
+        vim.api.nvim_create_autocmd({ event.BufEnter }, {
+          buffer = bufnr2,
+          callback = utils.ufo_detach,
+          once = true,
+        })
       end
     end
   end
@@ -564,13 +603,25 @@ function GitDiff:_setup_diff_windows(node)
 
     -- Our and their side in conflict
     local bufnr1, bufnr2 = self:_get_or_create_our_their_buffers(node.text, filetype)
+    local bufnr3
+
+    if git.index_inmemory then
+      -- Index buffer in case in memory index
+      bufnr3 = self:_get_or_create_index_buffer(node.text, filetype)
+    end
 
     vim.schedule(function()
       vim.cmd.diffoff { bang = true }
       self:_three_windows_layout()
       vim.api.nvim_win_set_buf(windows[2], bufnr2)
       vim.api.nvim_win_set_buf(windows[1], bufnr1)
-      vim.fn.win_execute(windows[3], "edit " .. file_path)
+
+      if bufnr3 then
+        vim.api.nvim_win_set_buf(windows[3], bufnr3)
+      else
+        vim.fn.win_execute(windows[3], "edit " .. file_path)
+      end
+
       vim.fn.win_execute(windows[1], "diffthis")
       vim.fn.win_execute(windows[2], "diffthis")
       vim.fn.win_execute(windows[3], "diffthis")
@@ -656,6 +707,12 @@ function GitDiff:_setup_handlers()
   source_tree:map("n", "s", self:_index_add_reset_handler(false, TreeBase.IndexAction.ADD), opts)
   source_tree:map("n", "u", self:_index_add_reset_handler(false, TreeBase.IndexAction.RESET), opts)
   source_tree:map("n", { "-", "<space>" }, self:_index_add_reset_handler(false, TreeBase.IndexAction.ADD_RESET), opts)
+
+  -- Refresh
+  source_tree:map("n", "r", function()
+    self:update()
+    self:_refresh_views()
+  end, opts)
 end
 
 return GitDiff
