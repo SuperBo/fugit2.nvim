@@ -194,7 +194,7 @@ local RevisionWalker = {}
 RevisionWalker.__index = RevisionWalker
 
 ---@class GitSignature
----@field sign ffi.cdata* libgit2.git_signature_pointer
+---@field sign ffi.cdata* libgit2 struct git_signature_pointer*
 local Signature = {}
 Signature.__index = Signature
 
@@ -266,7 +266,7 @@ end
 
 ---Inits git config
 function Config.new(git_config)
-  local config = { config = libgit2.git_config_pointer(git_config) }
+  local config = { config = ffi.new("git_config*", git_config) }
   setmetatable(config, Config)
 
   ffi.gc(config.config, libgit2_C.git_config_free)
@@ -278,7 +278,7 @@ end
 ---@return GitConfig?
 ---@return GIT_ERROR
 function Config.open_default()
-  local git_config = libgit2.git_config_pointer()
+  local git_config = ffi.new "git_config*[1]"
 
   local err = libgit2_C.git_config_open_default(git_config)
   if err ~= 0 then
@@ -293,7 +293,7 @@ end
 ---@return GitConfig?
 ---@return GIT_ERROR
 function Config:open_level(level)
-  local git_config = libgit2.git_config_double_pointer()
+  local git_config = ffi.new "git_config*[1]"
 
   local err = libgit2_C.git_config_open_level(git_config, self.config, level)
   if err ~= 0 then
@@ -308,7 +308,7 @@ end
 ---@return integer?
 ---@return GIT_ERROR
 function Config:get_int(name)
-  local out = libgit2.int64_array(1)
+  local out = ffi.new "int64_t[1]"
   local err = libgit2_C.git_config_get_int64(out, self.config, name)
   if err ~= 0 then
     return nil, 0
@@ -322,13 +322,13 @@ end
 ---@return boolean?
 ---@return GIT_ERROR
 function Config:get_bool(name)
-  local out = libgit2.int_array(1)
+  local out = ffi.new "int[1]"
   local err = libgit2_C.git_config_get_bool(out, self.config, name)
   if err ~= 0 then
     return nil, 0
   end
 
-  return (out ~= 0), 0
+  return (out[0] ~= 0), 0
 end
 
 ---Get the value of a string config variable.
@@ -353,13 +353,13 @@ end
 ---@return GitConfigEntry[]?
 ---@return GIT_ERROR
 function Config:entries()
-  local iter = libgit2.git_config_iterator_double_pointer()
+  local iter = ffi.new "git_config_iterator*[1]"
   local err = libgit2_C.git_config_iterator_new(iter, self.config)
   if err ~= 0 then
     return nil, err
   end
 
-  local git_config_entry = libgit2.git_config_entry_double_pointer()
+  local git_config_entry = ffi.new "git_config_entry*[1]"
   local entries = {}
 
   while libgit2_C.git_config_next(git_config_entry, iter[0]) == 0 do
@@ -384,10 +384,10 @@ end
 -- | Git Object functions |
 -- ========================
 
----@param git_object ffi.cdata* libgit2.git_object_pointer, own cdata.
+---@param git_object ffi.cdata* libgit2 git_object*, own cdata.
 ---@return GitObject
 function Object.new(git_object)
-  local object = { obj = libgit2.git_object_pointer(git_object) }
+  local object = { obj = ffi.new("git_object*", git_object) }
   setmetatable(object, Object)
 
   ffi.gc(object.obj, libgit2_C.git_object_free)
@@ -395,7 +395,7 @@ function Object.new(git_object)
 end
 
 function Object.borrow(git_object)
-  local object = { obj = libgit2.git_object_pointer(git_object) }
+  local object = { obj = git_object }
   setmetatable(object, Object)
   return object
 end
@@ -410,7 +410,7 @@ end
 -- Cast GitObject to GitBlob, the reference still be owned by main GitObject.
 ---@return GitBlob
 function Object:as_blob()
-  return Blob.borrow(ffi.cast(libgit2.git_blob_pointer, self.obj))
+  return Blob.borrow(ffi.cast("git_blob*", self.obj))
 end
 
 -- Lookups an object that represents a tree entry from this treeish object.
@@ -419,7 +419,7 @@ end
 ---@return GitObject?
 ---@return GIT_ERROR
 function Object:lookup_by_path(path, object_type)
-  local obj_out = libgit2.git_object_double_pointer()
+  local obj_out = ffi.new "git_object*[1]"
   local err = libgit2_C.git_object_lookup_bypath(obj_out, self.obj, path, object_type)
   if err ~= 0 then
     return nil, err
@@ -477,7 +477,7 @@ end
 
 ---@param oid ffi.cdata* libgit2 git_oid*, borrow data
 function ObjectId.borrow(oid)
-  local object_id = { oid = ffi.cast(libgit2.git_oid_pointer, oid) }
+  local object_id = { oid = ffi.cast("git_oid*", oid) }
   setmetatable(object_id, ObjectId)
   return object_id
 end
@@ -516,7 +516,7 @@ function ObjectId:tostring(n)
     n = 40
   end
 
-  local c_buf = libgit2.char_array(n + 1)
+  local c_buf = ffi.new("char[?]", n + 1)
   libgit2_C.git_oid_tostr(c_buf, n + 1, self.oid)
   return ffi.string(c_buf, n)
 end
@@ -549,7 +549,7 @@ end
 ---@param git_blob ffi.cdata* libgit2.git_blob_pointer, own cdata
 ---@return GitBlob
 function Blob.new(git_blob)
-  local blob = { blob = libgit2.git_blob_pointer(git_blob) }
+  local blob = { blob = ffi.new("git_blob*", git_blob) }
   setmetatable(blob, Blob)
 
   ffi.gc(blob.blob, libgit2_C.git_blob_free)
@@ -558,7 +558,7 @@ end
 
 ---@param git_blob ffi.cdata* libgit2.git_blob_pointer, doesn't own data
 function Blob.borrow(git_blob)
-  local blob = { blob = libgit2.git_blob_pointer(git_blob) }
+  local blob = { blob = git_blob }
   setmetatable(blob, Blob)
   return blob
 end
@@ -601,17 +601,17 @@ end
 -- | Git Tree Entry functions |
 -- ============================
 
----@param git_entry ffi.cdata* libgit2.git_tree_entry_pointer, own cdata
+---@param git_entry ffi.cdata* libgit2 git_tree_entry*, own cdata
 ---@return GitTreeEntry
 function TreeEntry.new(git_entry)
-  local tree_entry = { entry = libgit2.git_tree_entry_pointer(git_entry) }
+  local tree_entry = { entry = ffi.new("git_tree_entry*", git_entry) }
   setmetatable(tree_entry, TreeEntry)
 
   ffi.gc(tree_entry.entry, libgit2_C.git_tree_entry_free)
   return tree_entry
 end
 
----@param entry ffi.cdata* libgit2.git_tree_entry_pointer, just borrow data, didn't own
+---@param entry ffi.cdata* libgit2 git_tree_entry*, just borrow data, didn't own
 ---@return GitTreeEntry
 function TreeEntry.borrow(entry)
   local git_tree_entry = { entry = entry }
@@ -642,7 +642,7 @@ end
 ---@return GitObject?
 ---@return GIT_ERROR
 function TreeEntry:to_object(repo)
-  local git_object = libgit2.git_object_double_pointer()
+  local git_object = ffi.new "git_object*[1]"
   local err = libgit2_C.git_tree_entry_to_object(git_object, repo.repo, self.entry)
   if err ~= 0 then
     return nil, err
@@ -655,10 +655,10 @@ end
 -- | Git Tree object |
 -- ===================
 
----@param git_tree ffi.cdata* libgit2.git_tree_pointer, own cdata
+---@param git_tree ffi.cdata* libgit2 git_tree*, own cdata
 ---@return GitTree
 function Tree.new(git_tree)
-  local tree = { tree = libgit2.git_tree_pointer(git_tree) }
+  local tree = { tree = ffi.new("git_tree*", git_tree) }
   setmetatable(tree, Tree)
 
   ffi.gc(tree.tree, libgit2_C.git_tree_free)
@@ -668,7 +668,7 @@ end
 -- Cast Tree to GitObject, the reference still be owned by main Tree.
 ---@return GitObject
 function Tree:as_object()
-  return Object.borrow(ffi.cast(libgit2.git_object_pointer, self.tree))
+  return Object.borrow(ffi.cast("git_object*", self.tree))
 end
 
 -- Gets the id of a tree.
@@ -687,7 +687,7 @@ end
 ---@return GitTreeEntry?
 ---@return GIT_ERROR
 function Tree:entry_bypath(path)
-  local entry = libgit2.git_tree_entry_double_pointer()
+  local entry = ffi.new "git_tree_entry*[1]"
   local err = libgit2_C.git_tree_entry_bypath(entry, self.tree, path)
   if err ~= 0 then
     return nil, err
@@ -721,10 +721,10 @@ end
 -- | Git Tag object |
 -- ==================
 
----@param git_tag ffi.cdata* libgit2.git_tag_pointer, own cdata
+---@param git_tag ffi.cdata* libgit2 git_tag*, own cdata
 ---@return GitTag
 function Tag.new(git_tag)
-  local tag = { tag = libgit2.git_tag_pointer(git_tag) }
+  local tag = { tag = ffi.new("git_tag_*", git_tag) }
   setmetatable(tag, Tag)
 
   tag.name = ffi.string(libgit2_C.git_tag_name(git_tag))
@@ -743,10 +743,10 @@ end
 -- =============================
 
 ---Init GitAnnotatedCommit
----@param git_commit ffi.cdata* libgit2.git_annotated_commit_pointer, this owns cdata.
+---@param git_commit ffi.cdata* libgit2 git_annotated_commit*, this owns cdata.
 ---@return GitAnnotatedCommit
 function AnnotatedCommit.new(git_commit)
-  local commit = { commit = libgit2.git_annotated_commit_pointer(git_commit) }
+  local commit = { commit = ffi.new("git_annotated_commit*", git_commit) }
   setmetatable(commit, AnnotatedCommit)
 
   ffi.gc(commit.commit, libgit2_C.git_annotated_commit_free)
@@ -773,7 +773,7 @@ end
 
 -- Inits GitBlame object
 function Blame.new(git_blame)
-  local blame = { blame = libgit2.git_blame_pointer(git_blame) }
+  local blame = { blame = ffi.new("git_blame*", git_blame) }
   setmetatable(blame, Blame)
 
   ffi.gc(blame.blame, libgit2_C.git_blame_free)
@@ -786,7 +786,7 @@ end
 ---@return GitBlame?
 ---@return GIT_ERROR
 function Blame:blame_buffer(buf)
-  local git_blame = libgit2.git_blame_double_pointer()
+  local git_blame = ffi.new "git_blame*[1]"
   local err = libgit2_C.git_blame_buffer(git_blame, self.blame, buf, buf:len())
   if err ~= 0 then
     return nil, err
@@ -823,7 +823,7 @@ end
 function BlameHunk.borrow(git_blame_hunk)
   ---@type GitBlameHunk
   local hunk = {
-    hunk = libgit2.git_blame_hunk_pointer(git_blame_hunk),
+    hunk = git_blame_hunk,
     num_lines = tonumber(git_blame_hunk["lines_in_hunk"]) or 0,
     final_start_line_number = tonumber(git_blame_hunk["final_start_line_number"]) or 0,
     orig_start_line_number = tonumber(git_blame_hunk["orig_start_line_number"]) or 0,
@@ -868,7 +868,7 @@ end
 ---@param git_commit ffi.cdata* libgit2.git_commit_pointer, this owns the data.
 ---@return GitCommit
 function Commit.new(git_commit)
-  local commit = { commit = libgit2.git_commit_pointer(git_commit) }
+  local commit = { commit = ffi.new("git_commit*", git_commit) }
   setmetatable(commit, Commit)
 
   -- ffi garbage collector
@@ -929,13 +929,13 @@ end
 ---@return GitSignature
 function Commit:author_signature()
   local author = libgit2_C.git_commit_author(self.commit)
-  return Signature.borrow(ffi.cast(libgit2.git_signature_pointer, author))
+  return Signature.borrow(ffi.cast("git_signature*", author))
 end
 
 ---@return GitSignature
 function Commit:committer_signature()
   local committer = libgit2_C.git_commit_committer(self.commit)
-  return Signature.borrow(ffi.cast(libgit2.git_signature_pointer, committer))
+  return Signature.borrow(ffi.cast("git_signature*", committer))
 end
 
 -- Gets the number of parents of this commit
@@ -949,7 +949,7 @@ end
 ---@return GitCommit?
 ---@return GIT_ERROR
 function Commit:parent(i)
-  local c_commit = libgit2.git_commit_double_pointer()
+  local c_commit = ffi.new "git_commit*[1]"
   local err = libgit2_C.git_commit_parent(c_commit, self.commit, i)
   if err ~= 0 then
     return nil, err
@@ -979,7 +979,7 @@ end
 ---@return GitTree?
 ---@return GIT_ERROR
 function Commit:tree()
-  local git_tree = libgit2.git_tree_double_pointer()
+  local git_tree = ffi.new "git_tree*[1]"
   local err = libgit2_C.git_commit_tree(git_tree, self.commit)
   if err ~= 0 then
     return nil, err
@@ -1028,11 +1028,11 @@ local function reference_name_remote(refname)
 end
 
 ---Creates new Reference object
----@param git_reference ffi.cdata* libgit2.git_reference_pointer, own cdata
+---@param git_reference ffi.cdata* libgit2 git_reference*, own cdata
 ---@return GitReference
 function Reference.new(git_reference)
   local ref = {
-    ref = libgit2.git_reference_pointer(git_reference),
+    ref = ffi.new("git_reference*", git_reference),
     namespace = GIT_REFERENCE_NAMESPACE.NONE,
   }
   setmetatable(ref, Reference)
@@ -1065,7 +1065,7 @@ end
 ---@return GIT_ERROR
 function Reference:target()
   if self.type == libgit2.GIT_REFERENCE.SYMBOLIC then
-    local resolved = libgit2.git_reference_double_pointer()
+    local resolved = ffi.new "git_reference*[1]"
 
     local err = libgit2_C.git_reference_resolve(resolved, self.ref)
     if err ~= 0 then
@@ -1091,7 +1091,7 @@ end
 ---@return GitReference?
 ---@return GIT_ERROR
 function Reference:set_target(oid, message)
-  local ref = libgit2.git_reference_double_pointer()
+  local ref = ffi.new "git_reference*[1]"
   local err = libgit2_C.git_reference_set_target(ref, self.ref, oid.oid, message)
   if err ~= 0 then
     return nil, err
@@ -1104,7 +1104,7 @@ end
 ---@return GitReference? ref git reference
 ---@return GIT_ERROR err error code
 function Reference:resolve()
-  local ref = libgit2.git_reference_double_pointer()
+  local ref = ffi.new "git_reference*[1]"
   local err = libgit2_C.git_reference_resolve(ref, self.ref)
   if err ~= 0 then
     return nil, err
@@ -1118,7 +1118,7 @@ end
 ---@return GitObject?
 ---@return integer err Git Error code
 function Reference:peel(type)
-  local c_object = libgit2.git_object_double_pointer()
+  local c_object = ffi.new "git_object*[1]"
 
   local err = libgit2_C.git_reference_peel(c_object, self.ref, type)
   if err ~= 0 then
@@ -1132,28 +1132,28 @@ end
 ---@return GitCommit?
 ---@return GIT_ERROR err libgit2 Error code
 function Reference:peel_commit()
-  local c_object = libgit2.git_object_double_pointer()
+  local c_object = ffi.new "git_object*[1]"
 
   local err = libgit2_C.git_reference_peel(c_object, self.ref, libgit2.GIT_OBJECT.COMMIT)
   if err ~= 0 then
     return nil, err
   end
 
-  return Commit.new(ffi.cast(libgit2.git_commit_pointer, c_object[0])), 0
+  return Commit.new(ffi.cast("git_commit*", c_object[0])), 0
 end
 
 ---Recursively peel reference until tree object is found.
 ---@return GitTree?
 ---@return GIT_ERROR err libgit2 Error code
 function Reference:peel_tree()
-  local c_object = libgit2.git_object_double_pointer()
+  local c_object = ffi.new "git_object*[1]"
 
   local err = libgit2_C.git_reference_peel(c_object, self.ref, libgit2.GIT_OBJECT.TREE)
   if err ~= 0 then
     return nil, err
   end
 
-  return Tree.new(ffi.cast(libgit2.git_tree_pointer, c_object[0])), 0
+  return Tree.new(ffi.cast("git_tree*", c_object[0])), 0
 end
 
 ---Gets upstream for a branch.
@@ -1164,7 +1164,7 @@ function Reference:branch_upstream()
     return nil, 0
   end
 
-  local c_ref = libgit2.git_reference_double_pointer()
+  local c_ref = ffi.new "git_reference*[1]"
   local err = libgit2_C.git_branch_upstream(c_ref, self.ref)
   if err ~= 0 then
     return nil, err
@@ -1194,13 +1194,13 @@ end
 -- ============================
 
 -- Inits new GitRevisionWalker object.
----@param repo ffi.cdata* libgit2.git_respository_pointer, don't own data
----@param revwalk ffi.cdata* libgit2.git_revwalk_pointer, own cdata
+---@param repo ffi.cdata* libgit2 git_respository*, don't own data
+---@param revwalk ffi.cdata* libgit2 git_revwalk*, own cdata
 ---@return GitRevisionWalker
 function RevisionWalker.new(repo, revwalk)
   local git_walker = {
-    repo = libgit2.git_repository_pointer(repo),
-    revwalk = libgit2.git_revwalk_pointer(revwalk),
+    repo = ffi.new("git_repository*", repo),
+    revwalk = ffi.new("git_revwalk*", revwalk),
   }
   setmetatable(git_walker, RevisionWalker)
 
@@ -1278,7 +1278,7 @@ function RevisionWalker:next()
     return nil, nil, err
   end
 
-  local c_commit = libgit2.git_commit_double_pointer()
+  local c_commit = ffi.new "git_commit*[1]"
   err = libgit2_C.git_commit_lookup(c_commit, self.repo, git_oid)
   if err ~= 0 then
     return nil, nil, err
@@ -1298,7 +1298,7 @@ function RevisionWalker:iter()
       return nil, nil
     end
 
-    local c_commit = libgit2.git_commit_double_pointer()
+    local c_commit = ffi.new "git_commit*[1]"
     err = libgit2_C.git_commit_lookup(c_commit, self.repo, git_oid)
     if err ~= 0 then
       return nil, nil
@@ -1313,10 +1313,10 @@ end
 -- ====================
 
 -- Inits new GitRemote object.
----@param git_remote ffi.cdata* libgit2.git_remote_pointer, own data
+---@param git_remote ffi.cdata* libgit2 git_remote*, own data
 ---@return GitRemote
 function Remote.new(git_remote)
-  local remote = { remote = libgit2.git_remote_pointer(git_remote) }
+  local remote = { remote = ffi.new("git_remote*", git_remote) }
   setmetatable(remote, Remote)
 
   remote.name = ffi.string(libgit2_C.git_remote_name(remote.remote))
@@ -1335,9 +1335,9 @@ end
 -- | Signature functions |
 -- =======================
 
----@param git_signature ffi.cdata* libgit2.git_signature_pointer, own data
+---@param git_signature ffi.cdata* libgit2 git_signature*, own data
 function Signature.new(git_signature)
-  local signature = { sign = libgit2.git_signature_pointer(git_signature) }
+  local signature = { sign = ffi.new("git_signature*", git_signature) }
   setmetatable(signature, Signature)
 
   ffi.gc(signature.sign, libgit2_C.git_signature_free)
@@ -1345,7 +1345,7 @@ function Signature.new(git_signature)
 end
 
 function Signature.borrow(git_signature)
-  local signature = { sign = libgit2.git_signature_pointer(git_signature) }
+  local signature = { sign = git_signature }
   setmetatable(signature, Signature)
   return signature
 end
@@ -1369,15 +1369,15 @@ end
 -- ===========================
 
 -- Inits new GitIndexEntry object.
----@param git_index_entry ffi.cdata* libgit2.git_index_entry_pointer, don't own data
+---@param git_index_entry ffi.cdata* libgit2 const git_index_entry*, don't own data
 ---@return GitIndexEntry
 function IndexEntry.borrow(git_index_entry)
-  local entry = { entry = libgit2.const_git_index_entry_pointer(git_index_entry) }
+  local entry = { entry = git_index_entry }
   setmetatable(entry, IndexEntry)
   return entry
 end
 
----@param git_index_entry ffi.cdata* libgit2.git_index_entry_pointer, don't own data
+---@param git_index_entry ffi.cdata* libgit2 git_index_entry*, don't own data
 ---@param path string companion path
 ---@return GitIndexEntry
 function IndexEntry.new(git_index_entry, path)
@@ -1392,7 +1392,7 @@ end
 ---@param path string
 ---@return GitIndexEntry
 function IndexEntry.from_path(path)
-  local git_index_entry = libgit2.git_index_entry()
+  local git_index_entry = ffi.new "git_index_entry[1]"
   git_index_entry[0].path = path
   return IndexEntry.new(git_index_entry, path)
 end
@@ -1416,7 +1416,7 @@ end
 ---@param distrust boolean index distrust mode
 ---@return GitIndexEntry
 function IndexEntry.from_stat(fs_stat, path, distrust)
-  local git_index_entry = libgit2.git_index_entry()
+  local git_index_entry = ffi.new "git_index_entry[1]"
   local entry = git_index_entry[0]
   entry.ctime.seconds = fs_stat.ctime.sec
   entry.ctime.nanoseconds = fs_stat.ctime.nsec
@@ -1505,7 +1505,7 @@ end
 ---@param git_index ffi.cdata* libgit2.git_index_pointer, own cdata
 ---@return GitIndex
 function Index.new(git_index)
-  local index = { index = libgit2.git_index_pointer(git_index) }
+  local index = { index = ffi.new("git_index*", git_index) }
   setmetatable(index, Index)
 
   ffi.gc(index.index, libgit2_C.git_index_free)
@@ -1581,7 +1581,7 @@ end
 ---@param path string file path
 ---@return GIT_ERROR err
 function index_conflict_to_reuc(index, path)
-  local conflict_entries = libgit2.const_git_index_entry_pointer_array(3)
+  local conflict_entries = ffi.new "const git_index_entry*[3]"
   local err =
     libgit2_C.git_index_conflict_get(conflict_entries, conflict_entries + 1, conflict_entries + 2, index, path)
   if err ~= 0 then
@@ -1592,18 +1592,18 @@ function index_conflict_to_reuc(index, path)
   local id_offset = ffi.offsetof("git_index_entry", "id")
 
   if conflict_entries[0] ~= nil then
-    ancestor_oid = ffi.cast(libgit2.char_pointer, conflict_entries) + id_offset
-    ancestor_oid = ffi.cast(libgit2.git_oid_pointer, ancestor_oid)
+    ancestor_oid = ffi.cast("char*", conflict_entries) + id_offset
+    ancestor_oid = ffi.cast("git_oid*", ancestor_oid)
   end
 
   if conflict_entries[1] ~= nil then
-    our_oid = ffi.cast(libgit2.char_pointer, conflict_entries + 1) + id_offset
-    our_oid = ffi.cast(libgit2.git_oid_pointer, our_oid)
+    our_oid = ffi.cast("char*", conflict_entries + 1) + id_offset
+    our_oid = ffi.cast("git_oid*", our_oid)
   end
 
   if conflict_entries[2] ~= nil then
-    their_oid = ffi.cast(libgit2.char_pointer, conflict_entries + 2) + id_offset
-    their_oid = ffi.cast(libgit2.git_oid_pointer, their_oid)
+    their_oid = ffi.cast("char*", conflict_entries + 2) + id_offset
+    their_oid = ffi.cast("git_oid*", their_oid)
   end
 
   err = libgit2_C.git_index_reuc_add(
@@ -1640,8 +1640,8 @@ function Index:add_from_buffer_inmemory(repo, source_entry, buffer)
   local entry = source_entry:clone()
   entry:set_stage(libgit2.GIT_INDEX_STAGE.NORMAL)
   entry.entry[0].file_size = buflen
-  local entry_ptr = ffi.cast(libgit2.char_pointer, entry.entry)
-  local oid_ptr = ffi.cast(libgit2.git_oid_pointer, entry_ptr + ffi.offsetof("git_index_entry", "id"))
+  local entry_ptr = ffi.cast("char*", entry.entry)
+  local oid_ptr = ffi.cast("git_oid*", entry_ptr + ffi.offsetof("git_index_entry", "id"))
   err = libgit2_C.git_oid_cpy(oid_ptr, blob.oid)
   if err ~= 0 then
     return err
@@ -1690,8 +1690,8 @@ end
 -- Iterates through entries in the index.
 ---@return (fun(): GitIndexEntry?)?
 function Index:iter()
-  local entry = libgit2.git_index_entry_double_pointer()
-  local iterator = libgit2.git_index_iterator_double_pointer()
+  local entry = ffi.new "git_index_entry*[1]"
+  local iterator = ffi.new "git_index_iterator*[1]"
   local err = libgit2_C.git_index_iterator_new(iterator, self.index)
   if err ~= 0 then
     return nil
@@ -1715,7 +1715,7 @@ end
 ---@return GitIndexEntry? their side
 ---@return GIT_ERROR
 function Index:get_conflict(path)
-  local entries = libgit2.const_git_index_entry_pointer_array(3)
+  local entries = ffi.new "const git_index_entry*[3]"
 
   local err = libgit2_C.git_index_conflict_get(entries, entries + 1, entries + 2, self.index, path)
   if err ~= 0 then
@@ -1734,10 +1734,10 @@ end
 -- ==================
 
 ---Create new GitDiff object
----@param git_diff ffi.cdata* libgit2.git_diff_pointer, own cdata
+---@param git_diff ffi.cdata* libgit2 git_diff*, own cdata
 ---@return GitDiff
 function Diff.new(git_diff)
-  local diff = { diff = libgit2.git_diff_pointer(git_diff) }
+  local diff = { diff = ffi.new("git_diff*", git_diff) }
   setmetatable(diff, Diff)
 
   ffi.gc(diff.diff, libgit2_C.git_diff_free)
@@ -1749,7 +1749,7 @@ end
 ---@return GitDiff?
 ---@return GIT_ERROR
 function Diff.from_buffer(diff_str)
-  local diff = libgit2.git_diff_double_pointer()
+  local diff = ffi.new "git_diff*[1]"
 
   local err = libgit2_C.git_diff_from_buffer(diff, diff_str, diff_str:len())
   if err ~= 0 then
@@ -1782,7 +1782,7 @@ end
 ---@return GitDiffStats?
 ---@return GIT_ERROR
 function Diff:stats()
-  local diff_stats = libgit2.git_diff_stats_double_pointer()
+  local diff_stats = ffi.new "git_diff_stats*[1]"
   local err = libgit2_C.git_diff_get_stats(diff_stats, self.diff)
   if err ~= 0 then
     return nil, err
@@ -1810,7 +1810,7 @@ function Diff:patches(sort_case_sensitive)
   for i = 0, num_deltas - 1 do
     local delta = libgit2_C.git_diff_get_delta(self.diff, i)
 
-    local c_patch = libgit2.git_patch_double_pointer()
+    local c_patch = ffi.new "git_patch*[1]"
     err = libgit2_C.git_patch_from_diff(c_patch, self.diff, i)
     if err ~= 0 then
       break
@@ -1844,7 +1844,7 @@ end
 ---@param rename_threshold number?
 ---@return GIT_ERROR
 function Diff:find_similar(rename_threshold)
-  local find_opts = libgit2.git_diff_find_options(libgit2.GIT_DIFF_FIND_OPTIONS_INIT)
+  local find_opts = ffi.new("git_diff_find_options[1]", libgit2.GIT_DIFF_FIND_OPTIONS_INIT)
   if rename_threshold then
     find_opts[0].rename_threshold = rename_threshold
   end
@@ -1897,10 +1897,10 @@ end
 -- ===================
 
 ---Creates new GitPatch object
----@param git_patch ffi.cdata* libgit2.git_patch_pointer, own cdata
+---@param git_patch ffi.cdata* libgit2 git_patch*, own cdata
 ---@return GitPatch
 function Patch.new(git_patch)
-  local patch = { patch = libgit2.git_patch_pointer(git_patch) }
+  local patch = { patch = ffi.new("git_patch*", git_patch) }
   setmetatable(patch, Patch)
 
   ffi.gc(patch.patch, libgit2_C.git_patch_free)
@@ -1926,7 +1926,7 @@ end
 ---@return GitDiffStats?
 ---@return GIT_ERROR
 function Patch:stats()
-  local number = libgit2.size_t_array(2)
+  local number = ffi.new "size_t[2]"
   local err = libgit2_C.git_patch_line_stats(nil, number, number + 1, self.patch)
   if err ~= 0 then
     return nil, err
@@ -1949,8 +1949,8 @@ end
 ---@return GitDiffHunk?
 ---@return GIT_ERROR
 function Patch:hunk(idx)
-  local num_lines = libgit2.size_t_array(1)
-  local hunk = libgit2.git_diff_hunk_double_pointer()
+  local num_lines = ffi.new "size_t[1]"
+  local hunk = ffi.new "const git_diff_hunk*[1]"
 
   local err = libgit2_C.git_patch_get_hunk(hunk, num_lines, self.patch, idx)
   if err ~= 0 then
@@ -1975,7 +1975,7 @@ end
 ---@return GitDiffLine?
 ---@return GIT_ERROR
 function Patch:hunk_line(hunk_idx, line_idx)
-  local diff_line = libgit2.git_diff_line_double_pointer()
+  local diff_line = ffi.new "const git_diff_line*[1]"
 
   local err = libgit2_C.git_patch_get_line_in_hunk(diff_line, self.patch, hunk_idx, line_idx)
   if err ~= 0 then
@@ -2009,7 +2009,7 @@ end
 ---@return GitRebaseOperation
 function RebaseOperation.borrow(operation_ptr)
   local op = {
-    operation = libgit2.git_rebase_operation_pointer(operation_ptr),
+    operation = operation_ptr,
   }
   setmetatable(op, RebaseOperation)
   return op
@@ -2043,14 +2043,14 @@ end
 ---Gets ObjectId of rebase operation.
 ---@return GitObjectId
 function RebaseOperation:id()
-  return ObjectId.borrow(ffi.cast(libgit2.git_oid_pointer, self.operation["id"]))
+  return ObjectId.borrow(ffi.cast("git_oid*", self.operation["id"]))
 end
 
 ---Copies another git_oid to this RebaseOperation oid.
 ---@param oid GitObjectId
 ---@return GIT_ERROR err 0 on success or error code
 function RebaseOperation:set_id(oid)
-  local op_id_ptr = ffi.cast(libgit2.git_oid_pointer, self.operation["id"])
+  local op_id_ptr = ffi.cast("git_oid*", self.operation["id"])
   return libgit2_C.git_oid_cpy(op_id_ptr, oid.oid)
 end
 
@@ -2062,7 +2062,7 @@ end
 ---@param git_rebase_ptr ffi.cdata* libgit2 git_rebase*, own cdata
 ---@return GitRebase
 function Rebase.new(git_rebase_ptr)
-  local rebase = { rebase = libgit2.git_rebase_pointer(git_rebase_ptr) }
+  local rebase = { rebase = ffi.new("git_rebase*", git_rebase_ptr) }
   setmetatable(rebase, Rebase)
 
   ffi.gc(rebase.rebase, libgit2_C.git_rebase_free)
@@ -2100,7 +2100,7 @@ end
 ---@return GitRebaseOperation?
 ---@return GIT_ERROR
 function Rebase:next()
-  local operation = libgit2.git_rebase_operation_double_pointer()
+  local operation = ffi.new "git_rebase_operation*[1]"
   local err = libgit2_C.git_rebase_next(operation, self.rebase)
   if err ~= 0 then
     return nil, err
@@ -2124,7 +2124,7 @@ function Rebase:skip()
   c_rebase["current"] = next
 
   -- rebase_next_inmemory
-  local operation = libgit2.git_rebase_operation_pointer()
+  local operation = ffi.new "git_rebase_operation*"
   operation = c_rebase["operations"]["ptr"] + next
   return RebaseOperation.borrow(operation), 0
 end
@@ -2243,10 +2243,10 @@ function Rebase:_rebase_commit__amend(index, parent_commit, author, committer, m
   end
 
   local tree_id = libgit2.git_oid()
-  local parent_tree = libgit2.git_tree_double_pointer()
-  local tree = libgit2.git_tree_double_pointer()
+  local parent_tree = ffi.new "git_tree*[1]"
+  local tree = ffi.new "git_tree*[1]"
   local commit_id = libgit2.git_oid()
-  local commit = libgit2.git_commit_double_pointer()
+  local commit = libgit2.ffi.new "git_commit*[1]"
 
   err = libgit2_C.git_commit_tree(parent_tree, parent_commit)
   if err ~= 0 then
@@ -2346,7 +2346,7 @@ end
 ---@return GitIndex? The result index of the last operation.
 ---@return GIT_ERROR
 function Rebase:inmemory_index()
-  local index = libgit2.git_index_double_pointer()
+  local index = ffi.new "git_index*[1]"
   local err = libgit2_C.git_rebase_inmemory_index(index, self.rebase)
   if err ~= 0 then
     return nil, err
@@ -2408,10 +2408,10 @@ local DEFAULT_STATUS_FLAGS = bit.bor(
 )
 
 ---Inits new Repository object
----@param git_repository ffi.cdata* libgit2.git_repository_pointer, own cdata
+---@param git_repository ffi.cdata* libgit2 git_repository*, own cdata
 ---@return GitRepository
 function Repository.new(git_repository)
-  local repo = { repo = libgit2.git_repository_pointer(git_repository) }
+  local repo = { repo = ffi.new("git_repository*", git_repository) }
   setmetatable(repo, Repository)
 
   local c_path = libgit2_C.git_repository_path(repo.repo)
@@ -2423,10 +2423,10 @@ function Repository.new(git_repository)
 end
 
 -- New Repository object, only borrow cdata
----@param git_repo ffi.cdata* libgit2.git_repository_pointer, don't own cdata
+---@param git_repo ffi.cdata* libgit2 git_repository*, don't own cdata
 ---@return GitRepository
 function Repository.borrow(git_repo)
-  local repo = { repo = libgit2.git_repository_pointer(git_repo) }
+  local repo = { repo = git_repo }
   setmetatable(repo, Repository)
 
   local c_path = libgit2_C.git_repository_path(repo.repo)
@@ -2445,7 +2445,7 @@ end
 ---@return GitRepository?
 ---@return GIT_ERROR
 function Repository.open(path, search)
-  local git_repo = libgit2.git_repository_double_pointer()
+  local git_repo = ffi.new "git_repository*[1]"
 
   local open_flag = 0
   if not search then
@@ -2506,7 +2506,7 @@ end
 ---@return GitConfig?
 ---@return GIT_ERROR
 function Repository:config()
-  local git_config = libgit2.git_config_double_pointer()
+  local git_config = ffi.new "git_config*[1]"
 
   local err = libgit2_C.git_repository_config(git_config, self.repo)
   if err ~= 0 then
@@ -2521,7 +2521,7 @@ end
 ---@return GitAnnotatedCommit?
 ---@return GIT_ERROR
 function Repository:annotated_commit_from_ref(ref)
-  local git_commit = libgit2.git_annotated_commit_double_pointer()
+  local git_commit = ffi.new "git_annotated_commit*[1]"
 
   local err = libgit2_C.git_annotated_commit_from_ref(git_commit, self.repo, ref.ref)
   if err ~= 0 then
@@ -2536,7 +2536,7 @@ end
 ---@return GitAnnotatedCommit?
 ---@return GIT_ERROR
 function Repository:annotated_commit_from_revspec(revspec)
-  local git_commit = libgit2.git_annotated_commit_double_pointer()
+  local git_commit = ffi.new "git_annotated_commit*[1]"
 
   local err = libgit2_C.git_annotated_commit_from_revspec(git_commit, self.repo, revspec)
   if err ~= 0 then
@@ -2550,7 +2550,7 @@ end
 ---@return ffi.cdata*? blame_opts libgit2 git_blame_options[1]
 ---@return GIT_ERROR
 local function init_blame_options(opts)
-  local blame_opts = libgit2.git_blame_options()
+  local blame_opts = ffi.new "git_blame_options[1]"
   local err = libgit2_C.git_blame_options_init(blame_opts, libgit2.GIT_BLAME_OPTIONS_VERSION)
   if err ~= 0 then
     return nil, err
@@ -2612,7 +2612,7 @@ function Repository:blame_file(path, opts)
     return nil, err
   end
 
-  local git_blame = libgit2.git_blame_double_pointer()
+  local git_blame = ffi.new "git_blame*[1]"
 
   err = libgit2_C.git_blame_file(git_blame, self.repo, path, blame_opts)
   if err ~= 0 then
@@ -2626,7 +2626,7 @@ end
 ---@return GitReference?
 ---@return GIT_ERROR
 function Repository:head()
-  local c_ref = libgit2.git_reference_double_pointer()
+  local c_ref = ffi.new "git_reference*[1]"
   local err = libgit2_C.git_repository_head(c_ref, self.repo)
   if err ~= 0 then
     return nil, err
@@ -2638,13 +2638,13 @@ end
 ---@return GitCommit?
 ---@return GIT_ERROR
 function Repository:head_commit()
-  local c_ref = libgit2.git_reference_double_pointer()
+  local c_ref = ffi.new "git_reference*[1]"
   local err = libgit2_C.git_repository_head(c_ref, self.repo)
   if err ~= 0 then
     return nil, err
   end
 
-  local git_object = libgit2.git_object_double_pointer()
+  local git_object = ffi.new "git_object*[1]"
   err = libgit2_C.git_reference_peel(git_object, c_ref[0], libgit2.GIT_OBJECT.COMMIT)
   libgit2_C.git_reference_free(c_ref[0])
 
@@ -2652,7 +2652,7 @@ function Repository:head_commit()
     return nil, err
   end
 
-  return Commit.new(ffi.cast(libgit2.git_commit_pointer, git_object[0])), 0
+  return Commit.new(ffi.cast("git_commit*", git_object[0])), 0
 end
 
 -- Makes the repository HEAD point to the specified reference.
@@ -2714,8 +2714,8 @@ end
 ---@param oid GitObjectId
 ---@param field string? GPG sign field
 function Repository:commit_signature(oid, field)
-  local buf_signature = libgit2.git_buf()
-  local buf_signed_data = libgit2.git_buf()
+  local buf_signature = ffi.new "git_buf[2]"
+  local buf_signed_data = buf_signature + 1
 
   local err = libgit2_C.git_commit_extract_signature(buf_signature, buf_signed_data, self.repo, oid.oid, field)
   if err ~= 0 then
@@ -2734,13 +2734,13 @@ end
 ---@return GitTree?
 ---@return GIT_ERROR
 function Repository:head_tree()
-  local c_ref = libgit2.git_reference_double_pointer()
+  local c_ref = ffi.new "git_reference*[1]"
   local err = libgit2_C.git_repository_head(c_ref, self.repo)
   if err ~= 0 then
     return nil, err
   end
 
-  local git_object = libgit2.git_object_double_pointer()
+  local git_object = ffi.new "git_object*[1]"
   err = libgit2_C.git_reference_peel(git_object, c_ref[0], libgit2.GIT_OBJECT.TREE)
   libgit2_C.git_reference_free(c_ref[0])
 
@@ -2748,7 +2748,7 @@ function Repository:head_tree()
     return nil, err
   end
 
-  return Tree.new(ffi.cast(libgit2.git_tree_pointer, git_object[0])), 0
+  return Tree.new(ffi.cast("git_tree*", git_object[0])), 0
 end
 
 -- Creates a new branch pointing at a target commit
@@ -2758,7 +2758,7 @@ end
 ---@return GitReference? Reference to created branch
 ---@return GIT_ERROR
 function Repository:create_branch(name, target, force)
-  local git_ref = libgit2.git_reference_double_pointer()
+  local git_ref = ffi.new "git_reference*[1]"
   local is_force = force and 1 or 0
 
   local err = libgit2_C.git_branch_create(git_ref, self.repo, name, target.commit, is_force)
@@ -2787,7 +2787,7 @@ function Repository:branches(locals, remotes)
     branch_flags = bit.bor(branch_flags, libgit2.GIT_BRANCH.REMOTE)
   end
 
-  local c_branch_iter = libgit2.git_branch_iterator_double_pointer()
+  local c_branch_iter = ffi.new "git_branch_iterator*[1]"
   local err = libgit2_C.git_branch_iterator_new(c_branch_iter, self.repo, branch_flags)
   if err ~= 0 then
     return nil, err
@@ -2795,8 +2795,8 @@ function Repository:branches(locals, remotes)
 
   ---@type GitBranch[]
   local branches = {}
-  local c_ref = libgit2.git_reference_double_pointer()
-  local c_branch_type = libgit2.unsigned_int_array(1)
+  local c_ref = ffi.new "git_reference*[1]"
+  local c_branch_type = ffi.new "unsigned int[1]"
   while libgit2_C.git_branch_next(c_ref, c_branch_type, c_branch_iter[0]) == 0 do
     ---@type GitBranch
     local br = {
@@ -2818,7 +2818,7 @@ end
 ---@return string[]?
 ---@return GIT_ERROR
 function Repository:tag_list()
-  local tag_names = libgit2.git_strarray()
+  local tag_names = ffi.new "git_strarray[1]"
 
   local err = libgit2_C.git_tag_list(tag_names, self.repo)
   if err ~= 0 then
@@ -2844,7 +2844,7 @@ end
 ---@return number? behind Unique behind commits.
 ---@return GIT_ERROR err Error code.
 function Repository:ahead_behind(local_commit, upstream_commit)
-  local c_ahead = libgit2.size_t_array(2)
+  local c_ahead = ffi.new "size_t[2]"
 
   local err = libgit2_C.git_graph_ahead_behind(c_ahead, c_ahead + 1, self.repo, local_commit.oid, upstream_commit.oid)
 
@@ -2860,7 +2860,7 @@ end
 ---@return GitReference?
 ---@return GIT_ERROR
 function Repository:reference_lookup(refname)
-  local ref = libgit2.git_reference_double_pointer()
+  local ref = ffi.new "git_reference*[1]"
 
   local err = libgit2_C.git_reference_lookup(ref, self.repo, refname)
   if err ~= 0 then
@@ -2892,7 +2892,7 @@ end
 ---@return GitReference? ref direct reference
 ---@return GIT_ERROR err error code
 function Repository:create_reference(name, oid, is_force, log_message)
-  local git_ref = libgit2.git_reference_double_pointer()
+  local git_ref = ffi.new "git_reference*[1]"
   local force = is_force and 1 or 0
 
   local err = libgit2_C.git_reference_create(git_ref, self.repo, name, oid.oid, force, log_message)
@@ -2908,7 +2908,7 @@ end
 ---@return GitCommit?
 ---@return GIT_ERROR
 function Repository:commit_lookup(oid)
-  local c_commit = libgit2.git_commit_double_pointer()
+  local c_commit = ffi.new "git_commit*[1]"
 
   local err = libgit2_C.git_commit_lookup(c_commit, self.repo, oid.oid)
   if err ~= 0 then
@@ -2922,7 +2922,7 @@ end
 ---@return GitIndex?
 ---@return GIT_ERROR
 function Repository:index()
-  local c_index = libgit2.git_index_double_pointer()
+  local c_index = ffi.new "git_index*[1]"
 
   local err = libgit2_C.git_repository_index(c_index, self.repo)
   if err ~= 0 then
@@ -2944,8 +2944,8 @@ function Repository:reset_default(paths)
     if commit == nil then
       return err
     elseif #paths > 0 then
-      local c_paths = libgit2.const_char_pointer_array(#paths, paths)
-      local strarray = libgit2.git_strarray_readonly()
+      local c_paths = ffi.new("const char*[?]", #paths, paths)
+      local strarray = ffi.new "git_strarray_readonly[1]"
 
       -- for i, p in ipairs(paths) do
       --   c_paths[i-1] = p
@@ -2966,7 +2966,7 @@ end
 ---@return ffi.cdata* c_paths GIT_STR_ARRAY
 local function prepare_checkout_opts(strategy, paths)
   local c_paths
-  local opts = libgit2.git_checkout_options(libgit2.GIT_CHECKOUT_OPTIONS_INIT)
+  local opts = ffi.new("git_checkout_options[1]", libgit2.GIT_CHECKOUT_OPTIONS_INIT)
 
   if strategy ~= nil then
     opts[0].checkout_strategy = strategy
@@ -2975,7 +2975,7 @@ local function prepare_checkout_opts(strategy, paths)
   end
 
   if paths and #paths > 0 then
-    c_paths = libgit2.const_char_pointer_array(#paths, paths)
+    c_paths = ffi.new("const char*[?]", #paths, paths)
     opts[0].paths.strings = c_paths
     opts[0].paths.count = #paths
   end
@@ -3122,7 +3122,7 @@ end
 ---@return GitRemote?
 ---@return GIT_ERROR
 function Repository:remote_lookup(remote)
-  local c_remote = libgit2.git_remote_double_pointer()
+  local c_remote = ffi.new "git_remote*[1]"
 
   local err = libgit2_C.git_remote_lookup(c_remote, self.repo, remote)
   if err ~= 0 then
@@ -3136,7 +3136,7 @@ end
 ---@return string[]?
 ---@return GIT_ERROR
 function Repository:remote_list()
-  local strarr = libgit2.git_strarray()
+  local strarr = ffi.new "git_strarray[1]"
 
   local err = libgit2_C.git_remote_list(strarr, self.repo)
   if err ~= 0 then
@@ -3162,7 +3162,7 @@ end
 ---@return GIT_ERROR return_code Git return code.
 function Repository:status_file(path)
   local worktree_status, index_status = libgit2.GIT_DELTA.UNMODIFIED, libgit2.GIT_DELTA.UNMODIFIED
-  local c_status = libgit2.unsigned_int_array(1)
+  local c_status = ffi.new "unsigned int[1]"
 
   local err = libgit2_C.git_status_file(c_status, self.repo, path)
   if err ~= 0 then
@@ -3339,12 +3339,12 @@ function Repository:status()
   ---@type GIT_ERROR
   local err
 
-  local opts = libgit2.git_status_options(libgit2.GIT_STATUS_OPTIONS_INIT)
+  local opts = ffi.new("git_status_options[1]", libgit2.GIT_STATUS_OPTIONS_INIT)
   -- libgit2_C.git_status_options_init(opts, libgit2.GIT_STATUS_OPTIONS_VERSION)
   opts[0].show = libgit2.GIT_STATUS_SHOW.INDEX_AND_WORKDIR
   opts[0].flags = DEFAULT_STATUS_FLAGS
 
-  local status = libgit2.git_status_list_double_pointer()
+  local status = ffi.new "git_status_list*[1]"
   err = libgit2_C.git_status_list_new(status, self.repo, opts)
   if err ~= 0 then
     return nil, err
@@ -3403,7 +3403,7 @@ end
 ---@return GitSignature?
 ---@return GIT_ERROR
 function Repository:signature_default()
-  local git_signature = libgit2.git_signature_double_pointer()
+  local git_signature = ffi.new "git_signature*[1]"
 
   local err = libgit2_C.git_signature_default(git_signature, self.repo)
   if err ~= 0 then
@@ -3436,7 +3436,7 @@ function Repository:_create_commit_head_tree_parents(index)
     end
 
     if parent then
-      parents = libgit2.git_commit_double_pointer()
+      parents = ffi.new "git_commit*[1]"
       parents[0] = parent.commit
     end
   end
@@ -3447,7 +3447,7 @@ function Repository:_create_commit_head_tree_parents(index)
     return nil, nil, err
   end
 
-  local tree = libgit2.git_tree_double_pointer()
+  local tree = ffi.new "git_tree*[1]"
   err = libgit2_C.git_tree_lookup(tree, self.repo, tree_id.oid)
   if err ~= 0 then
     return nil, nil, err
@@ -3479,7 +3479,7 @@ function Repository:create_commit(index, signature, message)
     message,
     tree[0],
     parents and 1 or 0,
-    parents and ffi.cast(libgit2.git_commit_const_double_pointer, parents) or nil
+    parents and ffi.cast("const git_commit**", parents) or nil
   )
   libgit2_C.git_tree_free(tree[0])
   if err ~= 0 then
@@ -3511,7 +3511,7 @@ function Repository:create_commit_content(index, signature, message)
     message,
     tree[0],
     parents and 1 or 0,
-    parents and ffi.cast(libgit2.git_commit_const_double_pointer, parents) or nil
+    parents and ffi.cast("const git_commit**", parents) or nil
   )
   libgit2_C.git_tree_free(tree[0])
 
@@ -3546,7 +3546,7 @@ end
 ---@return GitBlob?
 ---@return GIT_ERROR
 function Repository:blob_lookup(id)
-  local blob = libgit2.git_blob_double_pointer()
+  local blob = ffi.new "git_blob*[1]"
   local err = libgit2_C.git_blob_lookup(blob, self.repo, id.oid)
   if err ~= 0 then
     return nil, err
@@ -3600,13 +3600,13 @@ function Repository:_amend_commit_head_tree_parents(index, no_tree)
       return nil, nil, err
     end
 
-    tree = libgit2.git_tree_double_pointer()
+    tree = ffi.new "git_tree*[1]"
     err = libgit2_C.git_tree_lookup(tree, self.repo, tree_id.oid)
     if err ~= 0 then
       return nil, nil, err
     end
   else
-    tree = libgit2.git_tree_double_pointer()
+    tree = ffi.new "git_tree*[1]"
     err = libgit2_C.git_commit_tree(tree, head_commit.commit)
     if err ~= 0 then
       return nil, nil, err
@@ -3680,7 +3680,7 @@ function Repository:amend_commit_content(index, author, committer, message)
   local parents
   local nparents = head_commit:nparents()
   if nparents > 0 then
-    parents = libgit2.git_commit_pointer_array(nparents)
+    parents = ffi.new("git_commit*[?]", nparents)
     for i = 0, nparents - 1 do
       parents[i] = nil
       err = libgit2_C.git_commit_parent(parents + i, head_commit.commit, i)
@@ -3697,7 +3697,7 @@ function Repository:amend_commit_content(index, author, committer, message)
     message,
     tree ~= nil and tree[0] or nil,
     nparents,
-    ffi.cast(libgit2.git_commit_const_double_pointer, parents)
+    ffi.cast("const git_commit**", parents)
   )
 
   if tree ~= nil then
@@ -3730,7 +3730,7 @@ function Repository:walker()
     return self._walker, 0
   end
 
-  local walker = libgit2.git_revwalk_double_pointer()
+  local walker = ffi.new "git_revwalk*[1]"
   local err = libgit2_C.git_revwalk_new(walker, self.repo)
   if err ~= 0 then
     return nil, err
@@ -3877,9 +3877,9 @@ end
 ---@return GIT_ERROR
 function Repository:diff_helper(include_workdir, include_index, tree, index, paths, reverse, context_lines)
   local c_paths, err
-  local opts = libgit2.git_diff_options(libgit2.GIT_DIFF_OPTIONS_INIT)
-  local find_opts = libgit2.git_diff_find_options(libgit2.GIT_DIFF_FIND_OPTIONS_INIT)
-  local diff = libgit2.git_diff_double_pointer()
+  local opts = ffi.new("git_diff_options[1]", libgit2.GIT_DIFF_OPTIONS_INIT)
+  local find_opts = ffi.new("git_diff_find_options[1]", libgit2.GIT_DIFF_FIND_OPTIONS_INIT)
+  local diff = ffi.new "git_diff*[1]"
 
   opts[0].id_abbrev = 8
   opts[0].flags, find_opts[0].flags = git_status_flags_to_diff_flags(DEFAULT_STATUS_FLAGS)
@@ -3889,7 +3889,7 @@ function Repository:diff_helper(include_workdir, include_index, tree, index, pat
   end
 
   if paths and #paths > 0 then
-    c_paths = libgit2.const_char_pointer_array(#paths, paths)
+    c_paths = ffi.new("const char*[?]", #paths, paths)
     opts[0].pathspec.strings = c_paths
     opts[0].pathspec.count = #paths
   end
@@ -3944,15 +3944,15 @@ end
 ---@return GIT_ERROR
 function Repository:diff_tree_to_tree(old_tree, new_tree, paths, context_lines)
   local c_paths, err
-  local opts = libgit2.git_diff_options(libgit2.GIT_DIFF_OPTIONS_INIT)
-  local find_opts = libgit2.git_diff_find_options(libgit2.GIT_DIFF_FIND_OPTIONS_INIT)
-  local diff = libgit2.git_diff_double_pointer()
+  local opts = ffi.new("git_diff_options[1]", libgit2.GIT_DIFF_OPTIONS_INIT)
+  local find_opts = ffi.new("git_diff_find_options[1]", libgit2.GIT_DIFF_FIND_OPTIONS_INIT)
+  local diff = ffi.new "git_diff*[1]"
 
   opts[0].id_abbrev = 8
   opts[0].flags, find_opts[0].flags = git_status_flags_to_diff_flags(DEFAULT_STATUS_FLAGS)
 
   if paths and #paths > 0 then
-    c_paths = libgit2.const_char_pointer_array(#paths, paths)
+    c_paths = ffi.new("const char*[?]", #paths, paths)
     opts[0].pathspec.strings = c_paths
     opts[0].pathspec.count = #paths
   end
@@ -4033,7 +4033,7 @@ function Repository:apply(diff, workdir, index)
     return 0
   end
 
-  local opts = libgit2.git_apply_options()
+  local opts = ffi.new "git_apply_options[1]"
   libgit2_C.git_apply_options_init(opts, libgit2.GIT_APPLY_OPTIONS_VERSION)
   local location = 0
   if workdir then
@@ -4050,7 +4050,7 @@ end
 ---@return GitTag?
 ---@return GIT_ERROR
 function Repository:tag_lookup(oid)
-  local git_tag = libgit2.git_tag_double_pointer()
+  local git_tag = ffi.new "git_tag*[1]"
 
   local err = libgit2_C.git_tag_lookup(git_tag, self.repo, oid.oid)
   if err ~= 0 then
@@ -4066,7 +4066,7 @@ end
 ---@return GitReference?
 ---@return GIT_ERROR
 function Repository:branch_lookup(branch_name, branch_type)
-  local ref = libgit2.git_reference_double_pointer()
+  local ref = ffi.new "git_reference*[1]"
 
   local err = libgit2_C.git_branch_lookup(ref, self.repo, branch_name, branch_type)
   if err ~= 0 then
@@ -4102,8 +4102,8 @@ end
 ---@return GitRebase?
 ---@return GIT_ERROR
 function Repository:rebase_init(branch, upstream, onto, opts)
-  local git_rebase = libgit2.git_rebase_double_pointer()
-  local rebase_opts = libgit2.git_rebase_options(libgit2.GIT_REBASE_OPTIONS_INIT)
+  local git_rebase = ffi.new "git_rebase*[1]"
+  local rebase_opts = ffi.new("git_rebase_options[1]", libgit2.GIT_REBASE_OPTIONS_INIT)
 
   if opts.inmemory then
     rebase_opts[0].inmemory = 1
@@ -4128,8 +4128,8 @@ end
 ---@return GitRebase?
 ---@return GIT_ERROR
 function Repository:rebase_open()
-  local git_rebase = libgit2.git_rebase_double_pointer()
-  local opts = libgit2.git_rebase_options(libgit2.GIT_REBASE_OPTIONS_INIT)
+  local git_rebase = ffi.new "git_rebase*[1]"
+  local opts = ffi.new("git_rebase_options[1]", libgit2.GIT_REBASE_OPTIONS_INIT)
 
   local err = libgit2_C.git_rebase_open(git_rebase, self.repo, opts)
   if err ~= 0 then
@@ -4156,16 +4156,16 @@ function Repository:blame_file_async(path, opts, callback)
     lg2.setup_lib(lib)
     local ffi_ = require "ffi"
 
-    local repo = ffi_.cast(lg2.git_repository_pointer, repo_ptr)
+    local repo = ffi_.cast("git_repository*", repo_ptr)
     local o = ffi_.cast("git_blame_options*", opts_ptr)
-    local git_blame = lg2.git_blame_double_pointer()
+    local git_blame = ffi_.new "git_blame*[1]"
 
     local e = lg2.C.git_blame_file(git_blame, repo, p, o)
     if e ~= 0 then
       return nil, e
     end
 
-    return tonumber(ffi_.cast(lg2.pointer_t, git_blame[0])), 0
+    return tonumber(ffi_.cast("intptr_t", git_blame[0])), 0
   end
 
   local after_work_fn = function(ptr, e)
@@ -4173,16 +4173,16 @@ function Repository:blame_file_async(path, opts, callback)
       return callback(nil, err)
     end
 
-    local blame = Blame.new(ffi.cast(libgit2.git_blame_pointer, ptr))
+    local blame = Blame.new(require("ffi").cast("git_blame*", ptr))
     callback(blame, 0)
   end
 
   local work = uv.new_work(work_fn, after_work_fn)
   work:queue(
     libgit2.library_path,
-    tonumber(ffi.cast(libgit2.pointer_t, self.repo)),
+    tonumber(ffi.cast("intptr_t", self.repo)),
     path,
-    tonumber(ffi.cast(libgit2.pointer_t, blame_opts))
+    tonumber(ffi.cast("intptr_t", blame_opts))
   )
 end
 
@@ -4199,17 +4199,17 @@ function Repository:status_async(callback)
     lg2.setup_lib(lib)
     local ffi_ = require "ffi"
 
-    local opts = lg2.git_status_options(lg2.GIT_STATUS_OPTIONS_INIT)
+    local opts = ffi_.new("git_status_options[1]", lg2.GIT_STATUS_OPTIONS_INIT)
     opts[0].show = lg2.GIT_STATUS_SHOW.INDEX_AND_WORKDIR
     opts[0].flags = flags
 
-    local repo = ffi_.cast(lg2.git_repository_pointer, repo_ptr)
-    local status = lg2.git_status_list_double_pointer()
+    local repo = ffi_.cast("git_repository*", repo_ptr)
+    local status = ffi_.new "git_status_list*[1]"
     local err = lg2.C.git_status_list_new(status, repo, opts)
     if err ~= 0 then
       return nil, err
     end
-    return tonumber(ffi_.cast(lg2.pointer_t, status[0])), 0
+    return tonumber(ffi_.cast("intptr_t", status[0])), 0
   end
 
   ---@param git_status_list_ptr integer?
@@ -4219,7 +4219,7 @@ function Repository:status_async(callback)
       return callback(nil, err)
     end
 
-    local status = ffi.cast(libgit2.git_status_list_pointer, git_status_list_ptr)
+    local status = ffi.cast("git_status_list*", git_status_list_ptr)
     local status_list = git_status_list_to_items(status)
 
     -- free C resources
@@ -4229,7 +4229,7 @@ function Repository:status_async(callback)
   end
 
   local work = uv.new_work(new_git_status_list, handle_git_status_list)
-  work:queue(libgit2.library_path, tonumber(ffi.cast(libgit2.pointer_t, self.repo)), DEFAULT_STATUS_FLAGS)
+  work:queue(libgit2.library_path, tonumber(ffi.cast("intptr_t", self.repo)), DEFAULT_STATUS_FLAGS)
 end
 
 -- ===================
