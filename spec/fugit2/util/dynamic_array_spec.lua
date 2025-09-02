@@ -1,11 +1,12 @@
 -- Test dynamic array module
 
 local DynamicArray = require "fugit2.util.dynamic_array"
+local ffi = require "ffi"
 local libgit2 = require "fugit2.core.libgit2"
 
 describe("DynamicArray", function()
   it("init array", function()
-    local arr = DynamicArray.new(4, 4, libgit2.git_rebase_operation_array)
+    local arr = DynamicArray.new(4, 4, ffi.typeof "git_rebase_operation[?]")
 
     assert.not_nil(arr)
     assert.are.equal(0, arr.size)
@@ -13,7 +14,7 @@ describe("DynamicArray", function()
   end)
 
   it("append element", function()
-    local arr = DynamicArray.new(4, 4, libgit2.size_t_array)
+    local arr = DynamicArray.new(4, 4, ffi.typeof "size_t[?]")
 
     local i = arr:append()
     arr[i] = 12LL
@@ -27,7 +28,7 @@ describe("DynamicArray", function()
   end)
 
   it("grow array", function()
-    local arr = DynamicArray.new(4, 4, libgit2.size_t_array)
+    local arr = DynamicArray.new(4, 4, ffi.typeof "size_t[?]")
     for i = 1, 6 do
       local j = arr:append()
       arr[j] = i
