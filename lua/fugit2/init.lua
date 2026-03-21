@@ -111,6 +111,16 @@ function M.git_diff(kwargs)
 end
 
 ---@param kwargs table arguments table
+function M.git_rebase(kwargs)
+  local repo = open_repository(kwargs.fargs[1])
+  if repo then
+    local upstream = kwargs.fargs[2] or "HEAD@{upstream}"
+    local rebase_view = ui.new_fugit2_rebase_window(M.namespace, repo, upstream)
+    rebase_view:mount()
+  end
+end
+
+---@param kwargs table arguments table
 function M.git_blame(kwargs)
   local repo = open_repository()
   if repo then

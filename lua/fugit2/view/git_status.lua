@@ -519,6 +519,19 @@ function GitStatus:_init_menus(menu_type)
       { texts = { NuiText(" Create ", head_hl) } },
       { texts = { NuiText "Pull Request" }, key = "cp" },
     }
+  elseif menu_type == Menu.REBASE then
+    menu_title = NuiText(" 󰜛 Rebasing ", title_hl)
+    local onto_text
+    if git.upstream then
+      onto_text = NuiText(utils.get_git_icon(git.upstream.remote_url) .. git.upstream.name, "Fugit2Heading")
+    else
+      onto_text = NuiText("upstream", "Fugit2Heading")
+    end
+    menu_items = {
+      { texts = { NuiText(" 󰜛 Rebase ", head_hl), states.current_text, NuiText(" onto ", head_hl) } },
+      { texts = { onto_text }, key = "i" },
+      { texts = { NuiText "  onto another branch" }, key = "e" },
+    }
   end
 
   return UI.Menu(self.ns_id, menu_title, menu_items, arg_items)
@@ -2482,6 +2495,44 @@ function GitStatus:quit_command()
   self:focus_file()
 end
 
+---GitStatus Rebase Menu
+---@return Fugit2UITransientMenu
+function GitStatus:_init_rebase_menu()
+  local m = self:_init_menus(Menu.REBASE)
+
+  m:on_submit(function(item_id, _)
+    local RebaseView = require "fugit2.view.git_rebase"
+
+    if item_id == "i" then
+      -- Interactive rebase onto upstream
+      local upstream = self._git.upstream
+      if not upstream then
+        notifier.warn "No upstream configured for current branch"
+        return
+      end
+      local rebase_view = RebaseView(self.ns_id, self.repo, nil, { upstream = upstream.name })
+      rebase_view:on_complete(function()
+        self:update_then_render()
+      end)
+      rebase_view:mount()
+    elseif item_id == "e" then
+      -- Interactive rebase onto a chosen branch
+      local GitPick = require "fugit2.view.git_pick"
+      local pick_view = GitPick(self.ns_id, self.repo, GitPick.ENTITY.BRANCH_LOCAL_REMOTE, " Rebase onto ")
+      pick_view:on_submit(function(ref)
+        local rebase_view = RebaseView(self.ns_id, self.repo, nil, { upstream = ref })
+        rebase_view:on_complete(function()
+          self:update_then_render()
+        end)
+        rebase_view:mount()
+      end)
+      pick_view:mount()
+    end
+  end)
+
+  return m
+end
+
 local MENU_INITS = {
   [Menu.BRANCH] = GitStatus._init_branch_menu,
   [Menu.COMMIT] = GitStatus._init_commit_menu,
@@ -2490,6 +2541,7 @@ local MENU_INITS = {
   [Menu.PULL] = GitStatus._init_pull_menu,
   [Menu.PUSH] = GitStatus._init_push_menu,
   [Menu.FORGE] = GitStatus._init_forge_menu,
+  [Menu.REBASE] = GitStatus._init_rebase_menu,
 }
 
 ---Menu handlers factory
@@ -2532,9 +2584,12 @@ function GitStatus:setup_handlers()
   -- popup:on(event.BufLeave, exit_fn)
 
   -- refresh
-  file_tree:map("n", "r", function()
+  file_tree:map("n", "g", function()
     self:update_then_render()
   end, map_options)
+
+  -- Rebase menu
+  file_tree:map("n", "r", self:_menu_handlers(Menu.REBASE), map_options)
 
   -- collapse
   file_tree:map("n", "h", function()
