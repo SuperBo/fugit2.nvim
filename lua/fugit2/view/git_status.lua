@@ -1095,16 +1095,21 @@ function GitStatus:update(callback)
   self._views.files:set_loading()
 
   self.repo:status_async(function(status_items, e)
-    if status_items then
-      diff_head_to_index = self.repo:diff_head_to_index(self.index)
-      -- update files tree
-      vim.schedule(function()
+    vim.schedule(function()
+      if self.closed or not self._views then
+        return
+      end
+      if status_items then
+        diff_head_to_index = self.repo:diff_head_to_index(self.index)
         self._views.files:update(status_items, self._git.path, diff_head_to_index)
-        if callback then
-          callback()
-        end
-      end)
-    end
+      else
+        self._views.files:update({}, self._git.path, nil)
+        notifier.warn("Failed to get git status, code: " .. e)
+      end
+      if callback then
+        callback()
+      end
+    end)
   end)
 end
 
