@@ -2540,7 +2540,7 @@ function Repository:annotated_commit_from_revspec(revspec)
 
   local err = libgit2_C.git_annotated_commit_from_revspec(git_commit, self.repo, revspec)
   if err ~= 0 then
-    return nil, 0
+    return nil, err
   end
 
   return AnnotatedCommit.new(git_commit[0]), 0
@@ -4118,7 +4118,7 @@ function Repository:rebase_init(branch, upstream, onto, opts)
     rebase_opts
   )
   if err ~= 0 then
-    return nil, 0
+    return nil, err
   end
 
   return Rebase.new(git_rebase[0]), 0
@@ -4133,7 +4133,7 @@ function Repository:rebase_open()
 
   local err = libgit2_C.git_rebase_open(git_rebase, self.repo, opts)
   if err ~= 0 then
-    return nil, 0
+    return nil, err
   end
 
   return Rebase.new(git_rebase[0]), 0

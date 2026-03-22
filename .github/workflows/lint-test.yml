@@ -26,6 +26,8 @@ jobs:
     steps:
       - name: checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: setup neovim
         uses: rhysd/action-setup-vim@v1
@@ -60,6 +62,8 @@ jobs:
     steps:
       - name: checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: setup neovim
         uses: rhysd/action-setup-vim@v1
