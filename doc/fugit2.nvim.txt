@@ -32,7 +32,7 @@ FEATURES              *fugit2.nvim-neovim-git-gui-powered-by-libgit2-features*
 - Native branch picker.
 - Diff view.
 - Git blame.
-- TODO: In-memory rebase.
+- Interactive in-memory rebase.
 - TODO: Remap default key binding.
 - TODO: Proper help menu.
 

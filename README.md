@@ -182,14 +182,14 @@ Open the rebase view from the status window (`Fugit2`) by pressing `r`, or direc
 
 | Key | Action |
 |-----|--------|
-| `p` | Pick |
-| `r` / `w` | Reword commit message |
+| `c` / `p` | Pick |
+| `r` | Reword commit message |
 | `s` | Squash into parent |
 | `f` | Fixup into parent (discard message) |
-| `d` / `x` | Drop |
+| `k` / `d` | Drop |
 | `b` | Break (drop all following commits) |
-| `gj` / `Ctrl-j` | Move commit down |
-| `gk` / `Ctrl-k` | Move commit up |
+| `M-n` / `Ctrl-j` | Move commit down |
+| `M-p` / `Ctrl-k` | Move commit up |
 | `<Enter>` | Execute rebase |
 | `q` / `<Esc>` | Abort / close |
 

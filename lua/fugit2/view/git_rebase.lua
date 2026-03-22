@@ -254,7 +254,7 @@ function RebaseView:init(ns_id, repo, ref_config, revspec_config)
   self._states = {
     help_line = NuiLine {
       NuiText(
-        "Actions: [p]ick, [r]e[w]ord, [s]quash, [f]ixup, [d]rop, [b]reak, [gj][C-j], [gk][C-k], []",
+        "Actions: [c/p]ick, [r]eword, [s]quash, [f]ixup, [k/d]rop, [b]reak, [M-n][C-j], [M-p][C-k], []",
         "Fugit2ObjectId"
       ),
     },
@@ -547,17 +547,17 @@ function RebaseView:rebase_start()
   local commit_view = self.views.commits
   commit_view:unmap("n", {
     "r",
-    "w",
-    "x",
+    "c",
+    "p",
+    "k",
     "d",
     "b",
     "e",
     "s",
     "f",
-    "p",
-    "gj",
+    "<M-n>",
     "<C-j>",
-    "gk",
+    "<M-p>",
     "<C-k>",
   })
   commit_view:map("n", "<cr>", function()
@@ -999,7 +999,7 @@ function RebaseView:setup_handlers()
   end
 
   -- drop commit
-  commit_view:map("n", { "x", "d" }, function()
+  commit_view:map("n", { "k", "d" }, function()
     action_fn(RebaseAction.DROP)
   end, opts)
 
@@ -1036,12 +1036,12 @@ function RebaseView:setup_handlers()
   end, opts)
 
   -- reword
-  commit_view:map("n", { "r", "w" }, function()
+  commit_view:map("n", "r", function()
     action_fn(RebaseAction.REWORD)
   end, opts)
 
   -- pick
-  commit_view:map("n", "p", function()
+  commit_view:map("n", { "c", "p" }, function()
     action_fn(RebaseAction.PICK)
   end, opts)
 
@@ -1091,17 +1091,16 @@ function RebaseView:setup_handlers()
     commit_view:render()
   end
 
-  commit_view:map("n", { "gj", "<C-j>" }, function()
+  commit_view:map("n", { "<M-n>", "<C-j>" }, function()
     reorder_fn(true)
   end, opts)
 
-  commit_view:map("n", { "gk", "<C-k>" }, function()
+  commit_view:map("n", { "<M-p>", "<C-k>" }, function()
     reorder_fn(false)
   end, opts)
 
   -- Move cursor
   commit_view:map("n", "j", "2j", opts)
-  commit_view:map("n", "k", "2k", opts)
   commit_view:map("v", "j", "2j", opts)
   commit_view:map("v", "k", "2k", opts)
 
