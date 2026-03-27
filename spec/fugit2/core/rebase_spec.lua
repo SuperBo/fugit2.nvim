@@ -3,12 +3,33 @@ local libgit2 = require "fugit2.core.libgit2"
 
 describe("in-memory rebase", function()
   local repo --[[@as GitRepository]]
+  local tmp_dir
 
   setup(function()
     local path = require("os").getenv "GIT2_DIR"
     libgit2.setup_lib(path and path .. "/lib/libgit2.so" or nil)
 
-    repo = git2.Repository.open(".", false) --[[@as GitRepository]]
+    -- Create a temporary git repo with at least 2 commits so HEAD~1 is always valid
+    tmp_dir = os.tmpname()
+    os.remove(tmp_dir)
+    os.execute("mkdir -p " .. tmp_dir)
+    os.execute(
+      "cd "
+        .. tmp_dir
+        .. " && git init -q"
+        .. " && git config user.email 'test@test.com'"
+        .. " && git config user.name 'Test'"
+        .. " && echo a > file.txt && git add file.txt && git commit -q -m 'first'"
+        .. " && echo b > file.txt && git add file.txt && git commit -q -m 'second'"
+    )
+
+    repo = git2.Repository.open(tmp_dir, false) --[[@as GitRepository]]
+  end)
+
+  teardown(function()
+    if tmp_dir then
+      os.execute("rm -rf " .. tmp_dir)
+    end
   end)
 
   describe("rebase_init with inmemory=true", function()
