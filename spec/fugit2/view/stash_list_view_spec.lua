@@ -1,9 +1,11 @@
 local StashListView = require "fugit2.view.components.stash_list_view"
 
+local ns_id = vim.api.nvim_create_namespace "fugit2_test_stash"
+
 ---@param entries StashEntry[]
 ---@return string[]
 local function render_lines(entries)
-  local view = StashListView(0, entries)
+  local view = StashListView(ns_id, entries)
   return vim.tbl_map(function(line)
     return line:content()
   end, view._lines)
@@ -62,7 +64,7 @@ describe("StashListView", function()
         { index = 1, message = "second", oid = nil },
         { index = 2, message = "third", oid = nil },
       }
-      local view = StashListView(0, entries)
+      local view = StashListView(ns_id, entries)
 
       -- 1-based line numbers map directly to entries
       assert.are.equal("first", view:get_entry(1).message)
@@ -74,7 +76,7 @@ describe("StashListView", function()
       local entries = {
         { index = 0, message = "only", oid = nil },
       }
-      local view = StashListView(0, entries)
+      local view = StashListView(ns_id, entries)
 
       assert.is_nil(view:get_entry(0))
       assert.is_nil(view:get_entry(2))
@@ -84,7 +86,7 @@ describe("StashListView", function()
       local entries = {
         { index = 0, message = "test", oid = nil },
       }
-      local view = StashListView(0, entries)
+      local view = StashListView(ns_id, entries)
 
       -- popup not mounted, so winid is nil
       assert.is_nil(view:get_entry())
@@ -96,7 +98,7 @@ describe("StashListView", function()
       local entries = {
         { index = 0, message = "old", oid = nil },
       }
-      local view = StashListView(0, entries)
+      local view = StashListView(ns_id, entries)
       assert.are.equal(1, #view._lines)
 
       local new_entries = {
@@ -117,7 +119,7 @@ describe("StashListView", function()
       local entries = {
         { index = 0, message = "will be dropped", oid = nil },
       }
-      local view = StashListView(0, entries)
+      local view = StashListView(ns_id, entries)
 
       view._entries = {}
       view:_build_lines()
@@ -131,7 +133,7 @@ describe("StashListView", function()
       local entries = {
         { index = 0, message = "test", oid = nil },
       }
-      local view = StashListView(0, entries)
+      local view = StashListView(ns_id, entries)
       local called = false
 
       view:on_action(function()
@@ -148,7 +150,7 @@ describe("StashListView", function()
         { index = 0, message = "first", oid = nil },
         { index = 1, message = "second", oid = nil },
       }
-      local view = StashListView(0, entries)
+      local view = StashListView(ns_id, entries)
       local received_action, received_entry
 
       view:on_action(function(action, entry)

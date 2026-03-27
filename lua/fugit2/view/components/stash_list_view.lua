@@ -62,7 +62,7 @@ function StashListView:_build_lines()
   for _, entry in ipairs(self._entries) do
     local line = NuiLine()
     line:append(string.format("stash@{%d}", entry.index), "Fugit2ObjectId")
-    line:append("  ")
+    line:append "  "
     line:append(entry.message)
     self._lines[#self._lines + 1] = line
   end

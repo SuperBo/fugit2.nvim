@@ -97,8 +97,8 @@ describe("stash", function()
     end)
 
     it("fails when there is nothing to stash", function()
-      -- Reset to clean state
-      os.execute("cd " .. tmp_dir .. " && git checkout -q -- . && git clean -fd -q")
+      -- Reset to clean state (reset --hard clears both index and working tree)
+      os.execute("cd " .. tmp_dir .. " && git reset --hard HEAD -q && git clean -fd -q")
 
       local sig, _ = repo:signature_default()
       local oid, err = repo:stash_save(sig, nil, 0)
@@ -182,7 +182,7 @@ describe("stash", function()
       assert.is_true(count >= 2)
 
       -- stash@{0} should be "stash B" (newest)
-      assert.is_true(entries[1].message:find("stash B") ~= nil)
+      assert.is_true(entries[1].message:find "stash B" ~= nil)
       assert.are.equal(0, entries[1].index)
       assert.are.equal(1, entries[2].index)
 
@@ -193,7 +193,7 @@ describe("stash", function()
       local entries_after, _ = repo:stash_list()
       assert.are.equal(count - 1, #entries_after)
       assert.are.equal(0, entries_after[1].index)
-      assert.is_true(entries_after[1].message:find("stash A") ~= nil)
+      assert.is_true(entries_after[1].message:find "stash A" ~= nil)
     end)
 
     it("fails with invalid index", function()
