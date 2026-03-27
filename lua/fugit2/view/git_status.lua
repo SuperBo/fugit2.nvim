@@ -67,6 +67,7 @@ local Menu = {
   PUSH = 6,
   REBASE = 7,
   FORGE = 8,
+  STASH = 9,
 }
 
 -- ======================
@@ -531,6 +532,35 @@ function GitStatus:_init_menus(menu_type)
       { texts = { NuiText(" 󰜛 Rebase ", head_hl), states.current_text, NuiText(" onto ", head_hl) } },
       { texts = { onto_text }, key = "i" },
       { texts = { NuiText "  onto another branch" }, key = "e" },
+    }
+  elseif menu_type == Menu.STASH then
+    menu_title = NuiText(" Stash ", title_hl)
+    menu_items = {
+      { texts = { NuiText("  Stash ", head_hl) } },
+      { texts = { NuiText "  Save" }, key = "z" },
+      { texts = { NuiText "  Pop" }, key = "p" },
+      { texts = { NuiText "  Apply" }, key = "a" },
+      { texts = { NuiText "  Drop" }, key = "d" },
+      { texts = { NuiText("  Inspect ", head_hl) } },
+      { texts = { NuiText "  List" }, key = "l" },
+    }
+    arg_items = {
+      {
+        text = NuiText "Include untracked files",
+        key = "-u",
+        arg = "--include-untracked",
+        type = UI.INPUT_TYPE.CHECKBOX,
+        model = "stash_flags",
+        default = false,
+      },
+      {
+        text = NuiText "Keep index",
+        key = "-k",
+        arg = "--keep-index",
+        type = UI.INPUT_TYPE.CHECKBOX,
+        model = "stash_flags",
+        default = false,
+      },
     }
   end
 
@@ -2533,6 +2563,160 @@ function GitStatus:_init_rebase_menu()
   return m
 end
 
+-- ========================
+-- | Stash action methods |
+-- ========================
+
+---Saves current changes to a new stash with optional message prompt.
+---@param args string[]? stash flag args from menu
+function GitStatus:stash_save(args)
+  local flags = 0
+  if args then
+    for _, arg in ipairs(args) do
+      if arg == "--include-untracked" then
+        flags = bit.bor(flags, git2.GIT_STASH.INCLUDE_UNTRACKED)
+      elseif arg == "--keep-index" then
+        flags = bit.bor(flags, git2.GIT_STASH.KEEP_INDEX)
+      end
+    end
+  end
+
+  vim.ui.input({ prompt = "Stash message (optional): " }, function(message)
+    if message == nil then
+      return
+    end
+    vim.schedule(function()
+      local signature = self._git.signature
+      if not signature then
+        notifier.error "No default author"
+        return
+      end
+      if message == "" then
+        message = nil
+      end
+      local _, err = self.repo:stash_save(signature, message, flags)
+      if err == 0 then
+        notifier.info "Stash saved"
+        self:update_then_render()
+      else
+        notifier.error("Failed to save stash", err)
+      end
+    end)
+  end)
+end
+
+---Pops the top stash (apply + remove).
+function GitStatus:stash_pop()
+  local err = self.repo:stash_pop(0)
+  if err == 0 then
+    notifier.info "Stash popped"
+    self:update_then_render()
+  else
+    notifier.error("Failed to pop stash", err)
+  end
+end
+
+---Applies the top stash without removing it.
+function GitStatus:stash_apply()
+  local err = self.repo:stash_apply(0)
+  if err == 0 then
+    notifier.info "Stash applied"
+    self:update_then_render()
+  else
+    notifier.error("Failed to apply stash", err)
+  end
+end
+
+---Drops the top stash with confirmation.
+function GitStatus:stash_drop()
+  local confirm = UI.Confirm(self.ns_id, NuiLine { NuiText "Drop top stash, are you sure?" })
+  confirm:on_yes(function()
+    local err = self.repo:stash_drop(0)
+    if err == 0 then
+      notifier.info "Stash dropped"
+      self:update_then_render()
+    else
+      notifier.error("Failed to drop stash", err)
+    end
+  end)
+  confirm:mount()
+end
+
+---Shows browsable stash list popup.
+function GitStatus:stash_list_show()
+  local StashListView = require "fugit2.view.components.stash_list_view"
+  local entries, err = self.repo:stash_list()
+  if err ~= 0 then
+    notifier.error("Failed to list stashes", err)
+    return
+  end
+  if #entries == 0 then
+    notifier.info "No stashes"
+    return
+  end
+
+  local view = StashListView(self.ns_id, entries)
+  view:on_action(function(action, entry)
+    if action == "apply" then
+      local apply_err = self.repo:stash_apply(entry.index)
+      if apply_err == 0 then
+        notifier.info("Applied stash@{" .. entry.index .. "}")
+        self:update_then_render()
+      else
+        notifier.error("Failed to apply stash", apply_err)
+      end
+    elseif action == "pop" then
+      local pop_err = self.repo:stash_pop(entry.index)
+      if pop_err == 0 then
+        notifier.info("Popped stash@{" .. entry.index .. "}")
+        self:update_then_render()
+        view:close()
+      else
+        notifier.error("Failed to pop stash", pop_err)
+      end
+    elseif action == "drop" then
+      local drop_confirm = UI.Confirm(self.ns_id, NuiLine { NuiText("Drop stash@{" .. entry.index .. "}?") })
+      drop_confirm:on_yes(function()
+        local drop_err = self.repo:stash_drop(entry.index)
+        if drop_err == 0 then
+          notifier.info("Dropped stash@{" .. entry.index .. "}")
+          local new_entries = self.repo:stash_list()
+          if #new_entries == 0 then
+            view:close()
+          else
+            view:update(new_entries)
+          end
+          self:update_then_render()
+        else
+          notifier.error("Failed to drop stash", drop_err)
+        end
+      end)
+      drop_confirm:mount()
+    end
+  end)
+  view:mount()
+end
+
+function GitStatus:_init_stash_menu()
+  local m = self:_init_menus(Menu.STASH)
+
+  m:on_submit(function(item_id, args)
+    if item_id == "z" then
+      self:stash_save(args["stash_flags"])
+    elseif item_id == "p" then
+      self:stash_pop()
+    elseif item_id == "a" then
+      self:stash_apply()
+    elseif item_id == "d" then
+      self:stash_drop()
+    elseif item_id == "l" then
+      self:stash_list_show()
+    end
+  end)
+
+  return m
+end
+
 local MENU_INITS = {
   [Menu.BRANCH] = GitStatus._init_branch_menu,
   [Menu.COMMIT] = GitStatus._init_commit_menu,
@@ -2542,6 +2726,7 @@ local MENU_INITS = {
   [Menu.PUSH] = GitStatus._init_push_menu,
   [Menu.FORGE] = GitStatus._init_forge_menu,
   [Menu.REBASE] = GitStatus._init_rebase_menu,
+  [Menu.STASH] = GitStatus._init_stash_menu,
 }
 
 ---Menu handlers factory
@@ -2813,6 +2998,9 @@ function GitStatus:setup_handlers()
 
   -- Forge menu
   file_tree:map("n", "N", self:_menu_handlers(Menu.FORGE), map_options)
+
+  -- Stash menu
+  file_tree:map("n", "z", self:_menu_handlers(Menu.STASH), map_options)
 end
 
 return GitStatus

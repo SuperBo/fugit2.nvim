@@ -4139,6 +4139,67 @@ function Repository:rebase_open()
   return Rebase.new(git_rebase[0]), 0
 end
 
+-- =====================
+-- | Repository: Stash |
+-- =====================
+
+---Saves current changes to a new stash.
+---@param signature GitSignature stasher identity
+---@param message string? optional stash message
+---@param flags integer stash flags (GIT_STASH enum, bitwise OR)
+---@return GitObjectId? oid
+---@return GIT_ERROR err
+function Repository:stash_save(signature, message, flags)
+  local git_oid = libgit2.git_oid()
+  local err = libgit2_C.git_stash_save(git_oid, self.repo, signature.sign, message, flags or 0)
+  if err ~= 0 then
+    return nil, err
+  end
+  return ObjectId.new(git_oid), 0
+end
+
+---Lists all stashes via git_stash_foreach callback.
+---@return StashEntry[] entries
+---@return GIT_ERROR err
+function Repository:stash_list()
+  local entries = {}
+  local cb = ffi.cast("git_stash_cb", function(index, message, stash_id, _payload)
+    entries[#entries + 1] = {
+      index = tonumber(index),
+      message = message ~= nil and ffi.string(message) or "",
+      oid = ObjectId.from_git_oid(stash_id),
+    }
+    return 0
+  end)
+  local err = libgit2_C.git_stash_foreach(self.repo, cb, nil)
+  cb:free()
+  if err ~= 0 then
+    return {}, err
+  end
+  return entries, 0
+end
+
+---Applies a stash without removing it.
+---@param index integer 0-based stash index
+---@return GIT_ERROR err
+function Repository:stash_apply(index)
+  return libgit2_C.git_stash_apply(self.repo, index, nil)
+end
+
+---Pops a stash (applies and removes).
+---@param index integer 0-based stash index
+---@return GIT_ERROR err
+function Repository:stash_pop(index)
+  return libgit2_C.git_stash_pop(self.repo, index, nil)
+end
+
+---Drops a stash without applying.
+---@param index integer 0-based stash index
+---@return GIT_ERROR err
+function Repository:stash_drop(index)
+  return libgit2_C.git_stash_drop(self.repo, index)
+end
+
 -- ==============================
 -- | Repository async functions |
 -- ==============================
@@ -4321,6 +4382,8 @@ M.GIT_REBASE_NO_OPERATION = libgit2.GIT_REBASE_NO_OPERATION
 M.GIT_REBASE_OPERATION = libgit2.GIT_REBASE_OPERATION
 M.GIT_REFERENCE = libgit2.GIT_REFERENCE
 M.GIT_REFERENCE_NAMESPACE = GIT_REFERENCE_NAMESPACE
+M.GIT_STASH = libgit2.GIT_STASH
+M.GIT_STASH_APPLY = libgit2.GIT_STASH_APPLY
 
 M.error_last = Error.last
 M.error_clear = Error.clear
