@@ -1,4 +1,4 @@
-*fugit2.nvim.txt*      For Neovim >= 0.8.0      Last change: 2025 September 02
+*fugit2.nvim.txt*        For Neovim >= 0.8.0        Last change: 2026 March 27
 
 ==============================================================================
 Table of Contents                              *fugit2.nvim-table-of-contents*
@@ -32,7 +32,7 @@ FEATURES              *fugit2.nvim-neovim-git-gui-powered-by-libgit2-features*
 - Native branch picker.
 - Diff view.
 - Git blame.
-- TODO: In-memory rebase.
+- Interactive in-memory rebase.
 - TODO: Remap default key binding.
 - TODO: Proper help menu.
 
@@ -87,7 +87,7 @@ If you are using lazy, you can use this config
           dependencies = { 'stevearc/dressing.nvim' }
         },
       },
-      cmd = { 'Fugit2', 'Fugit2Diff', 'Fugit2Graph' },
+      cmd = { 'Fugit2', 'Fugit2Diff', 'Fugit2Graph', 'Fugit2Rebase' },
       keys = {
         { '<leader>F', mode = 'n', '<cmd>Fugit2<cr>' }
       }
@@ -113,7 +113,7 @@ In case you want to use more stable diffview.nvim
           dependencies = { 'stevearc/dressing.nvim' }
         },
       },
-      cmd = { 'Fugit2', 'Fugit2Blame', 'Fugit2Diff', 'Fugit2Graph' },
+      cmd = { 'Fugit2', 'Fugit2Blame', 'Fugit2Diff', 'Fugit2Graph', 'Fugit2Rebase' },
       keys = {
         { '<leader>F', mode = 'n', '<cmd>Fugit2<cr>' }
       }
@@ -174,7 +174,7 @@ TESTED COLORSCHEMES*fugit2.nvim-neovim-git-gui-powered-by-libgit2-tested-colorsc
 - Nightfox <https://github.com/EdenEast/nightfox.nvim>
 - Tokyo Night <https://github.com/folke/tokyonight.nvim>
 - Kanagawa <https://github.com/rebelot/kanagawa.nvim>
-- Cyberdream <https://github.com/scottmckendry/cyberdream.nvim>please set `colorscheme = "cyberdream"` in plugin options.
+- Cyberdream <https://github.com/scottmckendry/cyberdream.nvim>: please set `colorscheme = "cyberdream"` in plugin options.
 
 
 USAGE AND KEYMAP*fugit2.nvim-neovim-git-gui-powered-by-libgit2-usage-and-keymap*
@@ -182,6 +182,39 @@ USAGE AND KEYMAP*fugit2.nvim-neovim-git-gui-powered-by-libgit2-usage-and-keymap*
 Please refer to Usage Guide
 <https://github.com/SuperBo/fugit2.nvim/wiki/%E2%8C%A8%EF%B8%8F-Usage-and-Keymap>.
 
+
+INTERACTIVE REBASE ~
+
+Open the rebase view from the status window (`Fugit2`) by pressing `r`, or
+directly with:
+
+>
+    :Fugit2Rebase                  " rebase current branch onto its upstream
+    :Fugit2Rebase . origin/main    " rebase current branch onto origin/main
+<
+
+**Status window — Rebasing menu (r)**
+
+  Key   Action
+  ----- ---------------------------------------------------
+  i     Rebase current branch onto upstream interactively
+  e     Rebase onto another branch (branch picker)
+**Rebase view keybindings**
+
+  Key           Action
+  ------------- -------------------------------------
+  p             Pick
+  r / w         Reword commit message
+  s             Squash into parent
+  f             Fixup into parent (discard message)
+  d / x         Drop
+  b             Break (drop all following commits)
+  gj / Ctrl-j   Move commit down
+  gk / Ctrl-k   Move commit up
+  <Enter>       Execute rebase
+  q / <Esc>     Abort / close
+
+  **Note:** `g` refreshes the status window (previously `r`).
 
 ISSUES                  *fugit2.nvim-neovim-git-gui-powered-by-libgit2-issues*
 
