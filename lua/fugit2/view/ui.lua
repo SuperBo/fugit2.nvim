@@ -52,6 +52,16 @@ function M.new_fugit2_diff_view(namespace, repo)
   return diffview
 end
 
+-- Creates Fugit2 RebaseView for interactive in-memory rebase.
+---@param namespace integer Nvim namespace
+---@param repo GitRepository
+---@param upstream string upstream revspec to rebase onto
+---@return Fugit2UIGitRebaseView
+function M.new_fugit2_rebase_window(namespace, repo, upstream)
+  local RebaseView = require "fugit2.view.git_rebase"
+  return RebaseView(namespace, repo, nil, { upstream = upstream })
+end
+
 -- Creates Fugit2 BlameView
 ---@param namespace integer Nvim namespace
 ---@param repo GitRepository

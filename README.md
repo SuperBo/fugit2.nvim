@@ -22,7 +22,7 @@ Git plugin for Neovim (based on libgit2).
 - ✔ Native branch picker.
 - ✔ Diff view.
 - ✔ Git blame.
-- ☐ TODO: In-memory rebase.
+- ✔ Interactive in-memory rebase.
 - ☐ TODO: Remap default key binding.
 - ☐ TODO: Proper help menu.
 
@@ -69,7 +69,7 @@ If you are using lazy, you can use this config
       dependencies = { 'stevearc/dressing.nvim' }
     },
   },
-  cmd = { 'Fugit2', 'Fugit2Diff', 'Fugit2Graph' },
+  cmd = { 'Fugit2', 'Fugit2Diff', 'Fugit2Graph', 'Fugit2Rebase' },
   keys = {
     { '<leader>F', mode = 'n', '<cmd>Fugit2<cr>' }
   }
@@ -96,7 +96,7 @@ In case you want to use more stable [diffview.nvim](https://github.com/sindrets/
       dependencies = { 'stevearc/dressing.nvim' }
     },
   },
-  cmd = { 'Fugit2', 'Fugit2Blame', 'Fugit2Diff', 'Fugit2Graph' },
+  cmd = { 'Fugit2', 'Fugit2Blame', 'Fugit2Diff', 'Fugit2Graph', 'Fugit2Rebase' },
   keys = {
     { '<leader>F', mode = 'n', '<cmd>Fugit2<cr>' }
   }
@@ -161,6 +161,39 @@ local opts = {
 ## Usage and Keymap
 
 Please refer to [Usage Guide](https://github.com/SuperBo/fugit2.nvim/wiki/%E2%8C%A8%EF%B8%8F-Usage-and-Keymap).
+
+### Interactive rebase
+
+Open the rebase view from the status window (`Fugit2`) by pressing `r`, or directly with:
+
+```
+:Fugit2Rebase                  " rebase current branch onto its upstream
+:Fugit2Rebase . origin/main    " rebase current branch onto origin/main
+```
+
+**Status window — Rebasing menu (`r`)**
+
+| Key | Action |
+|-----|--------|
+| `i` | Rebase current branch onto upstream interactively |
+| `e` | Rebase onto another branch (branch picker) |
+
+**Rebase view keybindings**
+
+| Key | Action |
+|-----|--------|
+| `p` | Pick |
+| `r` / `w` | Reword commit message |
+| `s` | Squash into parent |
+| `f` | Fixup into parent (discard message) |
+| `d` / `x` | Drop |
+| `b` | Break (drop all following commits) |
+| `gj` / `Ctrl-j` | Move commit down |
+| `gk` / `Ctrl-k` | Move commit up |
+| `<Enter>` | Execute rebase |
+| `q` / `<Esc>` | Abort / close |
+
+> **Note:** `g` refreshes the status window (previously `r`).
 
 ## Issues
 

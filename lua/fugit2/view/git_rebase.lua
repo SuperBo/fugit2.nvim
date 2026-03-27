@@ -190,6 +190,8 @@ function RebaseView:init(ns_id, repo, ref_config, revspec_config)
   self._git.rebase_finished = false
   ---@type GIT_ERROR
   self._git.rebase_error = 0
+  ---@type fun()?
+  self._on_complete = nil
   ---@type Fugit2GitGraphCommitNode[]
   self._git.commits = {}
   ---@type FUGIT2_GIT_REBASE_OPERATION[]
@@ -691,13 +693,12 @@ function RebaseView:rebase_finish()
   end
 
   notifier.info "Rebase successfully"
-  states.help_line = NuiLine { NuiText("Rebase successfully", "Fugit2Staged") }
 
-  self:update()
-  self:render()
-
-  -- TODO: remap to Finish flow
-  -- self:unmount()
+  local on_complete = self._on_complete
+  self:unmount()
+  if on_complete then
+    vim.schedule(on_complete)
+  end
 end
 
 -- Rebase action has some conflicts, need to resolve or abort.
@@ -1110,6 +1111,12 @@ function RebaseView:setup_handlers()
   commit_view:map("n", { "<esc>", "q" }, function()
     self:unmount()
   end, opts)
+end
+
+---Registers a callback to be called after rebase completes successfully.
+---@param callback fun()
+function RebaseView:on_complete(callback)
+  self._on_complete = callback
 end
 
 function RebaseView:mount()

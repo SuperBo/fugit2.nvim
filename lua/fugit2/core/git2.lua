@@ -2246,7 +2246,7 @@ function Rebase:_rebase_commit__amend(index, parent_commit, author, committer, m
   local parent_tree = ffi.new "git_tree*[1]"
   local tree = ffi.new "git_tree*[1]"
   local commit_id = libgit2.git_oid()
-  local commit = libgit2.ffi.new "git_commit*[1]"
+  local commit = ffi.new "git_commit*[1]"
 
   err = libgit2_C.git_commit_tree(parent_tree, parent_commit)
   if err ~= 0 then
