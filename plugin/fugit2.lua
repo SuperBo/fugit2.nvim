@@ -14,3 +14,7 @@ vim.api.nvim_create_user_command("Fugit2Blame", require "fugit2".git_blame, {
   desc = "Open Fugit2Blame.",
   nargs = "?"
 })
+vim.api.nvim_create_user_command("Fugit2CherryPick", require "fugit2".git_cherry_pick, {
+  desc = "Open Fugit2 cherry-pick commit picker.",
+  nargs = "?"
+})

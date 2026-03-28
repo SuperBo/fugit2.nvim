@@ -126,4 +126,29 @@ function M.git_blame(kwargs)
   end
 end
 
+function M.git_cherry_pick(kwargs)
+  local repo = open_repository(kwargs.fargs[1])
+  if repo then
+    local GitGraph = require "fugit2.view.git_graph"
+    local git2 = require "fugit2.core.git2"
+    local notifier = require "fugit2.notifier"
+    local graph = GitGraph(M.namespace, repo)
+    graph:on_commit_select(function(commit)
+      local oid = git2.ObjectId.from_string(commit.oid)
+      if not oid then
+        notifier.error "Invalid commit OID"
+        return
+      end
+      local err = repo:cherry_pick(oid)
+      if err == 0 then
+        notifier.info("Cherry-picked " .. commit.oid:sub(1, 7))
+      else
+        notifier.error("Cherry-pick failed", err)
+      end
+    end)
+    graph:render()
+    graph:mount()
+  end
+end
+
 return M

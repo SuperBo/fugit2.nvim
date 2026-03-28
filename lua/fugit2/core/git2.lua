@@ -4200,6 +4200,23 @@ function Repository:stash_drop(index)
   return libgit2_C.git_stash_drop(self.repo, index)
 end
 
+-- ==========================
+-- | Repository: CherryPick |
+-- ==========================
+
+---Cherry-picks a commit onto HEAD, applying changes to workdir and index.
+---@param oid GitObjectId commit OID to cherry-pick
+---@return GIT_ERROR err
+function Repository:cherry_pick(oid)
+  local commit, err = self:commit_lookup(oid)
+  if err ~= 0 then
+    return err
+  end
+
+  local opts = ffi.new("git_cherrypick_options[1]", libgit2.GIT_CHERRYPICK_OPTIONS_INIT)
+  return libgit2_C.git_cherrypick(self.repo, commit.commit, opts)
+end
+
 -- ==============================
 -- | Repository async functions |
 -- ==============================

@@ -68,6 +68,7 @@ local Menu = {
   REBASE = 7,
   FORGE = 8,
   STASH = 9,
+  CHERRY_PICK = 10,
 }
 
 -- ======================
@@ -532,6 +533,12 @@ function GitStatus:_init_menus(menu_type)
       { texts = { NuiText(" 󰜛 Rebase ", head_hl), states.current_text, NuiText(" onto ", head_hl) } },
       { texts = { onto_text }, key = "i" },
       { texts = { NuiText "  onto another branch" }, key = "e" },
+    }
+  elseif menu_type == Menu.CHERRY_PICK then
+    menu_title = NuiText("  Cherry Pick ", title_hl)
+    menu_items = {
+      { texts = { NuiText("  Apply ", head_hl) } },
+      { texts = { NuiText "  Pick commit" }, key = "A" },
     }
   elseif menu_type == Menu.STASH then
     menu_title = NuiText(" Stash ", title_hl)
@@ -2563,6 +2570,37 @@ function GitStatus:_init_rebase_menu()
   return m
 end
 
+---GitStatus Cherry Pick Menu
+---@return Fugit2UITransientMenu
+function GitStatus:_init_cherry_pick_menu()
+  local m = self:_init_menus(Menu.CHERRY_PICK)
+
+  m:on_submit(function(item_id, _)
+    if item_id == "A" then
+      local GitGraph = require "fugit2.view.git_graph"
+      local graph = GitGraph(self.ns_id, self.repo)
+      graph:on_commit_select(function(commit)
+        local oid = git2.ObjectId.from_string(commit.oid)
+        if not oid then
+          notifier.error "Invalid commit OID"
+          return
+        end
+        local err = self.repo:cherry_pick(oid)
+        if err == 0 then
+          notifier.info("Cherry-picked " .. commit.oid:sub(1, 7))
+          self:update_then_render()
+        else
+          notifier.error("Cherry-pick failed", err)
+        end
+      end)
+      graph:render()
+      graph:mount()
+    end
+  end)
+
+  return m
+end
+
 -- ========================
 -- | Stash action methods |
 -- ========================
@@ -2727,6 +2765,7 @@ local MENU_INITS = {
   [Menu.FORGE] = GitStatus._init_forge_menu,
   [Menu.REBASE] = GitStatus._init_rebase_menu,
   [Menu.STASH] = GitStatus._init_stash_menu,
+  [Menu.CHERRY_PICK] = GitStatus._init_cherry_pick_menu,
 }
 
 ---Menu handlers factory
@@ -3001,6 +3040,9 @@ function GitStatus:setup_handlers()
 
   -- Stash menu
   file_tree:map("n", "z", self:_menu_handlers(Menu.STASH), map_options)
+
+  -- Cherry-pick menu
+  file_tree:map("n", "A", self:_menu_handlers(Menu.CHERRY_PICK), map_options)
 end
 
 return GitStatus

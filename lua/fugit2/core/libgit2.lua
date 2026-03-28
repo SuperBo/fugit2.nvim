@@ -684,6 +684,16 @@ ffi.cdef [[
   int git_stash_pop(git_repository *repo, size_t index, const git_stash_apply_options *options);
   int git_stash_drop(git_repository *repo, size_t index);
   int git_stash_foreach(git_repository *repo, git_stash_cb callback, void *payload);
+
+  typedef struct git_cherrypick_options {
+    unsigned int version;
+    unsigned int mainline;
+    git_merge_options merge_opts;
+    git_checkout_options checkout_opts;
+  } git_cherrypick_options;
+
+  int git_cherrypick_options_init(git_cherrypick_options *opts, unsigned int version);
+  int git_cherrypick(git_repository *repo, git_commit *commit, const git_cherrypick_options *cherrypick_options);
 ]]
 
 ---@class Libgit2Module
@@ -735,6 +745,7 @@ M.GIT_DIFF_OPTIONS_VERSION = 1
 M.GIT_FETCH_OPTIONS_VERSION = 1
 M.GIT_MERGE_OPTIONS_VERSION = 1
 M.GIT_PROXY_OPTIONS_VERSION = 1
+M.GIT_CHERRYPICK_OPTIONS_VERSION = 1
 M.GIT_REBASE_OPTIONS_VERSION = 1
 M.GIT_REMOTE_CALLBACKS_VERSION = 1
 M.GIT_STATUS_OPTIONS_VERSION = 1
@@ -1282,6 +1293,14 @@ M.GIT_REBASE_OPTIONS_INIT = {
 }
 M.GIT_STASH_APPLY_OPTIONS_INIT = {
   { M.GIT_STASH_APPLY_OPTIONS_VERSION, 0, M.GIT_CHECKOUT_OPTIONS_INIT[1] },
+}
+M.GIT_CHERRYPICK_OPTIONS_INIT = {
+  {
+    M.GIT_CHERRYPICK_OPTIONS_VERSION,
+    0,
+    M.GIT_MERGE_OPTIONS_INIT[1],
+    M.GIT_CHECKOUT_OPTIONS_INIT[1],
+  },
 }
 
 return M
