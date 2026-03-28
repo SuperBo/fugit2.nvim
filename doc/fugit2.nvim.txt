@@ -34,7 +34,7 @@ FEATURES              *fugit2.nvim-neovim-git-gui-powered-by-libgit2-features*
 - Git blame.
 - Interactive in-memory rebase.
 - Stash management.
-- TODO: Remap default key binding.
+- TODO: Allow remap default key binding.
 - TODO: Proper help menu.
 
 
@@ -245,12 +245,12 @@ Open the stash menu from the status window (`Fugit2`) by pressing `z`.
   -k    Keep index (staged changes stay staged)
 **Stash list keybindings**
 
-  Key         Action
-  ----------- ------------------------------------------
-  a           Apply stash at cursor
-  p           Pop stash at cursor
-  d           Drop stash at cursor (with confirmation)
-  q / <Esc>   Close stash list
+  Key       Action
+  --------- ------------------------------------------
+  a         Apply stash at cursor
+  p         Pop stash at cursor
+  d         Drop stash at cursor (with confirmation)
+  q/<Esc>   Close stash list
 
 ISSUES                  *fugit2.nvim-neovim-git-gui-powered-by-libgit2-issues*
 
