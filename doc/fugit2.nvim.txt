@@ -1,4 +1,4 @@
-*fugit2.nvim.txt*        For Neovim >= 0.8.0        Last change: 2026 March 27
+*fugit2.nvim.txt*        For Neovim >= 0.8.0        Last change: 2026 March 28
 
 ==============================================================================
 Table of Contents                              *fugit2.nvim-table-of-contents*
@@ -8,8 +8,6 @@ Table of Contents                              *fugit2.nvim-table-of-contents*
   - Installation  |fugit2.nvim-neovim-git-gui-powered-by-libgit2-installation|
   - Tested colorschemes|fugit2.nvim-neovim-git-gui-powered-by-libgit2-tested-colorschemes|
   - Usage and Keymap|fugit2.nvim-neovim-git-gui-powered-by-libgit2-usage-and-keymap|
-    - Interactive rebase         |fugit2.nvim-interactive-rebase|
-    - Stash management           |fugit2.nvim-stash-management|
   - Issues              |fugit2.nvim-neovim-git-gui-powered-by-libgit2-issues|
   - Credits            |fugit2.nvim-neovim-git-gui-powered-by-libgit2-credits|
 2. Links                                                   |fugit2.nvim-links|
@@ -187,7 +185,6 @@ Please refer to Usage Guide
 
 
 INTERACTIVE REBASE ~
-                                                  *fugit2.nvim-interactive-rebase*
 
 Open the rebase view from the status window (`Fugit2`) by pressing `r`, or
 directly with:
@@ -220,37 +217,40 @@ directly with:
 
   **Note:** `g` refreshes the status window (previously `r`).
 
-
 STASH MANAGEMENT ~
-                                                  *fugit2.nvim-stash-management*
 
 Open the stash menu from the status window (`Fugit2`) by pressing `z`.
 
 **Status window — Stash menu (z)**
 
-  Key   Action
-  ----- -----------------------------------------------------------
-  z     Save current changes to a new stash (prompts for message)
-  p     Pop top stash (apply + remove)
-  a     Apply top stash (keep stash)
-  d     Drop top stash (with confirmation)
-  l     Open browsable stash list
+  -----------------------------------------------------------------------
+  Key                         Action
+  --------------------------- -------------------------------------------
+  z                           Save current changes to a new stash
+                              (prompts for optional message)
 
+  p                           Pop top stash (apply + remove)
+
+  a                           Apply top stash (keep stash)
+
+  d                           Drop top stash (with confirmation)
+
+  l                           Open browsable stash list
+  -----------------------------------------------------------------------
 **Stash menu arguments (toggles)**
 
   Key   Argument
-  ----- -------------------------------------------
+  ----- -----------------------------------------
   -u    Include untracked files
   -k    Keep index (staged changes stay staged)
-
 **Stash list keybindings**
 
-  Key       Action
-  --------- ---------------------------------
-  a         Apply stash at cursor
-  p         Pop stash at cursor
-  d         Drop stash at cursor (with confirmation)
-  q / <Esc> Close stash list
+  Key         Action
+  ----------- ------------------------------------------
+  a           Apply stash at cursor
+  p           Pop stash at cursor
+  d           Drop stash at cursor (with confirmation)
+  q / <Esc>   Close stash list
 
 ISSUES                  *fugit2.nvim-neovim-git-gui-powered-by-libgit2-issues*
 
