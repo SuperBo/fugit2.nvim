@@ -30,7 +30,7 @@ jobs:
           echo "GIT2_DIR=$GIT2_PATH" >> $GITHUB_ENV
 
       - name: LuaRocks Upload
-        uses: nvim-neorocks/luarocks-tag-release@v5
+        uses: nvim-neorocks/luarocks-tag-release@v7
         env:
           LUAROCKS_API_KEY: ${{ secrets.LUAROCKS_API_KEY }}
         with:
