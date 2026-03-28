@@ -31,7 +31,7 @@ describe("cherry_pick", function()
     -- Capture the OID of the commit on branch
     local handle = io.popen("cd " .. tmp_dir .. " && git rev-parse branch")
     if handle then
-      pick_oid_str = handle:read("*l")
+      pick_oid_str = handle:read "*l"
       handle:close()
     end
 
