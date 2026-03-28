@@ -668,6 +668,22 @@ ffi.cdef [[
   int git_rebase_abort(git_rebase *rebase);
   int git_rebase_finish(git_rebase *rebase, const git_signature *signature);
   void git_rebase_free(git_rebase *rebase);
+
+  typedef int (*git_stash_cb)(size_t index, const char *message, const git_oid *stash_id, void *payload);
+
+  typedef struct {
+    unsigned int version;
+    uint32_t flags;
+    git_checkout_options checkout_options;
+    void *progress_cb;
+    void *progress_payload;
+  } git_stash_apply_options;
+
+  int git_stash_save(git_oid *out, git_repository *repo, const git_signature *stasher, const char *message, uint32_t flags);
+  int git_stash_apply(git_repository *repo, size_t index, const git_stash_apply_options *options);
+  int git_stash_pop(git_repository *repo, size_t index, const git_stash_apply_options *options);
+  int git_stash_drop(git_repository *repo, size_t index);
+  int git_stash_foreach(git_repository *repo, git_stash_cb callback, void *payload);
 ]]
 
 ---@class Libgit2Module
@@ -1213,6 +1229,23 @@ M.GIT_MERGE = {
   VIRTUAL_BASE = 16, --(1 << 4): Treat this merge as if it is to produce the virtual base of recursive.
 }
 
+---@enum GIT_STASH
+M.GIT_STASH = {
+  DEFAULT = 0,
+  KEEP_INDEX = 1, --(1 << 0)
+  INCLUDE_UNTRACKED = 2, --(1 << 1)
+  INCLUDE_IGNORED = 4, --(1 << 2)
+  KEEP_ALL = 8, --(1 << 3)
+}
+
+---@enum GIT_STASH_APPLY
+M.GIT_STASH_APPLY = {
+  DEFAULT = 0,
+  REINSTATE_INDEX = 1, --(1 << 0)
+}
+
+M.GIT_STASH_APPLY_OPTIONS_VERSION = 1
+
 -- Inits helper
 
 local NULL = ffi.cast("void*", nil)
@@ -1246,6 +1279,9 @@ M.GIT_REBASE_OPTIONS_INIT = {
     NULL,
     NULL,
   },
+}
+M.GIT_STASH_APPLY_OPTIONS_INIT = {
+  { M.GIT_STASH_APPLY_OPTIONS_VERSION, 0, M.GIT_CHECKOUT_OPTIONS_INIT[1] },
 }
 
 return M

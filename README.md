@@ -23,6 +23,7 @@ Git plugin for Neovim (based on libgit2).
 - ✔ Diff view.
 - ✔ Git blame.
 - ✔ Interactive in-memory rebase.
+- ✔ Stash management.
 - ☐ TODO: Remap default key binding.
 - ☐ TODO: Proper help menu.
 
@@ -194,6 +195,36 @@ Open the rebase view from the status window (`Fugit2`) by pressing `r`, or direc
 | `q` / `<Esc>` | Abort / close |
 
 > **Note:** `g` refreshes the status window (previously `r`).
+
+### Stash management
+
+Open the stash menu from the status window (`Fugit2`) by pressing `z`.
+
+**Status window — Stash menu (`z`)**
+
+| Key | Action |
+|-----|--------|
+| `z` | Save current changes to a new stash (prompts for optional message) |
+| `p` | Pop top stash (apply + remove) |
+| `a` | Apply top stash (keep stash) |
+| `d` | Drop top stash (with confirmation) |
+| `l` | Open browsable stash list |
+
+**Stash menu arguments (toggles)**
+
+| Key | Argument |
+|-----|----------|
+| `-u` | Include untracked files |
+| `-k` | Keep index (staged changes stay staged) |
+
+**Stash list keybindings**
+
+| Key | Action |
+|-----|--------|
+| `a` | Apply stash at cursor |
+| `p` | Pop stash at cursor |
+| `d` | Drop stash at cursor (with confirmation) |
+| `q` / `<Esc>` | Close stash list |
 
 ## Issues
 
