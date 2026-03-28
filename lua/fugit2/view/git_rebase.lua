@@ -692,7 +692,12 @@ function RebaseView:rebase_finish()
     end
 
     -- checkout HEAD to update working directory on disk
-    err = self.repo:checkout_head(git2.GIT_CHECKOUT.SAFE + git2.GIT_CHECKOUT.RECREATE_MISSING)
+    local checkout_strategy = bit.bor(
+      git2.GIT_CHECKOUT.SAFE,
+      git2.GIT_CHECKOUT.ALLOW_CONFLICTS, -- assume no conflicts after rebase
+      git2.GIT_CHECKOUT.RECREATE_MISSING
+    )
+    err = self.repo:checkout_head(checkout_strategy)
     if err ~= 0 then
       notifier.error("Failed to checkout head after rebase", err)
       states.help_line = NuiLine { NuiText("Git rebase error " .. err, "Fugit2Untracked") }

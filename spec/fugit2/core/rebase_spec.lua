@@ -142,7 +142,8 @@ describe("in-memory rebase", function()
       assert.is_nil(f)
 
       -- Checkout HEAD to update working directory
-      err = repo:checkout_head(git2.GIT_CHECKOUT.SAFE + git2.GIT_CHECKOUT.RECREATE_MISSING)
+      local checkout_strategy = bit.bor(git2.GIT_CHECKOUT.SAFE, git2.GIT_CHECKOUT.RECREATE_MISSING)
+      err = repo:checkout_head(checkout_strategy)
       assert.are.equal(0, err)
 
       -- After checkout: newfile.txt should now exist with correct content
@@ -205,7 +206,13 @@ describe("in-memory rebase", function()
       assert.are.equal(0, err)
 
       -- SAFE checkout should not overwrite existing tracked file
-      err = repo:checkout_head(git2.GIT_CHECKOUT.SAFE + git2.GIT_CHECKOUT.RECREATE_MISSING)
+      local checkout_strategy = bit.bor(
+        git2.GIT_CHECKOUT.SAFE,
+        git2.GIT_CHECKOUT.ALLOW_CONFLICTS, -- assume no conflicts after rebase
+        git2.GIT_CHECKOUT.RECREATE_MISSING
+      )
+      err = repo:checkout_head(checkout_strategy)
+
       assert.are.equal(0, err)
 
       f = io.open(tmp_dir .. "/file.txt", "r")
