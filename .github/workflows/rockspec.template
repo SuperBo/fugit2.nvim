@@ -23,6 +23,7 @@ dependencies = {
 }
 
 test_dependencies = {
+  'nlua>=0.2.0',
   'busted>=2.2.0',
 }
 
