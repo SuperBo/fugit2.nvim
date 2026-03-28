@@ -40,4 +40,4 @@ jobs:
             neovim-stable
             neovim-nightly
           extra_luarocks_args: |
-            GIT2_DIR=$GIT2_DIR
+            GIT2_DIR=${{ env.GIT2_DIR }}
