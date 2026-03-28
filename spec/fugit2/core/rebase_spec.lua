@@ -85,22 +85,21 @@ describe("in-memory rebase", function()
   end)
 
   describe("in-memory rebase finish updates working directory", function()
-    it("checkout HEAD after rebase finish syncs files on disk", function()
-      -- Setup: create a branch with a diverging commit
+    it("checkout HEAD recreates missing files after rebase", function()
+      -- Setup: create a branch that adds a new file
       local branch_name = "test-inmemory-checkout-" .. os.time()
       os.execute(
         "cd "
           .. tmp_dir
           .. " && git checkout -q -b "
           .. branch_name
-          .. " && echo c > file.txt && git add file.txt && git commit -q -m 'third on branch'"
+          .. " && echo new > newfile.txt && git add newfile.txt && git commit -q -m 'add newfile'"
           .. " && git checkout -q -"
       )
 
-      -- Read file content before rebase (should be 'b' on main HEAD)
-      local f = io.open(tmp_dir .. "/file.txt", "r")
-      local content_before = f:read "*a"
-      f:close()
+      -- newfile.txt should not exist on main
+      local f = io.open(tmp_dir .. "/newfile.txt", "r")
+      assert.is_nil(f)
 
       -- Prepare rebase: rebase branch onto HEAD (main)
       local branch_commit, _ = repo:annotated_commit_from_revspec(branch_name)
@@ -131,30 +130,90 @@ describe("in-memory rebase", function()
       err = rebase:finish(signature)
       assert.are.equal(0, err)
 
-      -- Update HEAD ref (same as rebase_finish does for inmemory)
+      -- Update HEAD ref
       local last_commit, _ = repo:commit_lookup(commit_id)
       assert.is_not_nil(last_commit)
 
       err = repo:update_head_for_commit(commit_id, last_commit:summary(), "rebase: ")
       assert.are.equal(0, err)
 
-      -- Before checkout: file on disk should still have old content
-      f = io.open(tmp_dir .. "/file.txt", "r")
-      local content_after_update_head = f:read "*a"
-      f:close()
-      assert.are.equal(content_before, content_after_update_head)
+      -- Before checkout: newfile.txt should still not exist on disk
+      f = io.open(tmp_dir .. "/newfile.txt", "r")
+      assert.is_nil(f)
 
       -- Checkout HEAD to update working directory
       err = repo:checkout_head(git2.GIT_CHECKOUT.SAFE + git2.GIT_CHECKOUT.RECREATE_MISSING)
       assert.are.equal(0, err)
 
-      -- After checkout: file on disk should now match the rebased commit
-      f = io.open(tmp_dir .. "/file.txt", "r")
-      local content_after_checkout = f:read "*a"
+      -- After checkout: newfile.txt should now exist with correct content
+      f = io.open(tmp_dir .. "/newfile.txt", "r")
+      assert.is_not_nil(f)
+      local content = f:read "*a"
       f:close()
-      assert.are.equal("c\n", content_after_checkout)
+      assert.are.equal("new\n", content)
 
-      -- Cleanup: reset back to main state
+      -- Cleanup
+      os.execute("cd " .. tmp_dir .. " && git checkout -q main 2>/dev/null || git checkout -q master 2>/dev/null")
+      os.execute("cd " .. tmp_dir .. " && git branch -q -D " .. branch_name .. " 2>/dev/null")
+    end)
+
+    it("checkout HEAD with safe does not overwrite existing files", function()
+      -- Setup: create a branch that modifies file.txt
+      local branch_name = "test-inmemory-safe-" .. os.time()
+      os.execute(
+        "cd "
+          .. tmp_dir
+          .. " && git checkout -q -b "
+          .. branch_name
+          .. " && echo c > file.txt && git add file.txt && git commit -q -m 'modify file'"
+          .. " && git checkout -q -"
+      )
+
+      -- Read file content before rebase
+      local f = io.open(tmp_dir .. "/file.txt", "r")
+      local content_before = f:read "*a"
+      f:close()
+
+      -- Prepare rebase
+      local branch_commit, _ = repo:annotated_commit_from_revspec(branch_name)
+      assert.is_not_nil(branch_commit)
+
+      local head_commit, _ = repo:annotated_commit_from_revspec "HEAD"
+      assert.is_not_nil(head_commit)
+
+      local rebase, err = repo:rebase_init(branch_commit, head_commit, nil, { inmemory = true })
+      assert.are.equal(0, err)
+      assert.is_not_nil(rebase)
+
+      local signature, _ = repo:signature_default()
+      assert.is_not_nil(signature)
+
+      local op, commit_id
+      op, err = rebase:next()
+      assert.are.equal(0, err)
+
+      commit_id, err = rebase:commit(nil, signature, nil)
+      assert.are.equal(0, err)
+
+      err = rebase:finish(signature)
+      assert.are.equal(0, err)
+
+      local last_commit, _ = repo:commit_lookup(commit_id)
+      assert.is_not_nil(last_commit)
+
+      err = repo:update_head_for_commit(commit_id, last_commit:summary(), "rebase: ")
+      assert.are.equal(0, err)
+
+      -- SAFE checkout should not overwrite existing tracked file
+      err = repo:checkout_head(git2.GIT_CHECKOUT.SAFE + git2.GIT_CHECKOUT.RECREATE_MISSING)
+      assert.are.equal(0, err)
+
+      f = io.open(tmp_dir .. "/file.txt", "r")
+      local content_after = f:read "*a"
+      f:close()
+      assert.are.equal(content_before, content_after)
+
+      -- Cleanup
       os.execute("cd " .. tmp_dir .. " && git checkout -q main 2>/dev/null || git checkout -q master 2>/dev/null")
       os.execute("cd " .. tmp_dir .. " && git branch -q -D " .. branch_name .. " 2>/dev/null")
     end)
