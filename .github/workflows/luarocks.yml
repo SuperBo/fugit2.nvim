@@ -20,7 +20,7 @@ jobs:
       - name: Get Version
         run: echo "LUAROCKS_VERSION=$(git describe --abbrev=0 --tags)" >> $GITHUB_ENV
 
-      - uses: cachix/install-nix-action@v27
+      - uses: cachix/install-nix-action@v31
         with:
           nix_path: nixpkgs=channel:nixos-stable
 
