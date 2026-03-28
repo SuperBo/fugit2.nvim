@@ -24,7 +24,7 @@ Git plugin for Neovim (based on libgit2).
 - ✔ Git blame.
 - ✔ Interactive in-memory rebase.
 - ✔ Stash management.
-- ☐ TODO: Remap default key binding.
+- ☐ TODO: Allow remap default key binding.
 - ☐ TODO: Proper help menu.
 
 ## 📦 Installation
@@ -224,7 +224,7 @@ Open the stash menu from the status window (`Fugit2`) by pressing `z`.
 | `a` | Apply stash at cursor |
 | `p` | Pop stash at cursor |
 | `d` | Drop stash at cursor (with confirmation) |
-| `q` / `<Esc>` | Close stash list |
+| `q`/`<Esc>` | Close stash list |
 
 ## Issues
 

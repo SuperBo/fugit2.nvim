@@ -14,7 +14,3 @@ vim.api.nvim_create_user_command("Fugit2Blame", require "fugit2".git_blame, {
   desc = "Open Fugit2Blame.",
   nargs = "?"
 })
-vim.api.nvim_create_user_command("Fugit2Rebase", require "fugit2".git_rebase, {
-  desc = "Open Fugit2 interactive rebase. Optional args: [path] [upstream]",
-  nargs = "*",
-})
