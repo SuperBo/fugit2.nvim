@@ -145,7 +145,7 @@ describe("in-memory rebase", function()
       assert.are.equal(content_before, content_after_update_head)
 
       -- Checkout HEAD to update working directory
-      err = repo:checkout_head(git2.GIT_CHECKOUT.FORCE)
+      err = repo:checkout_head(git2.GIT_CHECKOUT.SAFE + git2.GIT_CHECKOUT.RECREATE_MISSING)
       assert.are.equal(0, err)
 
       -- After checkout: file on disk should now match the rebased commit

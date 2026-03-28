@@ -22,7 +22,7 @@ state to the working directory or `.git/rebase-merge/`. This means:
   1. Update the HEAD ref to point to the final rebased commit
      (`Repository:update_head_for_commit`).
   2. Checkout HEAD to synchronize the working directory with the new commit tree
-     (`Repository:checkout_head(GIT_CHECKOUT.FORCE)`).
+     (`Repository:checkout_head(GIT_CHECKOUT.SAFE + GIT_CHECKOUT.RECREATE_MISSING)`).
 
 **Entry points** (both set `inmemory = true`):
 - `_init_rebase_ref()` — rebase from `GitReference` objects
