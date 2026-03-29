@@ -694,6 +694,7 @@ ffi.cdef [[
 
   int git_cherrypick_options_init(git_cherrypick_options *opts, unsigned int version);
   int git_cherrypick(git_repository *repo, git_commit *commit, const git_cherrypick_options *cherrypick_options);
+  int git_cherrypick_commit(git_index **out, git_repository *repo, git_commit *cherrypick_commit, git_commit *our_commit, unsigned int mainline, const git_merge_options *merge_options);
 ]]
 
 ---@class Libgit2Module

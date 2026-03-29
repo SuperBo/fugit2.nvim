@@ -5,6 +5,7 @@ describe("cherry_pick", function()
   local repo --[[@as GitRepository]]
   local tmp_dir
   local pick_oid_str -- OID of the commit to cherry-pick
+  local initial_head_oid_str
 
   setup(function()
     local path = require("os").getenv "GIT2_DIR"
@@ -35,6 +36,13 @@ describe("cherry_pick", function()
       handle:close()
     end
 
+    -- Capture the initial HEAD OID on main
+    local h2 = io.popen("cd " .. tmp_dir .. " && git rev-parse HEAD")
+    if h2 then
+      initial_head_oid_str = h2:read "*l"
+      h2:close()
+    end
+
     repo = git2.Repository.open(tmp_dir, false) --[[@as GitRepository]]
   end)
 
@@ -57,15 +65,33 @@ describe("cherry_pick", function()
       assert.are.equal(0, err)
     end)
 
-    it("stages the cherry-picked changes in the index", function()
-      -- After cherry_pick, new.txt should be staged (added to index)
-      local f = io.open(tmp_dir .. "/new.txt", "r")
-      assert.is_not_nil(f, "new.txt should exist in working directory after cherry-pick")
-      if f then
-        local content = f:read "*a"
-        f:close()
-        assert.is_true(content:find "b" ~= nil)
+    it("creates a new commit without modifying the working directory", function()
+      -- HEAD should have advanced to a new commit
+      local handle = io.popen("cd " .. tmp_dir .. " && git rev-parse HEAD")
+      local new_head_oid_str = handle and handle:read "*l" or nil
+      if handle then
+        handle:close()
       end
+      assert.is_not_nil(new_head_oid_str)
+      assert.are_not.equal(initial_head_oid_str, new_head_oid_str)
+
+      -- Working directory must not contain new.txt (in-memory, not applied to workdir)
+      local f = io.open(tmp_dir .. "/new.txt", "r")
+      assert.is_nil(f, "new.txt must NOT exist in working directory for in-memory cherry-pick")
+      if f then
+        f:close()
+      end
+    end)
+
+    it("new commit contains the cherry-picked file in its tree", function()
+      -- The cherry-picked commit's tree should include new.txt
+      local handle = io.popen("cd " .. tmp_dir .. " && git show HEAD:new.txt 2>/dev/null")
+      local content = handle and handle:read "*a" or nil
+      if handle then
+        handle:close()
+      end
+      assert.is_not_nil(content)
+      assert.is_true(content ~= nil and content:find "b" ~= nil)
     end)
 
     it("fails with an invalid OID", function()
@@ -76,7 +102,7 @@ describe("cherry_pick", function()
       assert.is_not_nil(oid)
 
       local err = repo:cherry_pick(oid)
-      assert.are.not_equal(0, err)
+      assert.are_not.equal(0, err)
     end)
   end)
 end)
