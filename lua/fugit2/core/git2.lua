@@ -4224,14 +4224,7 @@ function Repository:cherry_pick(oid)
 
   local merge_opts = ffi.new("git_merge_options[1]", libgit2.GIT_MERGE_OPTIONS_INIT)
   local index_out = ffi.new "git_index*[1]"
-  err = libgit2_C.git_cherrypick_commit(
-    index_out,
-    self.repo,
-    pick_commit.commit,
-    head_commit.commit,
-    0,
-    merge_opts
-  )
+  err = libgit2_C.git_cherrypick_commit(index_out, self.repo, pick_commit.commit, head_commit.commit, 0, merge_opts)
   if err ~= 0 then
     return err
   end
@@ -4256,7 +4249,7 @@ function Repository:cherry_pick(oid)
     return err
   end
 
-  local parents = ffi.new("git_commit*[1]")
+  local parents = ffi.new "git_commit*[1]"
   parents[0] = head_commit.commit
 
   local new_oid = libgit2.git_oid()

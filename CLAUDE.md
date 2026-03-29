@@ -10,6 +10,8 @@ make format    # Format Lua code with stylua (lua/ and spec/ dirs)
 make deps      # Install dependencies via luarocks
 ```
 
+Always run `make format` (or `stylua lua/ spec/` directly) after editing any Lua file. If `stylua` is not on PATH, install it via `brew install stylua` (macOS) or the [stylua releases page](https://github.com/JohnnyMorganz/StyLua/releases).
+
 To run a single test file:
 ```bash
 luarocks test --local -- --config-file=nlua.busted spec/git2_spec.lua
