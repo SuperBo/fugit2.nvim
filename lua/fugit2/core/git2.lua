@@ -4200,6 +4200,75 @@ function Repository:stash_drop(index)
   return libgit2_C.git_stash_drop(self.repo, index)
 end
 
+-- ==========================
+-- | Repository: CherryPick |
+-- ==========================
+
+---Cherry-picks a commit onto HEAD in-memory, creating a new commit without touching the working directory.
+---@param oid GitObjectId commit OID to cherry-pick
+---@return GIT_ERROR err
+function Repository:cherry_pick(oid)
+  local err
+
+  local pick_commit
+  pick_commit, err = self:commit_lookup(oid)
+  if not pick_commit then
+    return err
+  end
+
+  local head_commit
+  head_commit, err = self:head_commit()
+  if not head_commit then
+    return err
+  end
+
+  local merge_opts = ffi.new("git_merge_options[1]", libgit2.GIT_MERGE_OPTIONS_INIT)
+  local index_out = ffi.new "git_index*[1]"
+  err = libgit2_C.git_cherrypick_commit(index_out, self.repo, pick_commit.commit, head_commit.commit, 0, merge_opts)
+  if err ~= 0 then
+    return err
+  end
+
+  local c_index = index_out[0]
+
+  if libgit2_C.git_index_has_conflicts(c_index) ~= 0 then
+    libgit2_C.git_index_free(c_index)
+    return libgit2.GIT_ERROR.GIT_EUNMERGED
+  end
+
+  local tree_id = libgit2.git_oid()
+  err = libgit2_C.git_index_write_tree_to(tree_id, c_index, self.repo)
+  libgit2_C.git_index_free(c_index)
+  if err ~= 0 then
+    return err
+  end
+
+  local tree = ffi.new "git_tree*[1]"
+  err = libgit2_C.git_tree_lookup(tree, self.repo, tree_id)
+  if err ~= 0 then
+    return err
+  end
+
+  local parents = ffi.new "git_commit*[1]"
+  parents[0] = head_commit.commit
+
+  local new_oid = libgit2.git_oid()
+  err = libgit2_C.git_commit_create(
+    new_oid,
+    self.repo,
+    "HEAD",
+    pick_commit:author_signature().sign,
+    pick_commit:committer_signature().sign,
+    nil,
+    pick_commit:message(),
+    tree[0],
+    1,
+    ffi.cast("const git_commit**", parents)
+  )
+  libgit2_C.git_tree_free(tree[0])
+  return err
+end
+
 -- ==============================
 -- | Repository async functions |
 -- ==============================
