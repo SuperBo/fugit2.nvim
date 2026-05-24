@@ -2770,8 +2770,9 @@ local MENU_INITS = {
 
 ---Menu handlers factory
 ---@param menu_type Fugit2GitStatusMenu menu to init
+---@param direct boolean? skip menu and pick top
 ---@return fun() closure handler
-function GitStatus:_menu_handlers(menu_type)
+function GitStatus:_menu_handlers(menu_type, direct)
   local menus = self._menus
 
   return function()
@@ -2782,7 +2783,11 @@ function GitStatus:_menu_handlers(menu_type)
       menu = menu_constructor(self)
       menus[menu_type] = menu
     end
-    menu:mount()
+    if direct then
+      menu:skip()
+    else
+      menu:mount()
+    end
   end
 end
 
@@ -2951,23 +2956,30 @@ function GitStatus:setup_handlers()
     end
   end, map_options)
 
+  file_tree:map(
+    "n",
+    "a",
+    utils.wrap(GitStatus._index_add_reset_discard_all, self, TreeBase.IndexAction.ADD_RESET),
+    map_options
+  )
+
   --- Space/[-]: Add or remove index
   file_tree:map(
     "n",
     { "-", "<space>" },
-    self:_index_add_reset_handler(false, TreeBase.IndexAction.ADD_RESET),
+    utils.wrap(GitStatus._index_add_reset_discard, self, TreeBase.IndexAction.ADD_RESET),
     map_options
   )
 
   --- [s]: stage file
-  file_tree:map("n", "s", self:_index_add_reset_handler(false, TreeBase.IndexAction.ADD), map_options)
+  file_tree:map("n", "s", utils.wrap(GitStatus._index_add_reset_discard, self, TreeBase.IndexAction.ADD), map_options)
 
   --- [u]: unstage file
-  file_tree:map("n", "u", self:_index_add_reset_handler(false, TreeBase.IndexAction.RESET), map_options)
+  file_tree:map("n", "u", utils.wrap(GitStatus._index_add_reset_discard, self, TreeBase.IndexAction.RESET), map_options)
 
   --- [D]/[x]: discard file changes
   -- file_tree:map("n", {"D", "x"}, self:index_add_reset_handler(false, false, false, true), map_options)
-  self._prompts.discard_confirm:on_yes(self:_index_add_reset_handler(false, TreeBase.IndexAction.DISCARD))
+  self._prompts.discard_confirm:on_yes(utils.wrap(GitStatus._index_add_reset_discard, self, TreeBase.IndexAction.DISCARD))
   file_tree:map("n", { "D", "x" }, function()
     local node = file_tree.tree:get_node()
     if node then
@@ -2984,15 +2996,15 @@ function GitStatus:setup_handlers()
   file_tree:map(
     "v",
     { "-", "<space>" },
-    self:_index_add_reset_handler(true, TreeBase.IndexAction.ADD_RESET),
+    utils.wrap(GitStatus._index_add_reset_discard_visual, self, TreeBase.IndexAction.ADD_RESET),
     map_options
   )
 
   --- Visual [s]: stage files in range
-  file_tree:map("v", "s", self:_index_add_reset_handler(true, TreeBase.IndexAction.ADD), map_options)
+  file_tree:map("v", "s", utils.wrap(GitStatus._index_add_reset_discard_visual, self, TreeBase.IndexAction.ADD), map_options)
 
   --- Visual [u]: unstage files in range
-  file_tree:map("v", "u", self:_index_add_reset_handler(true, TreeBase.IndexAction.RESET), map_options)
+  file_tree:map("v", "u", utils.wrap(GitStatus._index_add_reset_discard_visual, self, TreeBase.IndexAction.RESET), map_options)
 
   --- Visual [x][d]: discard files in range
   file_tree:map("v", { "x", "d" }, function()
@@ -3009,40 +3021,48 @@ function GitStatus:setup_handlers()
     end
   end, map_options)
 
-  -- Commit Menu
-  file_tree:map("n", "c", self:_menu_handlers(Menu.COMMIT), map_options)
-
-  -- Amend confirm
-  self._prompts.amend_confirm:on_yes(self:amend_confirm_yes_handler())
-
   -- Command popup
   self.command_popup:map("n", { "q", "<esc>" }, function()
     self:quit_command()
   end, map_options)
 
-  -- Diff Menu
-  file_tree:map("n", "d", self:_menu_handlers(Menu.DIFF), map_options)
+  -- Amend confirm
+  self._prompts.amend_confirm:on_yes(self:amend_confirm_yes_handler())
 
-  -- Branch Menu
-  file_tree:map("n", "b", self:_menu_handlers(Menu.BRANCH), map_options)
+  local action_enum_remap = {
+    commit = Menu.COMMIT,
+    diff = Menu.DIFF,
+    branch = Menu.BRANCH,
+    push = Menu.PUSH,
+    fetch = Menu.FETCH,
+    pull = Menu.PULL,
+    forge = Menu.FORGE,
+    stash = Menu.STASH,
+    cherry_pick = Menu.CHERRY_PICK,
+  }
 
-  -- Push menu
-  file_tree:map("n", "P", self:_menu_handlers(Menu.PUSH), map_options)
+  local keymaps_used = {}
+  local tree_keymaps = self.opts.file_tree_maps.menu
+  for action, key in pairs(tree_keymaps) do
+    if action_enum_remap[action] then
+    local action_enum = action_enum_remap[action]
+      file_tree:map("n", key, self:_menu_handlers(action_enum), map_options)
+      keymaps_used[key] = true
+    end
+  end
 
-  -- Fetch menu
-  file_tree:map("n", "f", self:_menu_handlers(Menu.FETCH), map_options)
-
-  -- Pull menu
-  file_tree:map("n", "p", self:_menu_handlers(Menu.PULL), map_options)
-
-  -- Forge menu
-  file_tree:map("n", "N", self:_menu_handlers(Menu.FORGE), map_options)
-
-  -- Stash menu
-  file_tree:map("n", "z", self:_menu_handlers(Menu.STASH), map_options)
-
-  -- Cherry-pick menu
-  file_tree:map("n", "A", self:_menu_handlers(Menu.CHERRY_PICK), map_options)
+  local direct_tree_keymaps = self.opts.file_tree_maps.direct or {}
+  for action, key in pairs(direct_tree_keymaps) do
+    if keymaps_used[key] then
+      notifier.warn(string.format("Key %s for action %s in direct maps is already used in menu maps, skipping", key, action))
+      goto continue
+    end
+    if action_enum_remap[action] then
+    local action_enum = action_enum_remap[action]
+      file_tree:map("n", key, self:_menu_handlers(action_enum, true), map_options)
+    end
+    ::continue::
+  end
 end
 
 return GitStatus

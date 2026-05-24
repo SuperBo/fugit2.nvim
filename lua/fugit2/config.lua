@@ -1,5 +1,20 @@
 -- Fugit2 config module
 
+---@class FileTreeActions
+---@field commit string?
+---@field diff string?
+---@field branch string?
+---@field push string?
+---@field fetch string?
+---@field pull string?
+---@field forge string?
+---@field stash string?
+---@field cherry_pick string?
+
+---@class FileTreeMaps
+---@field menu FileTreeActions
+---@field direct FileTreeActions?
+
 ---@class Fugit2Config
 ---@field width integer|string main popup width
 ---@field max_width integer|string expand popup width
@@ -15,6 +30,7 @@
 ---@field blame_info_height integer height of blame hunk detail popup
 ---@field command_timeout integer timeout in milisecond of command like git pull / git push
 ---@field colorscheme string? custom colorscheme specification
+---@field file_tree_maps FileTreeMaps keymaps for file tree
 local DEFAULT_CONFIG = {
   width = 100,
   min_width = 50,
@@ -27,6 +43,19 @@ local DEFAULT_CONFIG = {
   blame_info_width = 60,
   show_patch = false,
   command_timeout = 15000,
+  file_tree_maps = {
+    menu = {
+      commit = "c",
+      diff = "d",
+      branch = "b",
+      push = "P",
+      fetch = "f",
+      pull = "p",
+      forge = "N",
+      stash = "z",
+      cherry_pick = "A",
+    },
+  },
 }
 
 local M = {}

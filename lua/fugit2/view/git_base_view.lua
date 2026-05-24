@@ -61,39 +61,72 @@ local function get_leaves(tree, node)
   return nodes
 end
 
----@param is_visual_mode boolean
 ---@param action Fugit2IndexAction
-function GitStatusDiffBase:_index_add_reset_discard(is_visual_mode, action)
+function GitStatusDiffBase:_index_add_reset_discard_all(action)
   local tree = self._views.files
-  local git = self._git
+  local bufnr = vim.api.nvim_get_current_buf()
+  local line_count = vim.api.nvim_buf_line_count(bufnr)
   local nodes
 
-  if not is_visual_mode then
-    local node, _ = tree.tree:get_node()
+  nodes = iterators.range(1, line_count, 1):map(function(linenr)
+    return tree.tree:get_node(linenr)
+  end)
 
-    if not node:has_children() then
-      nodes = iterators.iter { node }
-    else
-      node:expand()
-      nodes = iterators.iter(get_leaves(tree.tree, node))
-    end
-  else
-    local cursor_start = vim.fn.getpos("v")[2]
-    local cursor_end = vim.fn.getpos(".")[2]
-    if cursor_end < cursor_start then
-      cursor_start, cursor_end = cursor_end, cursor_start
-    end
+  nodes = nodes:filter(function(node)
+    return not node:has_children()
+  end)
 
-    nodes = iterators.range(cursor_start, cursor_end, 1):map(function(linenr)
-      return tree.tree:get_node(linenr)
-    end)
+  self:_stage_change_post(iterators.iter(nodes), action)
+end
 
-    nodes = nodes:filter(function(node)
-      return not node:has_children()
-    end)
+---@param action Fugit2IndexAction
+function GitStatusDiffBase:_index_add_reset_discard(action)
+  local tree = self._views.files
+  local nodes
 
-    vim.api.nvim_feedkeys(utils.KEY_ESC, "n", false)
+  local node, _ = tree.tree:get_node()
+  if node == nil then
+    return
   end
+
+  if not node:has_children() then
+    nodes = iterators.iter { node }
+  else
+    node:expand()
+    nodes = iterators.iter(get_leaves(tree.tree, node))
+  end
+
+  self:_stage_change_post(nodes, action)
+end
+
+---@param action Fugit2IndexAction
+function GitStatusDiffBase:_index_add_reset_discard_visual(action)
+  local tree = self._views.files
+  local nodes
+
+  local cursor_start = vim.fn.getpos("v")[2]
+  local cursor_end = vim.fn.getpos(".")[2]
+  if cursor_end < cursor_start then
+    cursor_start, cursor_end = cursor_end, cursor_start
+  end
+
+  nodes = iterators.range(cursor_start, cursor_end, 1):map(function(linenr)
+    return tree.tree:get_node(linenr)
+  end)
+
+  nodes = nodes:filter(function(node)
+    return not node:has_children()
+  end)
+
+  vim.api.nvim_feedkeys(utils.KEY_ESC, "n", false)
+
+  self:_stage_change_post(nodes, action)
+end
+
+---@param action Fugit2IndexAction
+function GitStatusDiffBase:_stage_change_post(nodes, action)
+  local git = self._git
+  local tree = self._views.files
 
   local results = nodes
     :map(function(node)
@@ -129,16 +162,6 @@ function GitStatusDiffBase:_index_add_reset_discard(is_visual_mode, action)
 
   -- refresh other views
   self:_refresh_views()
-end
-
--- Add/reset/discard file entries handler.
----@param is_visual boolean whether this handler is called in visual mode.
----@param action Fugit2IndexAction index action
----@return function
-function GitStatusDiffBase:_index_add_reset_handler(is_visual, action)
-  return function()
-    self:_index_add_reset_discard(is_visual, action)
-  end
 end
 
 return GitStatusDiffBase

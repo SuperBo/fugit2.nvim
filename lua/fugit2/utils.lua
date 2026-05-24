@@ -48,6 +48,17 @@ M.LOADING_CHARS = {
   " ",
 }
 
+
+function M.wrap(callback, self, ...)
+  local args = { ... }
+  return function()
+    local ok, err = pcall(callback, self, unpack(args))
+    if not ok then
+      vim.notify("[Fugit2] Error: " .. err, vim.log.levels.ERROR)
+    end
+  end
+end
+
 ---@param str string
 function M.lines_head(str)
   local newline = str:find("\n", 1, true)

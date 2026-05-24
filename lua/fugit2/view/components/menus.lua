@@ -323,6 +323,13 @@ function Menu:on_submit(callback)
   end
 end
 
+function Menu:skip()
+  local item_id = self._hotkeys[1]
+  self._menu:unmount()
+  local args = collect_args(self._args, self._arg_models, self._arg_indices, self._arg_items)
+  self._submit_fn(item_id, args)
+end
+
 function Menu:mount()
   self._menu:mount()
   for _, key in ipairs(self._hotkeys) do
