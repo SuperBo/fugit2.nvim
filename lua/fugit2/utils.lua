@@ -48,7 +48,6 @@ M.LOADING_CHARS = {
   " ",
 }
 
-
 function M.wrap(callback, self, ...)
   local args = { ... }
   return function()

@@ -2989,7 +2989,9 @@ function GitStatus:setup_handlers()
 
   --- [D]/[x]: discard file changes
   -- file_tree:map("n", {"D", "x"}, self:index_add_reset_handler(false, false, false, true), map_options)
-  self._prompts.discard_confirm:on_yes(utils.wrap(GitStatus._index_add_reset_discard, self, TreeBase.IndexAction.DISCARD))
+  self._prompts.discard_confirm:on_yes(
+    utils.wrap(GitStatus._index_add_reset_discard, self, TreeBase.IndexAction.DISCARD)
+  )
   file_tree:map("n", { "D", "x" }, function()
     local node = file_tree.tree:get_node()
     if node then
@@ -3011,10 +3013,20 @@ function GitStatus:setup_handlers()
   )
 
   --- Visual [s]: stage files in range
-  file_tree:map("v", "s", utils.wrap(GitStatus._index_add_reset_discard_visual, self, TreeBase.IndexAction.ADD), map_options)
+  file_tree:map(
+    "v",
+    "s",
+    utils.wrap(GitStatus._index_add_reset_discard_visual, self, TreeBase.IndexAction.ADD),
+    map_options
+  )
 
   --- Visual [u]: unstage files in range
-  file_tree:map("v", "u", utils.wrap(GitStatus._index_add_reset_discard_visual, self, TreeBase.IndexAction.RESET), map_options)
+  file_tree:map(
+    "v",
+    "u",
+    utils.wrap(GitStatus._index_add_reset_discard_visual, self, TreeBase.IndexAction.RESET),
+    map_options
+  )
 
   --- Visual [x][d]: discard files in range
   file_tree:map("v", { "x", "d" }, function()
@@ -3055,7 +3067,7 @@ function GitStatus:setup_handlers()
   local tree_keymaps = self.opts.file_tree_maps.menu
   for action, key in pairs(tree_keymaps) do
     if action_enum_remap[action] then
-    local action_enum = action_enum_remap[action]
+      local action_enum = action_enum_remap[action]
       file_tree:map("n", key, self:_menu_handlers(action_enum), map_options)
       keymaps_used[key] = true
     end
@@ -3064,11 +3076,13 @@ function GitStatus:setup_handlers()
   local direct_tree_keymaps = self.opts.file_tree_maps.direct or {}
   for action, key in pairs(direct_tree_keymaps) do
     if keymaps_used[key] then
-      notifier.warn(string.format("Key %s for action %s in direct maps is already used in menu maps, skipping", key, action))
+      notifier.warn(
+        string.format("Key %s for action %s in direct maps is already used in menu maps, skipping", key, action)
+      )
       goto continue
     end
     if action_enum_remap[action] then
-    local action_enum = action_enum_remap[action]
+      local action_enum = action_enum_remap[action]
       file_tree:map("n", key, self:_menu_handlers(action_enum, true), map_options)
     end
     ::continue::
