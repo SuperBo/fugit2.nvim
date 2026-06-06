@@ -1129,16 +1129,25 @@ function GitStatus:update(callback)
     end
   end
 
-  self._views.files:set_loading()
+  local files_view = self._views.files
+  local files_winid = files_view.popup.winid
+  local files_linenr = files_winid and vim.api.nvim_win_get_cursor(files_winid)[1] or nil
+  files_view:set_loading()
 
-  self.repo:status_async(function(status_items, e)
+  self.repo:status_async(function(status_items, _)
     if status_items then
       diff_head_to_index = self.repo:diff_head_to_index(self.index)
       -- update files tree
       vim.schedule(function()
-        self._views.files:update(status_items, self._git.path, diff_head_to_index)
+        files_view:update(status_items, self._git.path, diff_head_to_index)
         if callback then
           callback()
+        end
+        if files_winid and files_linenr then
+          local bufid = vim.api.nvim_win_get_buf(files_winid)
+          local max_lines = vim.api.nvim_buf_line_count(bufid)
+          local target_linenr = math.min(files_linenr, max_lines)
+          vim.api.nvim_win_set_cursor(files_winid, { target_linenr, 1 })
         end
       end)
     end
@@ -1172,6 +1181,7 @@ end
 -- Renders git status only
 function GitStatus:render()
   -- self:render_top_info()
+  local linenr = vim.api.nvim_win_get_cursor(0)[1]
   self._views.files:render()
   -- self._views.commits:render()
 end

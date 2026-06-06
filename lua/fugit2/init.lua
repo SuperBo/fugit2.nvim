@@ -8,7 +8,6 @@ local M = {}
 
 ---@type integer
 M.namespace = vim.api.nvim_create_namespace "Fugit2"
-require("fugit2.view.colors").set_hl(0)
 
 ---@type integer
 M.autocmd_group = vim.api.nvim_create_augroup("Fugit2", { clear = true })

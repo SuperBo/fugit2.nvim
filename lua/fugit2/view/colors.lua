@@ -73,9 +73,9 @@ function M.set_hl(ns_id, colorscheme)
     local link_colors = M.link_colors
     for group, hl in pairs(link_colors) do
       if hl == "diffAdded" then
-        link_colors[group] = "DiffAdd"
+        link_colors[group] = "String"
       elseif hl == "diffRemoved" then
-        link_colors[group] = "DiffDelete"
+        link_colors[group] = "Error"
       end
     end
 

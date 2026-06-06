@@ -37,6 +37,13 @@ function GitStatusDiffBase:update() end
 
 function GitStatusDiffBase:render() end
 
+-- Default implementation of update then render
+-- Use to update underlying states then render new states.
+function GitStatusDiffBase:update_then_render()
+  self:update()
+  self:render()
+end
+
 ---@param node NuiTree.Node
 function GitStatusDiffBase:_remove_cached_states(node) end
 
@@ -152,8 +159,7 @@ function GitStatusDiffBase:_stage_change_post(nodes, action)
   end
 
   if refresh then
-    self:update()
-    self:render()
+    self:update_then_render()
   else
     tree:render()
   end
