@@ -2,7 +2,7 @@
 
 local diff_utils = require "fugit2.diff"
 local git2 = require "fugit2.core.git2"
-local pendulum = require "fugit2.core.pendulum"
+local pendulum = require "fugit2.util.pendulum"
 local utils = require "fugit2.utils"
 
 pendulum.init()

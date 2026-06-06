@@ -1,7 +1,7 @@
 -- Ports Pendulum datediff algo to lua
 -- Refer to https://github.com/sdispater/pendulum/blob/master/src/pendulum/_helpers.py
 
-local Matrix = require "fugit2.core.matrix"
+local Matrix = require "fugit2.util.matrix"
 
 -- =============
 -- | Constants |

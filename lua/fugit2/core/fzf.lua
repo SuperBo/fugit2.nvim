@@ -6,7 +6,7 @@ local ffi = require "ffi"
 local table_clear = require "table.clear"
 local table_new = require "table.new"
 
-local Matrix = require "fugit2.core.matrix"
+local Matrix = require "fugit2.util.matrix"
 
 local M = {}
 
