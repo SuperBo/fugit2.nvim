@@ -1,6 +1,6 @@
 -- Test pendulum module
 
-local pendulum = require "fugit2.core.pendulum"
+local pendulum = require "fugit2.util.pendulum"
 
 ---@param diff PreciseDiff
 ---@param years integer?

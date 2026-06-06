@@ -1,6 +1,6 @@
 local ffi = require "ffi"
 local libgit2 = require "fugit2.core.libgit2"
-local stat = require "fugit2.core.stat"
+local stat = require "fugit2.util.stat"
 local table_new = require "table.new"
 local uv = vim.uv or vim.loop
 local libgit2_C = libgit2.C
