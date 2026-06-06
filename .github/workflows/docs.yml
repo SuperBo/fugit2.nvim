@@ -3,7 +3,8 @@ name: docs
 on:
   push:
     branches:
-      - main
+      - docs
+      # - main
 
 permissions:
   contents: write

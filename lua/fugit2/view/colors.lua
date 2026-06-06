@@ -13,11 +13,11 @@ M.link_colors = {
   Fugit2UntrackedHeading = "PreCondit",
   Fugit2UnstagedHeading = "Macro",
   Fugit2StagedHeading = "Include",
-  Fugit2MessageHeading = "diffAdded",
+  Fugit2MessageHeading = "Added",
   Fugit2Modifier = "Type",
   Fugit2Ignored = "Ignore",
-  Fugit2Unstaged = "diffRemoved",
-  Fugit2Staged = "diffAdded",
+  Fugit2Unstaged = "Removed",
+  Fugit2Staged = "Added",
   Fugit2Modified = "Constant",
   Fugit2Unchanged = "",
   Fugit2Untracked = "Error",
@@ -26,8 +26,8 @@ M.link_colors = {
   Fugit2Hash = "Identifier",
   Fugit2SymbolicRef = "Function",
   Fugit2Count = "Number",
-  Fugit2Insertions = "diffAdded",
-  Fugit2Deletions = "diffRemoved",
+  Fugit2Insertions = "Added",
+  Fugit2Deletions = "Removed",
   Fugit2Match = "Type",
   Fugit2WindowHelp = "Comment",
   Fugit2MenuHead = "Function",
@@ -36,15 +36,15 @@ M.link_colors = {
   Fugit2MenuArgOn = "Number",
   Fugit2BranchHead = "Type",
   Fugit2FloatTitle = "@parameter",
-  Fugit2RebasePick = "diffAdded", -- green
-  Fugit2RebaseDrop = "diffRemoved", -- red
+  Fugit2RebasePick = "Added", -- green
+  Fugit2RebaseDrop = "Removed", -- red
   Fugit2RebaseConflict = "Error", -- red
   Fugit2RebaseResolved = "Type", -- yellow
   Fugit2RebaseSquash = "Type", -- yellow
   Fugit2BlameDate = "Constant",
   Fugit2BlameBorder = "Comment",
   Fugit2GraphDate = "Type",
-  Fugit2Branch1 = "diffAdded", -- green
+  Fugit2Branch1 = "Added", -- green
   Fugit2Branch2 = "DiagnosticInfo", --dark blue
   Fugit2Branch3 = "Type", -- yellow
   Fugit2Branch4 = "PreProc", -- orange
@@ -61,25 +61,25 @@ M.colors = {
 CYBERDREAM = {
   Fugit2MenuKey = "Special",
   Fugit2FloatTitle = "PreProc",
-  Fugit2MenuArgOn = "ErrorMsg",
+  Fugit2MenuArgOn = "Label",
 }
 
 ---Sets highlight groups
 ---@param ns_id integer
 ---@param colorscheme string?
 function M.set_hl(ns_id, colorscheme)
-  -- small tweak for cyberdream
-  if colorscheme == "cyberdream" then
+  -- tweak for legacy theme
+  if colorscheme == "legacy" then
     local link_colors = M.link_colors
     for group, hl in pairs(link_colors) do
-      if hl == "diffAdded" then
-        link_colors[group] = "String"
-      elseif hl == "diffRemoved" then
-        link_colors[group] = "Error"
+      if hl == "Added" then
+        link_colors[group] = "diffAdded"
+      elseif hl == "Removed" then
+        link_colors[group] = "diffRemoved"
       end
     end
-
-    M.link_colors = vim.tbl_deep_extend("force", link_colors, CYBERDREAM)
+  elseif colorscheme == "cyberdream" then
+    M.link_colors = vim.tbl_deep_extend("force", M.link_colors, CYBERDREAM)
   end
 
   for hl_group, link in pairs(M.link_colors) do
