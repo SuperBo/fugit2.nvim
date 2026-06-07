@@ -1,4 +1,5 @@
 -- Fugit2 main module file
+local commands = require "fugit2.commands"
 local config = require "fugit2.config"
 local ui = require "fugit2.view.ui"
 local utils = require "fugit2.utils"
@@ -80,6 +81,7 @@ local function open_repository(dir)
   return repo
 end
 
+-- Opens git status float window
 ---@param kwargs table
 function M.git_status(kwargs)
   local repo = open_repository(kwargs.fargs[1])
@@ -89,6 +91,7 @@ function M.git_status(kwargs)
   end
 end
 
+-- Opens gi graph float window
 ---@param kwargs table
 function M.git_graph(kwargs)
   local repo = open_repository(kwargs.fargs[1])
@@ -97,6 +100,7 @@ function M.git_graph(kwargs)
   end
 end
 
+-- Open Git diff mode
 ---@param kwargs table arguments table
 function M.git_diff(kwargs)
   local repo = open_repository()
@@ -109,6 +113,7 @@ function M.git_diff(kwargs)
   end
 end
 
+-- Opens In-file Git blame
 ---@param kwargs table arguments table
 function M.git_blame(kwargs)
   local repo = open_repository()
@@ -125,6 +130,7 @@ function M.git_blame(kwargs)
   end
 end
 
+-- TODO rewite this AI slop function
 function M.git_cherry_pick(kwargs)
   local repo = open_repository(kwargs.fargs[1])
   if repo then
@@ -147,6 +153,14 @@ function M.git_cherry_pick(kwargs)
     end)
     graph:render()
     graph:mount()
+  end
+end
+
+-- Fugitive style Gwrite
+function M.git_write(kwargs)
+  local repo = open_repository()
+  if repo then
+    commands.git_write(repo, "worktree")
   end
 end
 

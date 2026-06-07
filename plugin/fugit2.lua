@@ -18,3 +18,7 @@ vim.api.nvim_create_user_command("Fugit2CherryPick", require "fugit2".git_cherry
   desc = "Open Fugit2 cherry-pick commit picker.",
   nargs = "?"
 })
+vim.api.nvim_create_user_command("Gwrite", require "fugit2".git_write, {
+  desc = "Write file and add to git index",
+  nargs = "?"
+})
