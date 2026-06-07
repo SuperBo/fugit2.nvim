@@ -97,7 +97,10 @@ In case you want to use more stable [diffview.nvim](https://github.com/sindrets/
       dependencies = { 'stevearc/dressing.nvim' }
     },
   },
-  cmd = { 'Fugit2', 'Fugit2Blame', 'Fugit2Diff', 'Fugit2Graph', 'Fugit2Rebase' },
+  cmd = {
+    'Fugit2', 'Fugit2Blame', 'Fugit2Diff', 'Fugit2Graph', 'Fugit2Rebase',
+    'Gwrite',
+  },
   keys = {
     { '<leader>F', mode = 'n', '<cmd>Fugit2<cr>' }
   }

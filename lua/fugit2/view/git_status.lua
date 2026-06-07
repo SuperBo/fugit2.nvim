@@ -1,4 +1,4 @@
--- Fugit2 Git Status module
+--- Fugit2 Git Status module
 
 local uv = vim.uv or vim.loop
 
@@ -87,7 +87,7 @@ local function open_file(git_path, git_file, linenr)
   if tostring(file_path) ~= current_file then
     local open_path = file_path:make_relative(cwd)
     if linenr then
-      vim.cmd(string.format("edit %s|%d", open_path, linenr))
+      vim.cmd.edit(string.format("+%d %s", linenr, open_path))
     else
       vim.cmd.edit(open_path)
     end
@@ -1181,7 +1181,6 @@ end
 -- Renders git status only
 function GitStatus:render()
   -- self:render_top_info()
-  local linenr = vim.api.nvim_win_get_cursor(0)[1]
   self._views.files:render()
   -- self._views.commits:render()
 end
