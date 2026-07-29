@@ -1371,10 +1371,24 @@ function GitStatus:hide_input(reset_to_main)
     self._states.side_panel = SidePanel.NONE
     layout:update(self._layout_opts.main, self._boxes.main)
   else
+    -- Find the input box by component identity rather than assuming index 2:
+    -- if a pre-commit hook ran, focus_command()/quit_command() already
+    -- swapped the layout back to _boxes.main before this code is executed,
+    -- so index 2 is the files+patch row, not the input popup, and removing it
+    -- hides the files popup's window (crashing later Tree:get_node calls).
     local boxes = vim.list_slice(layout._.box.box)
+    local idx
 
-    if #boxes > 1 then
-      table.remove(boxes, 2)
+    for i, child in ipairs(boxes) do
+      local component = child.component
+      if component and (component == self.input_popup or component == self.branch_input) then
+        idx = i
+        break
+      end
+    end
+
+    if idx then
+      table.remove(boxes, idx)
       layout:update(NuiLayout.Box(boxes, { dir = "col" }))
     end
   end
