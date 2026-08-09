@@ -38,6 +38,7 @@ function HelpView:init(ns_id, title, entries)
     focusable = true,
     relative = "editor",
     position = "50%",
+    zindex = 55,
     size = { width = 60, height = math.min(#entries + 1, 20) },
     border = {
       style = "rounded",
