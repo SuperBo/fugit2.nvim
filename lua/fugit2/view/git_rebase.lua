@@ -10,6 +10,8 @@ local event = require("nui.utils.autocmd").event
 
 local LogView = require "fugit2.view.components.commit_log_view"
 local Menu = require "fugit2.view.components.menus"
+local fugit2_config = require "fugit2.config"
+local keymaps = require "fugit2.view.keymaps"
 
 local git2 = require "fugit2.core.git2"
 local git_rebase_helper = require "fugit2.core.git_rebase_helper"
@@ -354,16 +356,20 @@ function RebaseView:_init_input_popup()
     self.layout:update(self.boxes.main)
   end
 
-  input_popup:map("n", { "<esc>", "q" }, exit_fn, opts)
-  input_popup:map("i", "<C-c>", function()
-    vim.cmd.stopinsert()
-    exit_fn()
-  end, opts)
-  input_popup:map("n", "<cr>", enter_fn, opts)
-  input_popup:map("i", "<C-cr>", function()
-    vim.cmd.stopinsert()
-    enter_fn()
-  end, opts)
+  local user_input_keymaps = fugit2_config.get_keymaps "input"
+  local input_handlers = {
+    exit = exit_fn,
+    exit_insert = function()
+      vim.cmd.stopinsert()
+      exit_fn()
+    end,
+    enter = enter_fn,
+    enter_insert = function()
+      vim.cmd.stopinsert()
+      enter_fn()
+    end,
+  }
+  keymaps.bind(input_popup, "input", input_handlers, user_input_keymaps, opts)
 
   return input_popup
 end
@@ -545,24 +551,20 @@ function RebaseView:rebase_start()
 
   -- remove mapping
   local commit_view = self.views.commits
-  commit_view:unmap("n", {
-    "r",
-    "w",
-    "x",
-    "d",
-    "b",
-    "e",
-    "s",
-    "f",
-    "p",
-    "gj",
-    "<C-j>",
-    "gk",
-    "<C-k>",
-  })
-  commit_view:map("n", "<cr>", function()
-    self:rebase_continue()
-  end, { noremap = true, nowait = true })
+  local user_rebase_keymaps = fugit2_config.get_keymaps "rebase"
+  for action in pairs(keymaps.defaults.rebase) do
+    local keys = keymaps.resolve_keys("rebase", action, user_rebase_keymaps)
+    if keys and keys ~= false then
+      commit_view:unmap("n", keys)
+    end
+  end
+
+  local continue_keys = keymaps.resolve_keys("rebase", "continue", user_rebase_keymaps)
+  if continue_keys and continue_keys ~= false then
+    commit_view:map("n", continue_keys, function()
+      self:rebase_continue()
+    end, { noremap = true, nowait = true })
+  end
 
   -- call rebase
   self:rebase_continue()
@@ -1012,53 +1014,6 @@ function RebaseView:setup_handlers()
     commit_view:render()
   end
 
-  -- drop commit
-  commit_view:map("n", { "x", "d" }, function()
-    action_fn(RebaseAction.DROP)
-  end, opts)
-
-  -- break commit
-  commit_view:map("n", "b", function()
-    action_fn(RebaseAction.BREAK)
-  end, opts)
-
-  -- edit commit
-  if not self._git.inmemory then
-    commit_view:map("n", "e", function()
-      action_fn(RebaseAction.EDIT)
-    end, opts)
-  else
-    commit_view:map("n", "e", function()
-      notifier.warn "Inmemory rebase doens't not support EDIT!"
-    end, opts)
-  end
-
-  --squash commit
-  commit_view:map("n", "s", function()
-    action_fn(RebaseAction.SQUASH)
-  end, opts)
-  commit_view:map("v", "s", function()
-    fixup_fn(true)
-  end, opts)
-
-  --fixup
-  commit_view:map("n", "f", function()
-    action_fn(RebaseAction.FIXUP)
-  end, opts)
-  commit_view:map("v", "f", function()
-    fixup_fn(false)
-  end, opts)
-
-  -- reword
-  commit_view:map("n", { "r", "w" }, function()
-    action_fn(RebaseAction.REWORD)
-  end, opts)
-
-  -- pick
-  commit_view:map("n", "p", function()
-    action_fn(RebaseAction.PICK)
-  end, opts)
-
   -- Reorder actions
   local reorder_fn = function(is_down)
     local _, commit_idx = commit_view:get_commit()
@@ -1105,26 +1060,58 @@ function RebaseView:setup_handlers()
     commit_view:render()
   end
 
-  commit_view:map("n", { "gj", "<C-j>" }, function()
-    reorder_fn(true)
-  end, opts)
-
-  commit_view:map("n", { "gk", "<C-k>" }, function()
-    reorder_fn(false)
-  end, opts)
-
-  -- Move cursor
-  commit_view:map("n", "j", "2j", opts)
-  commit_view:map("n", "k", "2k", opts)
-  commit_view:map("v", "j", "2j", opts)
-  commit_view:map("v", "k", "2k", opts)
-
-  commit_view:map("n", "<cr>", function()
-    self:rebase_start()
-  end, opts)
-  commit_view:map("n", { "<esc>", "q" }, function()
-    self:unmount()
-  end, opts)
+  -- commit view keymaps
+  local commit_handlers = {
+    exit = function()
+      self:unmount()
+    end,
+    start = function()
+      self:rebase_start()
+    end,
+    drop = function()
+      action_fn(RebaseAction.DROP)
+    end,
+    break_commit = function()
+      action_fn(RebaseAction.BREAK)
+    end,
+    edit = function()
+      if not self._git.inmemory then
+        action_fn(RebaseAction.EDIT)
+      else
+        notifier.warn "Inmemory rebase doens't not support EDIT!"
+      end
+    end,
+    squash = function()
+      action_fn(RebaseAction.SQUASH)
+    end,
+    fixup = function()
+      action_fn(RebaseAction.FIXUP)
+    end,
+    reword = function()
+      action_fn(RebaseAction.REWORD)
+    end,
+    pick = function()
+      action_fn(RebaseAction.PICK)
+    end,
+    squash_visual = function()
+      fixup_fn(true)
+    end,
+    fixup_visual = function()
+      fixup_fn(false)
+    end,
+    move_down = function()
+      reorder_fn(true)
+    end,
+    move_up = function()
+      reorder_fn(false)
+    end,
+    quick_jump_down = "2j",
+    quick_jump_up = "2k",
+    quick_jump_down_visual = "2j",
+    quick_jump_up_visual = "2k",
+  }
+  local user_rebase_keymaps = fugit2_config.get_keymaps "rebase"
+  keymaps.bind(commit_view, "rebase", commit_handlers, user_rebase_keymaps, opts)
 end
 
 ---Registers a callback to be called after rebase completes successfully.

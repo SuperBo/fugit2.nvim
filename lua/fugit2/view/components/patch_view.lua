@@ -7,6 +7,8 @@ local event = require("nui.utils.autocmd").event
 local strings = require "plenary.strings"
 
 local diff_utils = require "fugit2.diff"
+local fugit2_config = require "fugit2.config"
+local keymaps = require "fugit2.view.keymaps"
 local utils = require "fugit2.utils"
 
 ---@class Fugit2PatchView
@@ -71,14 +73,12 @@ function PatchView:init(ns_id, title, title_color)
 
   -- keymaps
   local opts = { noremap = true, nowait = true }
-  -- self.popup:map("n", "=", "za", opts)
-  self.popup:map("n", "J", self:next_hunk_handler(), opts)
-  self.popup:map("n", "K", self:prev_hunk_handler(), opts)
-  -- local expand_collapse_handler = self:expand_collapse_handler()
-  -- self.popup:map("n", "<cr>", expand_collapse_handler, opts)
-  -- self.popup:map("n", "l", self:expand_handler(), opts)
-  -- self.popup:map("n", "H", self:collapse_all_handler(), opts)
-  -- self.popup:map("n", "L", self:expand_all_handler(), opts)
+  local user_patch_keymaps = fugit2_config.get_keymaps "patch"
+  local handlers = {
+    next_hunk = self:next_hunk_handler(),
+    prev_hunk = self:prev_hunk_handler(),
+  }
+  keymaps.bind(self.popup, "patch", handlers, user_patch_keymaps, opts)
 end
 
 function PatchView:winid()
