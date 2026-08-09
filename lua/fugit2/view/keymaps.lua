@@ -2,8 +2,7 @@
 ---
 --- This module is the single source of truth for default keybindings. Views bind
 --- their keymaps by calling `bind` with a handlers table; user overrides from
---- `opts.keymaps` are resolved here. The same registry feeds the help menu
---- (see docs/feature/help-menu.md).
+--- `opts.keymaps` are resolved here. The same registry feeds the help menu.
 
 ---@class Fugit2KeymapDef
 ---@field keys string|string[] Default key binding(s). An empty string "" disables the

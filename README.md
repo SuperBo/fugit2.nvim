@@ -186,6 +186,9 @@ opts = {
 > **Note:** The legacy `file_tree_maps.menu` option still works and is translated into
 > `keymaps.file_tree.menu_<action>` for backward compatibility, but is deprecated.
 
+See [docs/keymap-remapping.md](docs/keymap-remapping.md) for the full list of view
+groups and default keybindings.
+
 ## Tested colorschemes
 
 - [Catppuccin](https://github.com/catppuccin/nvim)
