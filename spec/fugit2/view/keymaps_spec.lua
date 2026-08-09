@@ -232,4 +232,69 @@ describe("keymaps", function()
       assert.is_nil(keymaps.defs "nope")
     end)
   end)
+
+  describe("help_entries", function()
+    it("returns an entry per action", function()
+      local entries = keymaps.help_entries("file_tree", {})
+      assert.is_true(#entries > 0)
+      for _, e in ipairs(entries) do
+        assert.is_not_nil(e.keys)
+        assert.is_not_nil(e.desc)
+      end
+    end)
+
+    it("joins multiple keys with /", function()
+      local entries = keymaps.help_entries("file_tree", {})
+      local discard
+      for _, e in ipairs(entries) do
+        if e.desc == "Discard changes" then
+          discard = e
+        end
+      end
+      assert.is_not_nil(discard)
+      assert.are.equal("D / x", discard.keys)
+    end)
+
+    it("reflects user overrides", function()
+      local entries = keymaps.help_entries("file_tree", { stage_file = "S" })
+      local stage
+      for _, e in ipairs(entries) do
+        if e.desc == "Stage file" then
+          stage = e
+        end
+      end
+      assert.is_not_nil(stage)
+      assert.are.equal("S", stage.keys)
+    end)
+
+    it("omits disabled actions", function()
+      local entries = keymaps.help_entries("file_tree", { stage_file = false })
+      local stage = vim.tbl_filter(function(e)
+        return e.desc == "Stage file"
+      end, entries)
+      assert.are.equal(0, #stage)
+    end)
+
+    it("includes no-op actions", function()
+      local entries = keymaps.help_entries("file_tree", {})
+      local disable = vim.tbl_filter(function(e)
+        return e.desc == "No-op: disable mirror pane move"
+      end, entries)
+      assert.are.equal(1, #disable)
+    end)
+
+    it("returns empty for unknown group", function()
+      assert.are.same({}, keymaps.help_entries "nope")
+    end)
+
+    it("sorts entries by action name", function()
+      local entries = keymaps.help_entries("stash_list", {})
+      local keys = vim.tbl_map(function(e)
+        return e.desc
+      end, entries)
+      local sorted = vim.deepcopy(keys)
+      table.sort(sorted)
+      assert.are.same(sorted, keys)
+    end)
+  end)
 end)

@@ -133,6 +133,11 @@ function StashListView:mount()
   local opts = { noremap = true, nowait = true }
   local user_stash_keymaps = fugit2_config.get_keymaps "stash_list"
   local handlers = {
+    help = function()
+      local HelpView = require "fugit2.view.components.help_view"
+      local entries = keymaps.help_entries("stash_list", user_stash_keymaps)
+      HelpView(self.ns_id, "Stash List", entries):mount()
+    end,
     exit = function()
       self:close()
     end,

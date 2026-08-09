@@ -484,6 +484,11 @@ function GitGraph:setup_handlers()
   end
 
   local log_handlers = {
+    help = function()
+      local HelpView = require "fugit2.view.components.help_view"
+      local entries = keymaps.help_entries("graph_log", fugit2_config.get_keymaps "graph_log")
+      HelpView(self.ns_id, "Commits Log", entries):mount()
+    end,
     exit = exit_fn,
     refresh = update_fn,
     focus_branch = function()
@@ -508,6 +513,11 @@ function GitGraph:setup_handlers()
   keymaps.bind(log_view, "graph_log", log_handlers, user_graph_keymaps.graph_log, map_options)
 
   local branch_handlers = {
+    help = function()
+      local HelpView = require "fugit2.view.components.help_view"
+      local entries = keymaps.help_entries("graph_branch", fugit2_config.get_keymaps "graph_branch")
+      HelpView(self.ns_id, "Branches", entries):mount()
+    end,
     exit = exit_fn,
     refresh = update_fn,
     focus_log = function()

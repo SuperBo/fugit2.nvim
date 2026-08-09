@@ -25,7 +25,7 @@ Git plugin for Neovim (based on libgit2).
 - ✔ Interactive in-memory rebase.
 - ✔ Stash management.
 - ✔ Remappable key bindings (`opts.keymaps`).
-- ☐ TODO: Proper help menu.
+- ✔ Keymap help menu (press `?` in any view).
 
 ## 📦 Installation
 
@@ -187,7 +187,8 @@ opts = {
 > `keymaps.file_tree.menu_<action>` for backward compatibility, but is deprecated.
 
 See [docs/keymap-remapping.md](docs/keymap-remapping.md) for the full list of view
-groups and default keybindings.
+groups and default keybindings, and [docs/help-menu.md](docs/help-menu.md) for the
+`?` help popup.
 
 ## Tested colorschemes
 

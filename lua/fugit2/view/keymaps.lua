@@ -18,6 +18,7 @@ local M = {}
 ---@type table<string, table<string, Fugit2KeymapDef>>
 M.defaults = {
   file_tree = {
+    help = { keys = "?", desc = "Show keymap help" },
     exit = { keys = { "q", "<esc>" }, desc = "Close window" },
     exit_insert = { keys = "<c-c>", mode = "i", desc = "Close window" },
     refresh = { keys = "g", desc = "Refresh status" },
@@ -51,6 +52,7 @@ M.defaults = {
     menu_cherry_pick = { keys = "A", desc = "Open cherry-pick menu" },
   },
   commit_log = {
+    help = { keys = "?", desc = "Show keymap help" },
     exit = { keys = { "q", "<esc>" }, desc = "Close window" },
     focus_file_tree = { keys = { "K", "<tab>" }, desc = "Move to file tree" },
     focus_file_tree_disable = { keys = "J", desc = "No-op: disable mirror pane move" },
@@ -60,6 +62,7 @@ M.defaults = {
     copy_oid_clipboard = { keys = "yc", desc = "Copy commit id to clipboard" },
   },
   patch_unstaged = {
+    help = { keys = "?", desc = "Show keymap help" },
     exit = { keys = { "q", "<esc>" }, desc = "Close window" },
     menu_commit = { keys = "c", desc = "Open commit menu" },
     menu_branch = { keys = "b", desc = "Open branch menu" },
@@ -73,6 +76,7 @@ M.defaults = {
     jump_file = { keys = "<cr>", desc = "Jump to file" },
   },
   patch_staged = {
+    help = { keys = "?", desc = "Show keymap help" },
     exit = { keys = { "q", "<esc>" }, desc = "Close window" },
     menu_commit = { keys = "c", desc = "Open commit menu" },
     menu_branch = { keys = "b", desc = "Open branch menu" },
@@ -83,6 +87,7 @@ M.defaults = {
     jump_file = { keys = "<cr>", desc = "Jump to file" },
   },
   rebase = {
+    help = { keys = "?", desc = "Show keymap help" },
     exit = { keys = { "<esc>", "q" }, desc = "Abort / close" },
     start = { keys = "<cr>", desc = "Start rebase" },
     continue = { keys = "<cr>", desc = "Continue rebase" },
@@ -103,6 +108,7 @@ M.defaults = {
     quick_jump_up_visual = { keys = "k", mode = "v", desc = "Jump up (2 lines)" },
   },
   graph_log = {
+    help = { keys = "?", desc = "Show keymap help" },
     exit = { keys = { "q", "<esc>" }, desc = "Close window" },
     refresh = { keys = "r", desc = "Refresh" },
     focus_branch = { keys = "h", desc = "Move to branch view" },
@@ -112,6 +118,7 @@ M.defaults = {
     copy_oid_clipboard = { keys = "yc", desc = "Copy commit id to clipboard" },
   },
   graph_branch = {
+    help = { keys = "?", desc = "Show keymap help" },
     exit = { keys = { "q", "<esc>" }, desc = "Close window" },
     refresh = { keys = "r", desc = "Refresh" },
     focus_log = { keys = { "l", "<cr>", "<space>" }, desc = "Move to commit log" },
@@ -121,6 +128,7 @@ M.defaults = {
     select_branch = { keys = { "<cr>", "<space>" }, desc = "Select branch" },
   },
   diff = {
+    help = { keys = "?", desc = "Show keymap help" },
     exit = { keys = { "q", "<esc>" }, desc = "Close window" },
     focus_pane = { keys = { "l", "<cr>" }, desc = "Focus diff pane" },
     stage_file = { keys = "s", desc = "Stage file" },
@@ -129,6 +137,7 @@ M.defaults = {
     refresh = { keys = "r", desc = "Refresh" },
   },
   stash_list = {
+    help = { keys = "?", desc = "Show keymap help" },
     exit = { keys = { "q", "<esc>" }, desc = "Close window" },
     apply = { keys = "a", desc = "Apply stash" },
     pop = { keys = "p", desc = "Pop stash" },
@@ -268,6 +277,50 @@ end
 ---@return table<string, Fugit2KeymapDef>?  action -> def
 function M.defs(group)
   return M.defaults[group]
+end
+
+---Builds the help-menu rows for a group, applying user overrides.
+---
+---Each row is `{ keys = string, desc = string, mode = string? }` where `keys` is the
+---display form of the effective binding (e.g. `"D / x"`). Disabled (`false`) actions
+---are omitted; no-op (`""`) actions are shown with an empty key. Rows are ordered by
+---description for stable, readable output.
+---@param group string View group name.
+---@param user table<string, string|string[]|false|"">? User overrides for the group.
+---@return { keys: string, desc: string, mode: string? }[]
+function M.help_entries(group, user)
+  user = user or {}
+  local entries = {}
+
+  local defs = M.defaults[group]
+  if not defs then
+    return entries
+  end
+
+  for action, def in pairs(defs) do
+    local keys = user[action]
+    if keys == nil then
+      keys = def.keys
+    end
+
+    if keys ~= false and keys ~= nil then
+      local key_str
+      if keys == "" then
+        key_str = ""
+      elseif type(keys) == "table" then
+        key_str = table.concat(keys, " / ")
+      else
+        key_str = keys
+      end
+      entries[#entries + 1] = { keys = key_str, desc = def.desc, mode = def.mode }
+    end
+  end
+
+  table.sort(entries, function(a, b)
+    return a.desc < b.desc
+  end)
+
+  return entries
 end
 
 return M

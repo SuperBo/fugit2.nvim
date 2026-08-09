@@ -695,6 +695,11 @@ function GitDiff:_setup_handlers()
 
   local user_diff_keymaps = fugit2_config.get_keymaps "diff"
   local source_tree_handlers = {
+    help = function()
+      local HelpView = require "fugit2.view.components.help_view"
+      local entries = keymaps.help_entries("diff", user_diff_keymaps)
+      HelpView(self.ns_id, "Diff", entries):mount()
+    end,
     exit = function()
       self:unmount()
     end,

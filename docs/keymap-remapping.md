@@ -3,7 +3,7 @@
 Fugit2 exposes **every** keybinding across **all** views as configurable through the
 `opts.keymaps` setup option. A central keymap registry
 (`lua/fugit2/view/keymaps.lua`) is the single source of truth for defaults, user
-overrides, and the upcoming help menu.
+overrides, and the help menu (see [help-menu.md](help-menu.md)).
 
 ## Configuring Keymaps
 
@@ -287,6 +287,7 @@ New `keymaps` entries always take precedence over a translated legacy value. The
 | `bind(view, group, handlers, user, opts)` | Binds every action in a group with a handler to a NUI view. |
 | `bind_buf(bufnr, group, handlers, user, opts)` | Same, but maps onto a raw buffer via `nui.utils.keymap`. |
 | `defs(group)` | All defs for a group (used by the help menu). |
+| `help_entries(group, user)` | Help-menu rows (effective keys + desc) for a group, ordered by description. |
 
 `bind` iterates `M.defaults[group]`. For each action the effective keys are
 `user[action]` when present, otherwise the default. `false` disables the mapping;

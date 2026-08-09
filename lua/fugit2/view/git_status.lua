@@ -706,6 +706,9 @@ function GitStatus:_init_patch_views()
 
   -- patch_unstaged keymaps
   local patch_unstaged_handlers = {
+    help = function()
+      self:_show_help "patch_unstaged"
+    end,
     exit = exit_fn,
     menu_commit = commit_menu_handler,
     menu_branch = branch_menu_handler,
@@ -767,6 +770,9 @@ function GitStatus:_init_patch_views()
 
   -- patch_staged keymaps
   local patch_staged_handlers = {
+    help = function()
+      self:_show_help "patch_staged"
+    end,
     exit = exit_fn,
     menu_commit = commit_menu_handler,
     menu_branch = branch_menu_handler,
@@ -2800,6 +2806,15 @@ function GitStatus:_menu_handlers(menu_type, direct)
   end
 end
 
+---Opens the keymap help popup for a view group.
+---@param group string keymap registry group
+function GitStatus:_show_help(group)
+  local HelpView = require "fugit2.view.components.help_view"
+  local entries = keymaps.help_entries(group, fugit2_config.get_keymaps(group))
+  local title = group:gsub("_", " "):gsub("^%l", string.upper)
+  HelpView(self.ns_id, title, entries):mount()
+end
+
 -- Setup keymap and event handlers
 function GitStatus:setup_handlers()
   local map_options = { noremap = true, nowait = true }
@@ -2812,6 +2827,12 @@ function GitStatus:setup_handlers()
     self:unmount()
   end
 
+  local help_fn = function(group)
+    return function()
+      self:_show_help(group)
+    end
+  end
+
   -- exit
   file_tree:on(event.BufUnload, function()
     self.closed = true
@@ -2820,6 +2841,7 @@ function GitStatus:setup_handlers()
 
   -- file tree handlers
   local file_tree_handlers = {
+    help = help_fn "file_tree",
     exit = exit_fn,
     exit_insert = exit_fn,
     refresh = function()
@@ -2940,6 +2962,7 @@ function GitStatus:setup_handlers()
 
   -- commit log handlers
   local commit_log_handlers = {
+    help = help_fn "commit_log",
     exit = exit_fn,
     focus_file_tree = function()
       if states.side_panel == SidePanel.NONE then
