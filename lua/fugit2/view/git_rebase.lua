@@ -1061,10 +1061,11 @@ function RebaseView:setup_handlers()
   end
 
   -- commit view keymaps
-  local commit_handlers = {
+  local commit_handlers
+  commit_handlers = {
     help = function()
       local HelpView = require "fugit2.view.components.help_view"
-      local entries = keymaps.help_entries("rebase", fugit2_config.get_keymaps "rebase")
+      local entries = keymaps.help_entries("rebase", fugit2_config.get_keymaps "rebase", commit_handlers)
       HelpView(self.ns_id, "Rebase", entries):mount()
     end,
     exit = function()
