@@ -283,6 +283,19 @@ describe("keymaps", function()
       assert.are.equal(1, #disable)
     end)
 
+    it("only includes actions with active handlers", function()
+      local handlers = {
+        help = function() end,
+        start = function() end,
+      }
+      local entries = keymaps.help_entries("rebase", {}, handlers)
+      local descriptions = vim.tbl_map(function(e)
+        return e.desc
+      end, entries)
+
+      assert.are.same({ "Show keymap help", "Start rebase" }, descriptions)
+    end)
+
     it("returns empty for unknown group", function()
       assert.are.same({}, keymaps.help_entries "nope")
     end)
