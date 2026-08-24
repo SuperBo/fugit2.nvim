@@ -217,14 +217,17 @@ function M.bind(view, group, handlers, user, opts)
   end
 
   for action, def in pairs(defs) do
-    local keys = user[action]
-    if keys == nil then
-      keys = def.keys
-    end
+    local handler = handlers[action]
+    if handler ~= nil then
+      local keys = user[action]
+      if keys == nil then
+        keys = def.keys
+      elseif keys == "" then
+        keys = def.keys
+        handler = ""
+      end
 
-    if keys ~= false and keys ~= nil then
-      local handler = handlers[action]
-      if handler ~= nil then
+      if keys ~= false and keys ~= nil then
         view:map(def.mode or "n", keys, handler, opts)
       end
     end
@@ -249,14 +252,17 @@ function M.bind_buf(bufnr, group, handlers, user, opts)
   end
 
   for action, def in pairs(defs) do
-    local keys = user[action]
-    if keys == nil then
-      keys = def.keys
-    end
+    local handler = handlers[action]
+    if handler ~= nil then
+      local keys = user[action]
+      if keys == nil then
+        keys = def.keys
+      elseif keys == "" then
+        keys = def.keys
+        handler = ""
+      end
 
-    if keys ~= false and keys ~= nil then
-      local handler = handlers[action]
-      if handler ~= nil then
+      if keys ~= false and keys ~= nil then
         keymap.set(bufnr, def.mode or "n", keys, handler, opts)
       end
     end
