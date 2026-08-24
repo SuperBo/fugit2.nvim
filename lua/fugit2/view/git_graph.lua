@@ -8,7 +8,9 @@ local iter = require "plenary.iterators"
 
 local BranchView = require "fugit2.view.components.branch_tree_view"
 local LogView = require "fugit2.view.components.commit_log_view"
+local fugit2_config = require "fugit2.config"
 local git2 = require "fugit2.core.git2"
+local keymaps = require "fugit2.view.keymaps"
 local notifier = require "fugit2.notifier"
 local utils = require "fugit2.utils"
 
@@ -429,13 +431,17 @@ function GitGraph:on_commit_select(callback)
   self._commit_select_fn = callback
 
   -- commit select
-  log_view:map("n", { "<cr>", "<space>" }, function()
-    local commit = self._views.log:get_commit()
-    if commit then
-      self:unmount()
-      callback(commit)
-    end
-  end, { noremap = true, nowait = true })
+  local user_select_keymaps = fugit2_config.get_keymaps "graph_select"
+  local keys = keymaps.resolve_keys("graph_select", "select_commit", user_select_keymaps)
+  if keys and keys ~= false then
+    log_view:map("n", keys, function()
+      local commit = self._views.log:get_commit()
+      if commit then
+        self:unmount()
+        callback(commit)
+      end
+    end, { noremap = true, nowait = true })
+  end
 end
 
 ---Set call be called when user select branch
@@ -445,14 +451,18 @@ function GitGraph:on_branch_select(callback)
   self._branch_select_fn = callback
 
   -- branch select
-  branch_view:unmap("n", { "<cr>", "<space>" })
-  branch_view:map("n", { "<cr>", "<space>" }, function()
-    local node, _ = branch_view:get_child_node_linenr()
-    if node and node.id then
-      self:unmount()
-      callback(node.id)
-    end
-  end, { noremap = true, nowait = true })
+  local user_select_keymaps = fugit2_config.get_keymaps "graph_select"
+  local keys = keymaps.resolve_keys("graph_select", "select_branch", user_select_keymaps)
+  if keys and keys ~= false then
+    branch_view:unmap("n", keys)
+    branch_view:map("n", keys, function()
+      local node, _ = branch_view:get_child_node_linenr()
+      if node and node.id then
+        self:unmount()
+        callback(node.id)
+      end
+    end, { noremap = true, nowait = true })
+  end
 end
 
 -- Setups keymap handlers
@@ -466,28 +476,55 @@ function GitGraph:setup_handlers()
     self.repo:free_walker() -- free cached walker
     self:unmount()
   end
-  log_view:map("n", "q", exit_fn, map_options)
-  log_view:map("n", "<esc>", exit_fn, map_options)
-  branch_view:map("n", "q", exit_fn, map_options)
-  branch_view:map("n", "<esc>", exit_fn, map_options)
 
   -- refresh
   local update_fn = function()
     self:update()
     self:render()
   end
-  log_view:map("n", "r", update_fn, map_options)
-  branch_view:map("n", "r", update_fn, map_options)
 
-  --movement
-  log_view:map("n", "j", "2j", map_options)
-  log_view:map("n", "k", "2k", map_options)
-  log_view:map("n", "h", function()
-    vim.api.nvim_set_current_win(branch_view:winid())
-  end, map_options)
-  branch_view:map("n", { "l", "<cr>", "<space>" }, function()
-    vim.api.nvim_set_current_win(log_view:winid())
-  end, map_options)
+  local log_handlers = {
+    help = function()
+      local HelpView = require "fugit2.view.components.help_view"
+      local entries = keymaps.help_entries("graph_log", fugit2_config.get_keymaps "graph_log")
+      HelpView(self.ns_id, "Commits Log", entries):mount()
+    end,
+    exit = exit_fn,
+    refresh = update_fn,
+    focus_branch = function()
+      vim.api.nvim_set_current_win(branch_view:winid())
+    end,
+    quick_jump_down = "2j",
+    quick_jump_up = "2k",
+    copy_oid = function()
+      local commit, _ = log_view:get_commit()
+      if commit then
+        vim.fn.setreg("0", commit.oid)
+      end
+    end,
+    copy_oid_clipboard = function()
+      local commit, _ = log_view:get_commit()
+      if commit then
+        vim.fn.setreg("+", commit.oid)
+      end
+    end,
+  }
+  local user_graph_keymaps = fugit2_config.get_keymaps()
+  keymaps.bind(log_view, "graph_log", log_handlers, user_graph_keymaps.graph_log, map_options)
+
+  local branch_handlers = {
+    help = function()
+      local HelpView = require "fugit2.view.components.help_view"
+      local entries = keymaps.help_entries("graph_branch", fugit2_config.get_keymaps "graph_branch")
+      HelpView(self.ns_id, "Branches", entries):mount()
+    end,
+    exit = exit_fn,
+    refresh = update_fn,
+    focus_log = function()
+      vim.api.nvim_set_current_win(log_view:winid())
+    end,
+  }
+  keymaps.bind(branch_view, "graph_branch", branch_handlers, user_graph_keymaps.graph_branch, map_options)
 
   -- move cursor
   branch_view:on(event.CursorMoved, function()
@@ -498,21 +535,6 @@ function GitGraph:setup_handlers()
       self:render()
     end
   end)
-
-  -- copy commit id
-  log_view:map("n", "yy", function()
-    local commit, _ = log_view:get_commit()
-    if commit then
-      vim.fn.setreg("0", commit.oid)
-    end
-  end, map_options)
-
-  log_view:map("n", "yc", function()
-    local commit, _ = log_view:get_commit()
-    if commit then
-      vim.fn.setreg("+", commit.oid)
-    end
-  end, map_options)
 
   -- log lazy load handling
   log_view:on(event.WinScrolled, function(ev)

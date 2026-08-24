@@ -20,6 +20,7 @@ local fugit2_config = require "fugit2.config"
 local git2 = require "fugit2.core.git2"
 local git_gpg = require "fugit2.core.git_gpg"
 local git_hooks = require "fugit2.core.git_hooks"
+local keymaps = require "fugit2.view.keymaps"
 local notifier = require "fugit2.notifier"
 local utils = require "fugit2.utils"
 
@@ -590,55 +591,15 @@ function GitStatus:_init_patch_views()
     self:focus_file()
     vim.api.nvim_feedkeys("q", "m", true)
   end
-  patch_unstaged:map("n", { "q", "<esc" }, exit_fn, opts)
-  patch_staged:map("n", { "q", "<esc>" }, exit_fn, opts)
 
   self._prompts.discard_hunk_confirm = UI.Confirm(self.ns_id, NuiLine { NuiText "󰮈 Discard this hunk?" })
   self._prompts.discard_line_confirm = UI.Confirm(self.ns_id, NuiLine { NuiText "󰮈 Discard these lines?" })
 
   -- Commit menu
   local commit_menu_handler = self:_menu_handlers(Menu.COMMIT)
-  patch_unstaged:map("n", "c", commit_menu_handler, opts)
-  patch_staged:map("n", "c", commit_menu_handler, opts)
-
-  -- Diff menu
-  -- local diff_menu_handler = self:_menu_handlers(Menu.DIFF)
-  -- patch_unstaged:map("n", "d", diff_menu_handler, opts)
-  -- patch_staged:map("n", "d", diff_menu_handler, opts)
 
   -- Branch menu
   local branch_menu_handler = self:_menu_handlers(Menu.BRANCH)
-  patch_unstaged:map("n", "b", branch_menu_handler, opts)
-  patch_staged:map("n", "b", branch_menu_handler, opts)
-
-  -- [h]: move left
-  patch_unstaged:map("n", "h", function()
-    self:focus_file()
-  end, opts)
-  patch_staged:map("n", "h", function()
-    if states.patch_unstaged_shown then
-      patch_unstaged:focus()
-    else
-      self:focus_file()
-    end
-  end, opts)
-
-  -- [l]: move right
-  patch_unstaged.popup:map("n", "l", function()
-    if states.patch_staged_shown then
-      patch_staged:focus()
-    else
-      vim.cmd "normal! l"
-    end
-  end, opts)
-
-  -- [=]: turn off
-  local turn_off_patch_fn = function()
-    self:focus_file()
-    vim.api.nvim_feedkeys("=", "m", true)
-  end
-  patch_unstaged:map("n", "=", turn_off_patch_fn, opts)
-  patch_staged:map("n", "=", turn_off_patch_fn, opts)
 
   local diff_apply_fn = function(diff_str, is_index)
     local diff, err = git2.Diff.from_buffer(diff_str)
@@ -687,23 +648,7 @@ function GitStatus:_init_patch_views()
     end
   end
 
-  -- [-]/[s]: Stage handling
-  patch_unstaged:map("n", { "-", "s" }, function()
-    local diff_str = patch_unstaged:get_diff_hunk()
-    if not diff_str then
-      notifier.error "Failed to get hunk"
-      return
-    end
-
-    if diff_apply_fn(diff_str, true) == 0 then
-      local node, _ = tree:get_child_node_linenr()
-      if node then
-        diff_update_fn(node)
-      end
-    end
-  end, opts)
-
-  -- [x]/[d]: Discard handling
+  -- discard confirmations
   self._prompts.discard_hunk_confirm:on_yes(function()
     local diff_str = patch_unstaged:get_diff_hunk_reversed()
     if not diff_str then
@@ -721,77 +666,6 @@ function GitStatus:_init_patch_views()
       end
     end
   end)
-  patch_unstaged:map("n", { "d", "x" }, function()
-    self._prompts.discard_hunk_confirm:show()
-  end, opts)
-
-  -- [-]/[u]: Unstage handling
-  patch_staged:map("n", { "-", "u" }, function()
-    local node, _ = tree:get_child_node_linenr()
-    if not node then
-      return
-    end
-
-    local err = 0
-    if node.istatus == "A" then
-      err = self.repo:reset_default { node.id }
-    else
-      local diff_str = patch_staged:get_diff_hunk_reversed()
-      if not diff_str then
-        notifier.error "Failed to get revere hunk"
-        return
-      end
-      err = diff_apply_fn(diff_str, true)
-    end
-
-    if err == 0 then
-      diff_update_fn(node)
-    end
-  end, opts)
-
-  -- [-]/[s]: Visual selected staging
-  patch_unstaged:map("v", { "-", "s" }, function()
-    local cursor_start = vim.fn.getpos("v")[2]
-    local cursor_end = vim.fn.getpos(".")[2]
-
-    local diff_str = patch_unstaged:get_diff_hunk_range(cursor_start, cursor_end)
-    if not diff_str then
-      -- do nothing
-      return
-    end
-
-    vim.api.nvim_feedkeys(utils.KEY_ESC, "n", false)
-
-    if diff_apply_fn(diff_str, true) == 0 then
-      local node, _ = tree:get_child_node_linenr()
-      if node then
-        diff_update_fn(node)
-      end
-    end
-  end, opts)
-
-  -- [-]/[u]: Visual selected unstage
-  patch_staged:map("v", { "-", "u" }, function()
-    local cursor_start = vim.fn.getpos("v")[2]
-    local cursor_end = vim.fn.getpos(".")[2]
-
-    local diff_str = patch_staged:get_diff_hunk_range_reversed(cursor_start, cursor_end)
-    if not diff_str then
-      -- do nothing
-      return
-    end
-
-    vim.api.nvim_feedkeys(utils.KEY_ESC, "n", false)
-
-    if diff_apply_fn(diff_str, true) == 0 then
-      local node, _ = tree:get_child_node_linenr()
-      if node then
-        diff_update_fn(node)
-      end
-    end
-  end, opts)
-
-  -- [d]/[x]: Visual selected discard
   self._prompts.discard_line_confirm:on_yes(function()
     local cursor_start = vim.fn.getpos("v")[2]
     local cursor_end = vim.fn.getpos(".")[2]
@@ -813,9 +687,6 @@ function GitStatus:_init_patch_views()
       end
     end
   end)
-  patch_unstaged:map("v", { "d", "x" }, function()
-    self._prompts.discard_line_confirm:show()
-  end, opts)
 
   -- Enter to jump to file
   local jump_file_fn = function(v)
@@ -826,12 +697,139 @@ function GitStatus:_init_patch_views()
       open_file(self._git.path, node.id, linenr)
     end
   end
-  patch_unstaged:map("n", "<cr>", function()
-    jump_file_fn(patch_unstaged)
-  end, opts)
-  patch_staged:map("n", "<cr>", function()
-    jump_file_fn(patch_staged)
-  end, opts)
+
+  -- [=]: turn off
+  local turn_off_patch_fn = function()
+    self:focus_file()
+    vim.api.nvim_feedkeys("=", "m", true)
+  end
+
+  -- patch_unstaged keymaps
+  local patch_unstaged_handlers = {
+    help = function()
+      self:_show_help "patch_unstaged"
+    end,
+    exit = exit_fn,
+    menu_commit = commit_menu_handler,
+    menu_branch = branch_menu_handler,
+    focus_file_tree = function()
+      self:focus_file()
+    end,
+    focus_staged = function()
+      if states.patch_staged_shown then
+        patch_staged:focus()
+      else
+        vim.cmd "normal! l"
+      end
+    end,
+    toggle_off = turn_off_patch_fn,
+    stage_hunk = function()
+      local diff_str = patch_unstaged:get_diff_hunk()
+      if not diff_str then
+        notifier.error "Failed to get hunk"
+        return
+      end
+
+      if diff_apply_fn(diff_str, true) == 0 then
+        local node, _ = tree:get_child_node_linenr()
+        if node then
+          diff_update_fn(node)
+        end
+      end
+    end,
+    discard_hunk = function()
+      self._prompts.discard_hunk_confirm:show()
+    end,
+    stage_visual = function()
+      local cursor_start = vim.fn.getpos("v")[2]
+      local cursor_end = vim.fn.getpos(".")[2]
+
+      local diff_str = patch_unstaged:get_diff_hunk_range(cursor_start, cursor_end)
+      if not diff_str then
+        -- do nothing
+        return
+      end
+
+      vim.api.nvim_feedkeys(utils.KEY_ESC, "n", false)
+
+      if diff_apply_fn(diff_str, true) == 0 then
+        local node, _ = tree:get_child_node_linenr()
+        if node then
+          diff_update_fn(node)
+        end
+      end
+    end,
+    discard_visual = function()
+      self._prompts.discard_line_confirm:show()
+    end,
+    jump_file = function()
+      jump_file_fn(patch_unstaged)
+    end,
+  }
+  keymaps.bind(patch_unstaged, "patch_unstaged", patch_unstaged_handlers, self.opts.keymaps.patch_unstaged, opts)
+
+  -- patch_staged keymaps
+  local patch_staged_handlers = {
+    help = function()
+      self:_show_help "patch_staged"
+    end,
+    exit = exit_fn,
+    menu_commit = commit_menu_handler,
+    menu_branch = branch_menu_handler,
+    focus_file_tree = function()
+      if states.patch_unstaged_shown then
+        patch_unstaged:focus()
+      else
+        self:focus_file()
+      end
+    end,
+    toggle_off = turn_off_patch_fn,
+    unstage_hunk = function()
+      local node, _ = tree:get_child_node_linenr()
+      if not node then
+        return
+      end
+
+      local err = 0
+      if node.istatus == "A" then
+        err = self.repo:reset_default { node.id }
+      else
+        local diff_str = patch_staged:get_diff_hunk_reversed()
+        if not diff_str then
+          notifier.error "Failed to get revere hunk"
+          return
+        end
+        err = diff_apply_fn(diff_str, true)
+      end
+
+      if err == 0 then
+        diff_update_fn(node)
+      end
+    end,
+    unstage_visual = function()
+      local cursor_start = vim.fn.getpos("v")[2]
+      local cursor_end = vim.fn.getpos(".")[2]
+
+      local diff_str = patch_staged:get_diff_hunk_range_reversed(cursor_start, cursor_end)
+      if not diff_str then
+        -- do nothing
+        return
+      end
+
+      vim.api.nvim_feedkeys(utils.KEY_ESC, "n", false)
+
+      if diff_apply_fn(diff_str, true) == 0 then
+        local node, _ = tree:get_child_node_linenr()
+        if node then
+          diff_update_fn(node)
+        end
+      end
+    end,
+    jump_file = function()
+      jump_file_fn(patch_staged)
+    end,
+  }
+  keymaps.bind(patch_staged, "patch_staged", patch_staged_handlers, self.opts.keymaps.patch_staged, opts)
 end
 
 -- Read git config
@@ -1897,12 +1895,6 @@ function GitStatus:_init_input_popup()
   local opts = { noremap = true, nowait = true }
   local states = self._states
 
-  input_popup:map("n", { "q", "<esc>" }, function()
-    self:hide_input(false)
-  end, opts)
-
-  input_popup:map("i", "<C-c>", "<esc>q", { nowait = true })
-
   local input_enter_fn = function()
     local message = vim.trim(table.concat(vim.api.nvim_buf_get_lines(self.input_popup.bufnr, 0, -1, true), "\n"))
     if states.commit_mode == CommitMode.CREATE then
@@ -1915,11 +1907,23 @@ function GitStatus:_init_input_popup()
 
     states.commit_args = nil
   end
-  input_popup:map("n", "<cr>", input_enter_fn, opts)
-  input_popup:map("i", "<C-cr>", function()
-    vim.cmd.stopinsert()
-    input_enter_fn()
-  end, opts)
+
+  local user_input_keymaps = fugit2_config.get_keymaps "input"
+  local input_handlers = {
+    exit = function()
+      self:hide_input(false)
+    end,
+    exit_insert = function()
+      vim.cmd.stopinsert()
+      self:hide_input(false)
+    end,
+    enter = input_enter_fn,
+    enter_insert = function()
+      vim.cmd.stopinsert()
+      input_enter_fn()
+    end,
+  }
+  keymaps.bind(input_popup, "input", input_handlers, user_input_keymaps, opts)
 
   return input_popup
 end
@@ -2022,7 +2026,9 @@ function GitStatus:_init_branch_input()
   local opts = { nowait = true, noremap = true }
 
   vim.fn.prompt_setinterrupt(input.bufnr, exit_fn)
-  input:map("n", { "<esc>", "q" }, exit_fn, opts)
+  keymaps.bind(input, "input", {
+    exit = exit_fn,
+  }, fugit2_config.get_keymaps "input", opts)
 
   return input
 end
@@ -2800,6 +2806,15 @@ function GitStatus:_menu_handlers(menu_type, direct)
   end
 end
 
+---Opens the keymap help popup for a view group.
+---@param group string keymap registry group
+function GitStatus:_show_help(group)
+  local HelpView = require "fugit2.view.components.help_view"
+  local entries = keymaps.help_entries(group, fugit2_config.get_keymaps(group))
+  local title = group:gsub("_", " "):gsub("^%l", string.upper)
+  HelpView(self.ns_id, title, entries):mount()
+end
+
 -- Setup keymap and event handlers
 function GitStatus:setup_handlers()
   local map_options = { noremap = true, nowait = true }
@@ -2812,109 +2827,165 @@ function GitStatus:setup_handlers()
     self:unmount()
   end
 
+  local help_fn = function(group)
+    return function()
+      self:_show_help(group)
+    end
+  end
+
   -- exit
-  file_tree:map("n", { "q", "<esc>" }, exit_fn, map_options)
-  file_tree:map("i", "<c-c>", exit_fn, map_options)
-  commit_log:map("n", { "q", "<esc>" }, exit_fn, map_options)
   file_tree:on(event.BufUnload, function()
     self.closed = true
   end)
   -- popup:on(event.BufLeave, exit_fn)
 
-  -- refresh
-  file_tree:map("n", "g", function()
-    self:update_then_render()
-  end, map_options)
+  -- file tree handlers
+  local file_tree_handlers = {
+    help = help_fn "file_tree",
+    exit = exit_fn,
+    exit_insert = exit_fn,
+    refresh = function()
+      self:update_then_render()
+    end,
+    menu_rebase = self:_menu_handlers(Menu.REBASE),
+    collapse = function()
+      local node = file_tree.tree:get_node()
 
-  -- Rebase menu
-  file_tree:map("n", "r", self:_menu_handlers(Menu.REBASE), map_options)
-
-  -- collapse
-  file_tree:map("n", "h", function()
-    local node = file_tree.tree:get_node()
-
-    if node and node:collapse() then
-      file_tree:render()
-    end
-  end, map_options)
-
-  -- collapse all
-  file_tree:map("n", "H", function()
-    local updated = false
-
-    for _, node in pairs(file_tree.tree.nodes.by_id) do
-      updated = node:collapse() or updated
-    end
-
-    if updated then
-      file_tree:render()
-    end
-  end, map_options)
-
-  -- Expand and move right
-  file_tree:map("n", "l", function()
-    local node = file_tree.tree:get_node()
-    if node then
-      if node:expand() then
+      if node and node:collapse() then
         file_tree:render()
       end
-      if not node:has_children() and states.side_panel == SidePanel.PATCH_VIEW then
-        if states.patch_unstaged_shown then
-          self._views.patch_unstaged:focus()
-        elseif states.patch_staged_shown then
-          self._views.patch_staged:focus()
+    end,
+    collapse_all = function()
+      local updated = false
+
+      for _, node in pairs(file_tree.tree.nodes.by_id) do
+        updated = node:collapse() or updated
+      end
+
+      if updated then
+        file_tree:render()
+      end
+    end,
+    expand = function()
+      local node = file_tree.tree:get_node()
+      if node then
+        if node:expand() then
+          file_tree:render()
+        end
+        if not node:has_children() and states.side_panel == SidePanel.PATCH_VIEW then
+          if states.patch_unstaged_shown then
+            self._views.patch_unstaged:focus()
+          elseif states.patch_staged_shown then
+            self._views.patch_staged:focus()
+          end
         end
       end
-    end
-  end, map_options)
+    end,
+    focus_commit_log = function()
+      if states.side_panel == SidePanel.NONE then
+        commit_log:focus()
+      end
+    end,
+    focus_commit_log_disable = "",
+    expand_all = function()
+      local updated = false
 
-  -- Move to commit view
-  file_tree:map("n", { "J", "<tab>" }, function()
-    if states.side_panel == SidePanel.NONE then
-      commit_log:focus()
-    end
-  end, map_options)
-  file_tree:map("n", "K", "", map_options)
+      for _, node in pairs(file_tree.tree.nodes.by_id) do
+        updated = node:expand() or updated
+      end
 
-  -- Move back to file popup
-  commit_log:map("n", { "K", "<tab>" }, function()
-    if states.side_panel == SidePanel.NONE then
-      file_tree:focus()
-    end
-  end, map_options)
-  commit_log:map("n", "J", "", map_options)
+      if updated then
+        file_tree:render()
+      end
+    end,
+    toggle_patch = function()
+      if states.side_panel == SidePanel.PATCH_VIEW then
+        self:hide_patch_view()
+      elseif states.side_panel == SidePanel.NONE then
+        self:show_patch_for_current_file()
+      end
+    end,
+    open_file = function()
+      local node = file_tree.tree:get_node()
+      if node and node:has_children() then
+        if node:is_expanded() then
+          node:collapse()
+        else
+          node:expand()
+        end
+        file_tree:render()
+      elseif node then
+        exit_fn()
+        open_file(self._git.path, node.id)
+      end
+    end,
+    stage_all = utils.wrap(GitStatus._index_add_reset_discard_all, self, TreeBase.IndexAction.ADD_RESET),
+    stage_toggle = utils.wrap(GitStatus._index_add_reset_discard, self, TreeBase.IndexAction.ADD_RESET),
+    stage_file = utils.wrap(GitStatus._index_add_reset_discard, self, TreeBase.IndexAction.ADD),
+    unstage_file = utils.wrap(GitStatus._index_add_reset_discard, self, TreeBase.IndexAction.RESET),
+    discard = function()
+      local node = file_tree.tree:get_node()
+      if node then
+        self._prompts.discard_confirm:set_text(NuiLine {
+          NuiText("󰮈 Discard ", "Fugit2Unstaged"),
+          NuiText(node.id, "Fugit2MenuHead"),
+          NuiText "?",
+        })
+      end
+      self._prompts.discard_confirm:show()
+    end,
+    write_index = function()
+      if self.index:write() == 0 then
+        notifier.info "Index saved"
+      end
+    end,
+    stage_toggle_visual = utils.wrap(GitStatus._index_add_reset_discard_visual, self, TreeBase.IndexAction.ADD_RESET),
+    stage_visual = utils.wrap(GitStatus._index_add_reset_discard_visual, self, TreeBase.IndexAction.ADD),
+    unstage_visual = utils.wrap(GitStatus._index_add_reset_discard_visual, self, TreeBase.IndexAction.RESET),
+    discard_visual = function()
+      self._prompts.discard_confirm:set_text(NuiLine {
+        NuiText("󰮈 Discard selected changes?", "Fugit2Unstaged"),
+      })
+      self._prompts.discard_confirm:show()
+    end,
+    menu_commit = self:_menu_handlers(Menu.COMMIT),
+    menu_diff = self:_menu_handlers(Menu.DIFF),
+    menu_branch = self:_menu_handlers(Menu.BRANCH),
+    menu_push = self:_menu_handlers(Menu.PUSH),
+    menu_fetch = self:_menu_handlers(Menu.FETCH),
+    menu_pull = self:_menu_handlers(Menu.PULL),
+    menu_forge = self:_menu_handlers(Menu.FORGE),
+    menu_stash = self:_menu_handlers(Menu.STASH),
+    menu_cherry_pick = self:_menu_handlers(Menu.CHERRY_PICK),
+  }
+  keymaps.bind(file_tree, "file_tree", file_tree_handlers, self.opts.keymaps.file_tree, map_options)
 
-  -- Quick jump commit
-  commit_log:map("n", "j", "2j", map_options)
-  commit_log:map("n", "k", "2k", map_options)
-
-  -- copy commit id
-  commit_log:map("n", "yy", function()
-    local commit, _ = commit_log:get_commit()
-    if commit then
-      vim.api.nvim_call_function("setreg", { '"', commit.oid })
-    end
-  end, map_options)
-
-  commit_log:map("n", "yc", function()
-    local commit, _ = commit_log:get_commit()
-    if commit then
-      vim.api.nvim_call_function("setreg", { "+", commit.oid })
-    end
-  end, map_options)
-
-  -- expand all
-  file_tree:map("n", "L", function()
-    local updated = false
-
-    for _, node in pairs(file_tree.tree.nodes.by_id) do
-      updated = node:expand() or updated
-    end
-
-    if updated then
-      file_tree:render()
-    end
-  end, map_options)
+  -- commit log handlers
+  local commit_log_handlers = {
+    help = help_fn "commit_log",
+    exit = exit_fn,
+    focus_file_tree = function()
+      if states.side_panel == SidePanel.NONE then
+        file_tree:focus()
+      end
+    end,
+    focus_file_tree_disable = "",
+    quick_jump_down = "2j",
+    quick_jump_up = "2k",
+    copy_oid = function()
+      local commit, _ = commit_log:get_commit()
+      if commit then
+        vim.api.nvim_call_function("setreg", { '"', commit.oid })
+      end
+    end,
+    copy_oid_clipboard = function()
+      local commit, _ = commit_log:get_commit()
+      if commit then
+        vim.api.nvim_call_function("setreg", { "+", commit.oid })
+      end
+    end,
+  }
+  keymaps.bind(commit_log, "commit_log", commit_log_handlers, self.opts.keymaps.commit_log, map_options)
 
   -- Patch view & move cursor
   states.last_patch_line = -1
@@ -2934,122 +3005,22 @@ function GitStatus:setup_handlers()
     end
   end)
 
-  ---- Toggle patch views
-  file_tree:map("n", "=", function()
-    if states.side_panel == SidePanel.PATCH_VIEW then
-      self:hide_patch_view()
-    elseif states.side_panel == SidePanel.NONE then
-      self:show_patch_for_current_file()
-    end
-  end, map_options)
-
-  ---- Enter: collapse expand toggle, move to file buffer and diff
-  file_tree:map("n", "<cr>", function()
-    local node = file_tree.tree:get_node()
-    if node and node:has_children() then
-      if node:is_expanded() then
-        node:collapse()
-      else
-        node:expand()
-      end
-      file_tree:render()
-    -- elseif states.patch_shown then
-    --   if states.patch_unstaged_shown then
-    --     self._patch_unstaged:focus()
-    --   elseif states.patch_staged_shown then
-    --     self._patch_staged:focus()
-    --   end
-    elseif node then
-      exit_fn()
-      open_file(self._git.path, node.id)
-    end
-  end, map_options)
-
-  file_tree:map(
-    "n",
-    "a",
-    utils.wrap(GitStatus._index_add_reset_discard_all, self, TreeBase.IndexAction.ADD_RESET),
-    map_options
-  )
-
-  --- Space/[-]: Add or remove index
-  file_tree:map(
-    "n",
-    { "-", "<space>" },
-    utils.wrap(GitStatus._index_add_reset_discard, self, TreeBase.IndexAction.ADD_RESET),
-    map_options
-  )
-
-  --- [s]: stage file
-  file_tree:map("n", "s", utils.wrap(GitStatus._index_add_reset_discard, self, TreeBase.IndexAction.ADD), map_options)
-
-  --- [u]: unstage file
-  file_tree:map("n", "u", utils.wrap(GitStatus._index_add_reset_discard, self, TreeBase.IndexAction.RESET), map_options)
-
-  --- [D]/[x]: discard file changes
-  -- file_tree:map("n", {"D", "x"}, self:index_add_reset_handler(false, false, false, true), map_options)
+  -- Write index
   self._prompts.discard_confirm:on_yes(
     utils.wrap(GitStatus._index_add_reset_discard, self, TreeBase.IndexAction.DISCARD)
   )
-  file_tree:map("n", { "D", "x" }, function()
-    local node = file_tree.tree:get_node()
-    if node then
-      self._prompts.discard_confirm:set_text(NuiLine {
-        NuiText("󰮈 Discard ", "Fugit2Unstaged"),
-        NuiText(node.id, "Fugit2MenuHead"),
-        NuiText "?",
-      })
-    end
-    self._prompts.discard_confirm:show()
-  end, map_options)
-
-  --- Visual Space/[-]: Add remove for range
-  file_tree:map(
-    "v",
-    { "-", "<space>" },
-    utils.wrap(GitStatus._index_add_reset_discard_visual, self, TreeBase.IndexAction.ADD_RESET),
-    map_options
-  )
-
-  --- Visual [s]: stage files in range
-  file_tree:map(
-    "v",
-    "s",
-    utils.wrap(GitStatus._index_add_reset_discard_visual, self, TreeBase.IndexAction.ADD),
-    map_options
-  )
-
-  --- Visual [u]: unstage files in range
-  file_tree:map(
-    "v",
-    "u",
-    utils.wrap(GitStatus._index_add_reset_discard_visual, self, TreeBase.IndexAction.RESET),
-    map_options
-  )
-
-  --- Visual [x][d]: discard files in range
-  file_tree:map("v", { "x", "d" }, function()
-    self._prompts.discard_confirm:set_text(NuiLine {
-      NuiText("󰮈 Discard selected changes?", "Fugit2Unstaged"),
-    })
-    self._prompts.discard_confirm:show()
-  end, map_options)
-
-  ---- Write index
-  file_tree:map("n", "w", function()
-    if self.index:write() == 0 then
-      notifier.info "Index saved"
-    end
-  end, map_options)
 
   -- Command popup
-  self.command_popup:map("n", { "q", "<esc>" }, function()
-    self:quit_command()
-  end, map_options)
+  keymaps.bind(self.command_popup, "input", {
+    exit = function()
+      self:quit_command()
+    end,
+  }, fugit2_config.get_keymaps "input", map_options)
 
   -- Amend confirm
   self._prompts.amend_confirm:on_yes(self:amend_confirm_yes_handler())
 
+  -- Deprecated: direct file tree maps (legacy file_tree_maps.direct)
   local action_enum_remap = {
     commit = Menu.COMMIT,
     diff = Menu.DIFF,
@@ -3063,12 +3034,17 @@ function GitStatus:setup_handlers()
   }
 
   local keymaps_used = {}
-  local tree_keymaps = self.opts.file_tree_maps.menu
-  for action, key in pairs(tree_keymaps) do
-    if action_enum_remap[action] then
-      local action_enum = action_enum_remap[action]
-      file_tree:map("n", key, self:_menu_handlers(action_enum), map_options)
-      keymaps_used[key] = true
+  local ft_keymaps = self.opts.keymaps.file_tree or {}
+  for action in pairs(action_enum_remap) do
+    local registry_action = "menu_" .. action
+    local def = keymaps.get("file_tree", registry_action)
+    local keys = ft_keymaps[registry_action] or (def and def.keys) or nil
+    if type(keys) == "table" then
+      for _, k in ipairs(keys) do
+        keymaps_used[k] = true
+      end
+    elseif keys then
+      keymaps_used[keys] = true
     end
   end
 

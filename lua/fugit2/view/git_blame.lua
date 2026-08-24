@@ -1,7 +1,6 @@
 -- GitBlame split view
 
 local Object = require "nui.object"
-local keymap = require "nui.utils.keymap"
 local table_new = require "table.new"
 local uv = vim.uv or vim.loop
 local NuiLine = require "nui.line"
@@ -12,6 +11,8 @@ local strings = require "plenary.strings"
 
 local event = require("nui.utils.autocmd").event
 local blame = require "fugit2.core.blame"
+local fugit2_config = require "fugit2.config"
+local keymaps = require "fugit2.view.keymaps"
 local notifier = require "fugit2.notifier"
 local utils = require "fugit2.utils"
 
@@ -359,18 +360,20 @@ function GitBlame:setup_handlers()
     end,
   })
 
-  -- quit event
-  keymap.set(self.bufnr, "n", { "q", "<esc>" }, function()
-    self:unmount()
-  end, opts)
-
-  -- jump events
-  keymap.set(self.bufnr, "n", { "J", "]c" }, function()
-    self:next_hunk()
-  end, opts)
-  keymap.set(self.bufnr, "n", { "K", "[c" }, function()
-    self:prev_hunk()
-  end, opts)
+  -- keymaps
+  local user_blame_keymaps = fugit2_config.get_keymaps "blame"
+  local handlers = {
+    exit = function()
+      self:unmount()
+    end,
+    next_hunk = function()
+      self:next_hunk()
+    end,
+    prev_hunk = function()
+      self:prev_hunk()
+    end,
+  }
+  keymaps.bind_buf(self.bufnr, "blame", handlers, user_blame_keymaps, opts)
 end
 
 return GitBlame

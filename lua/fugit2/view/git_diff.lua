@@ -15,7 +15,9 @@ local GitStatusDiffBase = require "fugit2.view.git_base_view"
 local SourceTree = require "fugit2.view.components.source_tree_view"
 local TreeBase = require "fugit2.view.components.base_tree_view"
 local UI = require "fugit2.view.components.menus"
+local fugit2_config = require "fugit2.config"
 local git2 = require "fugit2.core.git2"
+local keymaps = require "fugit2.view.keymaps"
 local notifier = require "fugit2.notifier"
 
 local GIT_OID_LENGTH = 8
@@ -682,18 +684,6 @@ function GitDiff:_setup_handlers()
   local opts = { noremap = true, nowait = true }
   local source_tree = self._views.files
 
-  source_tree:map("n", { "q", "<esc>" }, function()
-    self:unmount()
-  end, opts)
-
-  source_tree:map("n", { "l", "<cr>" }, function()
-    if self._states.pane == Pane.TWO and vim.api.nvim_win_is_valid(self._windows[1]) then
-      vim.api.nvim_set_current_win(self._windows[1])
-    elseif self._states.pane == Pane.THREE and vim.api.nvim_win_is_valid(self._windows[3]) then
-      vim.api.nvim_set_current_win(self._windows[3])
-    end
-  end, opts)
-
   -- SourceTree handlers
   -- source_tree:on(event.BufWinLeave, function()
   --   self:unmount()
@@ -703,16 +693,32 @@ function GitDiff:_setup_handlers()
     self:_refresh_views()
   end)
 
-  -- Stage/unstaged/discard
-  source_tree:map("n", "s", self:_index_add_reset_handler(false, TreeBase.IndexAction.ADD), opts)
-  source_tree:map("n", "u", self:_index_add_reset_handler(false, TreeBase.IndexAction.RESET), opts)
-  source_tree:map("n", { "-", "<space>" }, self:_index_add_reset_handler(false, TreeBase.IndexAction.ADD_RESET), opts)
-
-  -- Refresh
-  source_tree:map("n", "r", function()
-    self:update()
-    self:_refresh_views()
-  end, opts)
+  local user_diff_keymaps = fugit2_config.get_keymaps "diff"
+  local source_tree_handlers = {
+    help = function()
+      local HelpView = require "fugit2.view.components.help_view"
+      local entries = keymaps.help_entries("diff", user_diff_keymaps)
+      HelpView(self.ns_id, "Diff", entries):mount()
+    end,
+    exit = function()
+      self:unmount()
+    end,
+    focus_pane = function()
+      if self._states.pane == Pane.TWO and vim.api.nvim_win_is_valid(self._windows[1]) then
+        vim.api.nvim_set_current_win(self._windows[1])
+      elseif self._states.pane == Pane.THREE and vim.api.nvim_win_is_valid(self._windows[3]) then
+        vim.api.nvim_set_current_win(self._windows[3])
+      end
+    end,
+    stage_file = self:_index_add_reset_handler(false, TreeBase.IndexAction.ADD),
+    unstage_file = self:_index_add_reset_handler(false, TreeBase.IndexAction.RESET),
+    stage_toggle = self:_index_add_reset_handler(false, TreeBase.IndexAction.ADD_RESET),
+    refresh = function()
+      self:update()
+      self:_refresh_views()
+    end,
+  }
+  keymaps.bind(source_tree, "diff", source_tree_handlers, user_diff_keymaps, opts)
 end
 
 return GitDiff

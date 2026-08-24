@@ -4,6 +4,8 @@ local NuiLine = require "nui.line"
 local NuiPopup = require "nui.popup"
 local NuiText = require "nui.text"
 local Object = require "nui.object"
+local fugit2_config = require "fugit2.config"
+local keymaps = require "fugit2.view.keymaps"
 
 ---@class Fugit2StashListView
 ---@field ns_id integer
@@ -129,31 +131,36 @@ function StashListView:mount()
   self:render()
 
   local opts = { noremap = true, nowait = true }
-
-  self.popup:map("n", { "q", "<esc>" }, function()
-    self:close()
-  end, opts)
-
-  self.popup:map("n", "a", function()
-    local entry = self:get_entry()
-    if entry and self._action_fn then
-      self._action_fn("apply", entry)
-    end
-  end, opts)
-
-  self.popup:map("n", "p", function()
-    local entry = self:get_entry()
-    if entry and self._action_fn then
-      self._action_fn("pop", entry)
-    end
-  end, opts)
-
-  self.popup:map("n", "d", function()
-    local entry = self:get_entry()
-    if entry and self._action_fn then
-      self._action_fn("drop", entry)
-    end
-  end, opts)
+  local user_stash_keymaps = fugit2_config.get_keymaps "stash_list"
+  local handlers = {
+    help = function()
+      local HelpView = require "fugit2.view.components.help_view"
+      local entries = keymaps.help_entries("stash_list", user_stash_keymaps)
+      HelpView(self.ns_id, "Stash List", entries):mount()
+    end,
+    exit = function()
+      self:close()
+    end,
+    apply = function()
+      local entry = self:get_entry()
+      if entry and self._action_fn then
+        self._action_fn("apply", entry)
+      end
+    end,
+    pop = function()
+      local entry = self:get_entry()
+      if entry and self._action_fn then
+        self._action_fn("pop", entry)
+      end
+    end,
+    drop = function()
+      local entry = self:get_entry()
+      if entry and self._action_fn then
+        self._action_fn("drop", entry)
+      end
+    end,
+  }
+  keymaps.bind(self.popup, "stash_list", handlers, user_stash_keymaps, opts)
 end
 
 return StashListView

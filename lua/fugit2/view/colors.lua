@@ -9,6 +9,7 @@ M.link_colors = {
   Fugit2AuthorEmail = "Label",
   Fugit2HelpHeader = "Label",
   Fugit2HelpTag = "Tag",
+  Fugit2HelpKey = "PreProc",
   Fugit2Heading = "PreProc",
   Fugit2UntrackedHeading = "PreCondit",
   Fugit2UnstagedHeading = "Macro",

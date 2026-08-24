@@ -5,7 +5,9 @@ local NuiLayout = require "nui.layout"
 local NuiText = require "nui.text"
 
 local GitGraph = require "fugit2.view.git_graph"
+local fugit2_config = require "fugit2.config"
 local fzf = require "fugit2.core.fzf"
+local keymaps = require "fugit2.view.keymaps"
 
 local ENTITY = GitGraph.ENTITY
 local BRANCH_WINDOW_WIDTH = 36
@@ -164,35 +166,30 @@ function GitPick:setup_handlers()
   local input = self._views.input
   local branch_view = self._views.branch
 
-  input:map("i", "<C-n>", function()
-    local pos = branch_view:get_cursor()
-    branch_view:set_cursor(pos[1] + 1, pos[2])
+  local move_fn = function(delta)
+    return function()
+      local pos = branch_view:get_cursor()
+      branch_view:set_cursor(pos[1] + delta, pos[2])
 
-    local node, linenr = branch_view:get_child_node_linenr()
-    if node and linenr and linenr ~= states.last_branch_linenr then
-      states.last_branch_linenr = linenr
-      states.last_ref = node.id
-      self:update_log(node.id)
-      self._views.log:render()
+      local node, linenr = branch_view:get_child_node_linenr()
+      if node and linenr and linenr ~= states.last_branch_linenr then
+        states.last_branch_linenr = linenr
+        states.last_ref = node.id
+        self:update_log(node.id)
+        self._views.log:render()
+      end
     end
-  end, opts)
+  end
 
-  input:map("i", "<C-p>", function()
-    local pos = branch_view:get_cursor()
-    branch_view:set_cursor(pos[1] - 1, pos[2])
-
-    local node, linenr = branch_view:get_child_node_linenr()
-    if node and linenr and linenr ~= states.last_branch_linenr then
-      states.last_branch_linenr = linenr
-      states.last_ref = node.id
-      self:update_log(node.id)
-      self._views.log:render()
-    end
-  end, opts)
-
-  input:map("i", { "<esc>", "<C-c>" }, function()
-    self:unmount()
-  end, opts)
+  local user_input_keymaps = fugit2_config.get_keymaps "pick"
+  local input_handlers = {
+    exit = function()
+      self:unmount()
+    end,
+    next_item = move_fn(1),
+    prev_item = move_fn(-1),
+  }
+  keymaps.bind(input, "pick", input_handlers, user_input_keymaps, opts)
 end
 
 GitPick.ENTITY = ENTITY
