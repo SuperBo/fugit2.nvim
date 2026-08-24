@@ -6,12 +6,12 @@ local NuiText = require "nui.text"
 local Object = require "nui.object"
 local Path = require "plenary.path"
 local PlenaryJob = require "plenary.job"
-local keymap = require "nui.utils.keymap"
 local strings = require "plenary.strings"
 local event = require("nui.utils.autocmd").event
 
 local blame = require "fugit2.core.blame"
 local config = require "fugit2.config"
+local keymaps = require "fugit2.view.keymaps"
 local notifier = require "fugit2.notifier"
 local pendulum = require "fugit2.core.pendulum"
 local utils = require "fugit2.utils"
@@ -237,7 +237,9 @@ function GitBlameFile:show_blame_popup()
     states.popup = nil
     blame_detail:unmount()
   end
-  blame_detail:map("n", { "q", "<esc>" }, exit_fn, { noremap = true, nowait = true })
+  keymaps.bind(blame_detail, "blame_popup", {
+    exit = exit_fn,
+  }, config.get_keymaps "blame_popup", { noremap = true, nowait = true })
   blame_detail:on(event.BufLeave, exit_fn, { once = true })
 
   states.cursor_move_handler = vim.api.nvim_create_autocmd({ event.CursorMoved, event.WinScrolled }, {
@@ -403,23 +405,31 @@ end
 function GitBlameFile:setup_handlers()
   local opts = { noremap = true, nowait = true }
   local bufnr = self.file_bufnr
+  local user_blame_file_keymaps = config.get_keymaps "blame_file"
 
-  -- quit event
-  keymap.set(bufnr, "n", { "q", "<esc>" }, function()
-    self:destroy()
-  end, opts)
-
-  -- show detail
-  keymap.set(bufnr, "n", { "c" }, function()
-    self:toggle_blame_popup()
-  end, opts)
+  local handlers = {
+    exit = function()
+      self:destroy()
+    end,
+    show_detail = function()
+      self:toggle_blame_popup()
+    end,
+  }
+  keymaps.bind_buf(bufnr, "blame_file", handlers, user_blame_file_keymaps, opts)
 end
 
 -- Clears handlers we setup before.
 function GitBlameFile:clear_handlers()
-  vim.api.nvim_buf_del_keymap(self.file_bufnr, "n", "q")
-  vim.api.nvim_buf_del_keymap(self.file_bufnr, "n", "<esc>")
-  vim.api.nvim_buf_del_keymap(self.file_bufnr, "n", "c")
+  local bufnr = self.file_bufnr
+  local user_blame_file_keymaps = config.get_keymaps "blame_file"
+  local keymap = require "nui.utils.keymap"
+
+  for action in pairs(keymaps.defs "blame_file") do
+    local keys = keymaps.resolve_keys("blame_file", action, user_blame_file_keymaps)
+    if keys and keys ~= false then
+      keymap._del(bufnr, "n", keys, true)
+    end
+  end
 end
 
 -- Loads Fugit2Blame in file buffer information.

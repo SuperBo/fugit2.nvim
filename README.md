@@ -24,7 +24,7 @@ Git plugin for Neovim (based on libgit2).
 - ✔ Git blame.
 - ✔ Interactive in-memory rebase.
 - ✔ Stash management.
-- ☐ TODO: Allow remap default key binding.
+- ✔ Remappable key bindings (`opts.keymaps`).
 - ☐ TODO: Proper help menu.
 
 ## 📦 Installation
@@ -139,6 +139,7 @@ TODO: add later
 ---@field blame_info_height integer height of blame hunk detail popup
 ---@field command_timeout integer timeout in milisecond of command like git pull / git push
 ---@field colorscheme string? custom color scheme override
+---@field keymaps table<string, table<string, string|string[]|false>> keybindings per view
 local opts = {
   width = 100,
   min_width = 50,
@@ -153,6 +154,40 @@ local opts = {
   command_timeout = 15000,
 }
 ```
+
+### Remapping keybindings
+
+All keybindings across every view can be remapped through `opts.keymaps`, grouped by
+view. Each action accepts a single key string, a list of keys, `false` to disable, or
+`""` to bind as a no-op:
+
+```lua
+opts = {
+  keymaps = {
+    file_tree = {
+      stage_file = "S",          -- remap stage from "s"
+      unstage_file = false,      -- disable unstage binding
+      discard = { "X", "D" },    -- multiple keys
+      menu_commit = "C",         -- menu actions use menu_<action> ids
+    },
+    commit_log = {
+      copy_oid = "yY",
+    },
+    rebase = {
+      drop = { "x", "d" },
+    },
+    -- groups: file_tree, commit_log, patch_unstaged, patch_staged, rebase,
+    --         graph_log, graph_branch, graph_select, diff, stash_list,
+    --         pick, input, confirm, blame, blame_file, blame_popup, patch
+  },
+}
+```
+
+> **Note:** The legacy `file_tree_maps.menu` option still works and is translated into
+> `keymaps.file_tree.menu_<action>` for backward compatibility, but is deprecated.
+
+See [docs/keymap-remapping.md](docs/keymap-remapping.md) for the full list of view
+groups and default keybindings.
 
 ## Tested colorschemes
 

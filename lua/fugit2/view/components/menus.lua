@@ -58,18 +58,24 @@ function Confirm:init(ns_id, msg_line)
     self._popup:hide()
   end
   self._popup:on(event.BufLeave, exit_fn)
-  self._popup:map("n", { "q", "n", "<esc>" }, exit_fn, opts)
-  self._popup:map("n", "l", function()
-    vim.api.nvim_win_set_cursor(self._popup.winid, { 2, self._no_pos })
-  end, opts)
-  self._popup:map("n", "h", function()
-    vim.api.nvim_win_set_cursor(self._popup.winid, { 2, self._yes_pos })
-  end, opts)
-  self._popup:map("n", "<tab>", function()
-    local pos = vim.api.nvim_win_get_cursor(self._popup.winid)
-    local new_pos = (pos[2] < self._yes_pos + 4) and self._no_pos or self._yes_pos
-    vim.api.nvim_win_set_cursor(self._popup.winid, { 2, new_pos })
-  end, opts)
+  local keymaps = require "fugit2.view.keymaps"
+  local fugit2_config = require "fugit2.config"
+  local user_confirm_keymaps = fugit2_config.get_keymaps "confirm"
+  local handlers = {
+    exit = exit_fn,
+    move_no = function()
+      vim.api.nvim_win_set_cursor(self._popup.winid, { 2, self._no_pos })
+    end,
+    move_yes = function()
+      vim.api.nvim_win_set_cursor(self._popup.winid, { 2, self._yes_pos })
+    end,
+    toggle = function()
+      local pos = vim.api.nvim_win_get_cursor(self._popup.winid)
+      local new_pos = (pos[2] < self._yes_pos + 4) and self._no_pos or self._yes_pos
+      vim.api.nvim_win_set_cursor(self._popup.winid, { 2, new_pos })
+    end,
+  }
+  keymaps.bind(self._popup, "confirm", handlers, user_confirm_keymaps, opts)
 end
 
 ---@parm text NuiLine
@@ -105,17 +111,28 @@ end
 
 ---@param callback function
 function Confirm:on_yes(callback)
-  self._popup:map("n", "y", function()
-    self._popup:hide()
-    callback()
-  end, { noremap = true, nowait = true })
-  self._popup:map("n", "<cr>", function()
-    local pos = vim.api.nvim_win_get_cursor(self._popup.winid)
-    self._popup:hide()
-    if pos[1] == 2 and pos[2] < self._yes_pos + 4 then
+  local keymaps = require "fugit2.view.keymaps"
+  local fugit2_config = require "fugit2.config"
+  local user_confirm_keymaps = fugit2_config.get_keymaps "confirm"
+
+  local yes_keys = keymaps.resolve_keys("confirm", "yes", user_confirm_keymaps)
+  if yes_keys and yes_keys ~= false then
+    self._popup:map("n", yes_keys, function()
+      self._popup:hide()
       callback()
-    end
-  end, { noremap = true, nowait = true })
+    end, { noremap = true, nowait = true })
+  end
+
+  local enter_keys = keymaps.resolve_keys("confirm", "yes_enter", user_confirm_keymaps)
+  if enter_keys and enter_keys ~= false then
+    self._popup:map("n", enter_keys, function()
+      local pos = vim.api.nvim_win_get_cursor(self._popup.winid)
+      self._popup:hide()
+      if pos[1] == 2 and pos[2] < self._yes_pos + 4 then
+        callback()
+      end
+    end, { noremap = true, nowait = true })
+  end
 end
 
 ---@param callback function
