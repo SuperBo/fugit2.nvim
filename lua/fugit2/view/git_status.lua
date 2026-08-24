@@ -3014,8 +3014,7 @@ function GitStatus:setup_handlers()
   local ft_keymaps = self.opts.keymaps.file_tree or {}
   for action in pairs(action_enum_remap) do
     local registry_action = "menu_" .. action
-    local def = keymaps.get("file_tree", registry_action)
-    local keys = ft_keymaps[registry_action] or (def and def.keys) or nil
+    local keys = keymaps.resolve_keys("file_tree", registry_action, ft_keymaps)
     if type(keys) == "table" then
       for _, k in ipairs(keys) do
         keymaps_used[k] = true
