@@ -287,8 +287,9 @@ end
 ---description for stable, readable output.
 ---@param group string View group name.
 ---@param user table<string, string|string[]|false|"">? User overrides for the group.
+---@param handlers Fugit2KeymapHandlers? Only include actions with an active handler.
 ---@return { keys: string, desc: string, mode: string? }[]
-function M.help_entries(group, user)
+function M.help_entries(group, user, handlers)
   user = user or {}
   local entries = {}
 
@@ -303,7 +304,7 @@ function M.help_entries(group, user)
       keys = def.keys
     end
 
-    if keys ~= false and keys ~= nil then
+    if keys ~= false and keys ~= nil and (handlers == nil or handlers[action] ~= nil) then
       local key_str
       if keys == "" then
         key_str = ""
