@@ -154,6 +154,17 @@ describe("keymaps", function()
       assert.are.equal("", calls[1].handler)
     end)
 
+    it("maps default keys to a no-op for empty overrides", function()
+      local handlers = {
+        stage_file = function() end,
+      }
+      keymaps.bind(mock_view, "file_tree", handlers, { stage_file = "" })
+
+      assert.are.equal(1, #calls)
+      assert.are.equal("s", calls[1].keys)
+      assert.are.equal("", calls[1].handler)
+    end)
+
     it("skips actions without handlers", function()
       local handlers = {}
       keymaps.bind(mock_view, "file_tree", handlers, {})
@@ -219,6 +230,16 @@ describe("keymaps", function()
       keymaps.bind_buf(1, "blame", handlers, { exit = "Q" })
       assert.are.equal(1, #calls)
       assert.are.equal("Q", calls[1].keys)
+    end)
+    it("maps default keys to a no-op for empty overrides", function()
+      local handlers = {
+        exit = function() end,
+      }
+      keymaps.bind_buf(1, "blame", handlers, { exit = "" })
+
+      assert.are.equal(1, #calls)
+      assert.are.same({ "q", "<esc>" }, calls[1].keys)
+      assert.are.equal("", calls[1].handler)
     end)
   end)
 
