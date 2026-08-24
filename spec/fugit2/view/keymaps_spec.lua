@@ -231,6 +231,7 @@ describe("keymaps", function()
       assert.are.equal(1, #calls)
       assert.are.equal("Q", calls[1].keys)
     end)
+
     it("maps default keys to a no-op for empty overrides", function()
       local handlers = {
         exit = function() end,
