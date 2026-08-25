@@ -1377,19 +1377,13 @@ function GitStatus:hide_input(reset_to_main)
     -- so index 2 is the files+patch row, not the input popup, and removing it
     -- hides the files popup's window (crashing later Tree:get_node calls).
     local boxes = vim.list_slice(layout._.box.box)
-    local idx
 
     for i, child in ipairs(boxes) do
-      local component = child.component
-      if component and (component == self.input_popup or component == self.branch_input) then
-        idx = i
+      if child.component == self.input_popup or child.component == self.branch_input then
+        table.remove(boxes, i)
+        layout:update(NuiLayout.Box(boxes, { dir = "col" }))
         break
       end
-    end
-
-    if idx then
-      table.remove(boxes, idx)
-      layout:update(NuiLayout.Box(boxes, { dir = "col" }))
     end
   end
 
